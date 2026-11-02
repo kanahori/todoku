@@ -59,11 +59,16 @@ function renderApp(config) {
   const headingId = `app-${config.id}`;
   const list = el('ul', { class: 'cards' });
   for (const card of config.cards) {
-    const children = [el('span', { class: 'card-title', text: card.title })];
+    // 名前は題だけにし、補足は説明として分けて読ませる（NVDA で題と補足がつながって読まれたため）。
+    const titleId = `title-${config.id}-${card.id}`;
+    const descId = `desc-${config.id}-${card.id}`;
+    const children = [el('span', { class: 'card-title', id: titleId, text: card.title })];
+    const attrs = { type: 'button', class: 'card', 'data-card': card.id, 'aria-labelledby': titleId };
     if (card.description) {
-      children.push(el('span', { class: 'card-description', text: card.description }));
+      children.push(el('span', { class: 'card-description', id: descId, text: card.description }));
+      attrs['aria-describedby'] = descId;
     }
-    const button = el('button', { type: 'button', class: 'card', 'data-card': card.id }, children);
+    const button = el('button', attrs, children);
     button.addEventListener('click', () => runCard(config, card, button));
     list.append(el('li', {}, [button]));
   }
