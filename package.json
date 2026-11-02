@@ -8,7 +8,8 @@
     "test": "node --test",
     "smoke": "electron test/smoke.js",
     "ui:repair": "electron test/ui-repair.js",
-    "dist:win": "electron-builder --win --arm64 --x64"
+    "dist:win": "electron-builder --win --arm64 --x64",
+    "dist:mac": "electron-builder --mac dmg --arm64"
   },
   "build": {
     "appId": "jp.example.hackathon2026.cards",
@@ -31,6 +32,17 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
     }
   },
   "repository": {

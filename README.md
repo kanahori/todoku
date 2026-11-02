@@ -10,7 +10,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - Each web app (a learning site, a city website, ...) has a small config file that says, card by card, where to read and what to press.
 - The app turns that config into a screen of plain buttons. A screen reader user moves with Tab and presses Enter or Space; the result is read out.
-- `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...".
+- `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...". Text in images is read from their `alt` text and `aria-label`, and slides that a carousel hides with `aria-hidden` are still read, because the person asked for them.
 - When a web app changes its screen and a config line no longer matches, the app reports only which line fails. Claude then proposes a repaired selector from the page structure (with all text removed), and a person accepts or rejects each proposal.
 
 ## Getting started (Windows)
@@ -35,7 +35,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - Requirements: macOS on Apple silicon, Node.js 22.12 or later (tested with Node 22.19).
 - `npm ci`, then `npm start`. `npm test` and `npm run smoke` work the same way as on Windows.
 - If the Electron binary download fails behind a proxy, download `electron-v<version>-darwin-arm64.zip` and `SHASUMS256.txt` from the Electron releases page, check the SHA-256, extract the zip into `node_modules/electron/dist`, and write `Electron.app/Contents/MacOS/Electron` into `node_modules/electron/path.txt`.
-- A macOS package is not provided yet.
+- Build a macOS disk image: `npm run dist:mac` produces `dist/hackathon2026-1.0.0-arm64.dmg` (Apple silicon). It is not signed or notarized, so macOS warns that the developer cannot be verified; open it from the context menu (Open) the first time.
+  - Behind a proxy, point `ELECTRON_CACHE` to a folder that already holds the Electron zip and `SHASUMS256.txt`.
 
 ## Configuration (environment variables)
 
@@ -88,7 +89,7 @@ Licenses were read from each package's `package.json` in `node_modules`.
 視覚に障害のある方が、カードの簡単な画面からウェブアプリを使えるようにする、Windows と macOS のアプリです。Built with Claude: Japan 2026（2026年11月2日〜8日）の期間中に作りました。テーマ2「本来、誰にでも届くべきもの」に当たります。開発中です。
 
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをふつうのボタンのカードの画面にします。画面読み上げソフトの利用者は、Tab で移り、Enter か Space で押すと、結果が読み上げられます。
-- `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。
+- `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。
 - ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。Claude が、文字を全部落としたページの構造から直したセレクタの案を作り、人が案ごとに「採る／採らない」を選びます。
 - 動かし方・設定・使った部品は、上の英語の節をご覧ください。
 - 練習のページ（みどり市・講座のページ）は作り物で、実在の自治体や人とは関係ありません。
