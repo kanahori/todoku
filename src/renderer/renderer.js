@@ -40,7 +40,9 @@ async function runCard(config, card, button) {
   heading.textContent = `結果: ${card.title}`;
 
   let message;
-  if (!result.ok) {
+  if (result.needLogin) {
+    message = `${result.message}。`;
+  } else if (!result.ok) {
     message = `うまくいきませんでした。設定ファイルの ${result.where} が当たりません。${result.message}。`;
   } else if (result.action === 'click') {
     message = '押しました。';

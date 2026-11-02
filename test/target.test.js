@@ -12,6 +12,23 @@ test('fixture: の url は test/fixtures/ のファイルになる', () => {
   assert.equal(resolveUrl('https://example.com/'), 'https://example.com/');
 });
 
+test('カードの path は同じサイトの中のページになる', () => {
+  assert.equal(resolveUrl('https://example.com/', '/my/'), 'https://example.com/my/');
+  assert.equal(resolveUrl('https://example.com/a/', '/my/courses.php'), 'https://example.com/my/courses.php');
+  assert.throws(() => resolveUrl('https://example.com/', '//evil.example/'));
+  const expected = pathToFileURL(path.join(__dirname, 'fixtures', 'practice-login.html')).href;
+  assert.equal(resolveUrl('fixture:practice.html', '/practice-login.html'), expected);
+  assert.throws(() => resolveUrl('fixture:practice.html', '/../secret.html'));
+});
+
+test('path と login の形を確かめる', () => {
+  const base = { id: 'x', name: 'x', url: 'https://example.com/' };
+  const card = { id: 'a', title: 'a', action: 'read', selector: 'main' };
+  assert.deepEqual(validateConfig({ ...base, login: { selector: '#login' }, cards: [{ ...card, path: '/my/' }] }), []);
+  const where = validateConfig({ ...base, login: {}, cards: [{ ...card, path: '//evil.example/' }] }).map((e) => e.where);
+  assert.deepEqual(where, ['login.selector', 'cards[0].path']);
+});
+
 test('fixture: の url は、名前の形が正しいときだけ通る', () => {
   const base = { id: 'x', name: 'x', cards: [{ id: 'a', title: 'a', action: 'read', selector: 'main' }] };
   assert.deepEqual(validateConfig({ ...base, url: 'fixture:practice.html' }), []);

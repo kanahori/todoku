@@ -1,0 +1,30 @@
+{
+  "id": "moodle-demo",
+  "name": "学習のサイト（公式デモ）",
+  "url": "https://school.moodledemo.net/",
+  "login": { "selector": "a[href$=\"/login/index.php\"]", "path": "/login/index.php" },
+  "cards": [
+    {
+      "id": "next-deadlines",
+      "title": "次の締め切りを読む",
+      "action": "read",
+      "path": "/my/",
+      "selector": ".block_timeline [data-region=\"event-list-container\"]",
+      "description": "ダッシュボードのタイムラインを読みます"
+    },
+    {
+      "id": "my-courses",
+      "title": "講座の一覧を読む",
+      "action": "read",
+      "path": "/my/courses.php",
+      "selector": ".block_myoverview [data-region=\"courses-view\"]"
+    },
+    {
+      "id": "announcements",
+      "title": "サイトのお知らせを読む",
+      "action": "read",
+      "path": "/?redirect=0",
+      "selector": "#site-news-forum"
+    }
+  ]
+}

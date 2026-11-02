@@ -28,6 +28,11 @@
         <li>英語の練習（作り物）: 11月12日まで</li>
       </ul>
     </section>
+    <!-- 後から中身が出てくる所（読み込みの後で締め切りを出すサイトをまねる）。 -->
+    <section id="deadlines">
+      <h2>次の締め切り</h2>
+      <ul id="deadline-list"></ul>
+    </section>
     <section id="compose-area" hidden>
       <h2>新しい知らせ</h2>
       <label>本文 <textarea id="compose-body"></textarea></label>
@@ -38,6 +43,11 @@
       document.getElementById('compose-area').hidden = false;
       document.body.dataset.composed = 'yes';
     });
+    setTimeout(() => {
+      const li = document.createElement('li');
+      li.textContent = '情報処理の練習（作り物）: 11月9日 23時59分';
+      document.getElementById('deadline-list').append(li);
+    }, 1000);
   </script>
 </body>
 </html>

@@ -36,14 +36,32 @@ async function main() {
   const composed = await win.webContents.executeJavaScript('document.body.dataset.composed');
   check('押したあと、ページの中で書く欄が開いた', composed === 'yes', composed);
 
+  // 後から出てくる所は、出てくるまで待って読む。
+  const late = { ...config, cards: [{ id: 'late', title: '次の締め切り', action: 'read', selector: '#deadline-list' }] };
+  const wc = BrowserWindow.getAllWindows()[0].webContents;
+  await wc.loadURL(wc.getURL()); // 読み込み直した直後は、締め切りはまだ出ていない
+  const lateResult = await runCard(BrowserWindow, late, 'late');
+  check('1秒後に出てくる締め切りを待って読める', lateResult.ok && lateResult.text.includes('23時59分'), lateResult);
+
   // 当たらない行は、設定ファイルの場所だけを返す。
   const broken = { ...config, cards: [...config.cards, { id: 'grades', title: '成績', action: 'read', selector: '#grades' }] };
-  const miss = await runCard(BrowserWindow, broken, 'grades');
+  const miss = await runCard(BrowserWindow, broken, 'grades', { waitMs: 500 });
   check('当たらない行は cards[3].selector と返す', !miss.ok && miss.where === 'cards[3].selector' && miss.text === undefined, miss);
 
   const bad = { ...config, cards: [{ id: 'bad', title: '壊れた行', action: 'read', selector: 'ul[' }] };
-  const invalid = await runCard(BrowserWindow, bad, 'bad');
+  const invalid = await runCard(BrowserWindow, bad, 'bad', { waitMs: 500 });
   check('書き方の正しくない selector も cards[0].selector と返す', !invalid.ok && invalid.where === 'cards[0].selector', invalid);
+
+  // ログインの画面に当たったら、「当たらない」ではなく「ログインが要る」と返す。
+  const loginConfig = {
+    ...config,
+    login: { selector: 'body.notloggedin', path: '/practice-login.html' },
+    cards: [{ id: 'dash', title: 'ダッシュボード', action: 'read', selector: '#dashboard', path: '/practice-guest.html' }],
+  };
+  const login = await runCard(BrowserWindow, loginConfig, 'dash', { waitMs: 3000 });
+  check('ログインしていないときは needLogin を返す', !login.ok && login.needLogin === true && login.where === undefined, login);
+  const loginUrl = BrowserWindow.getAllWindows()[0].webContents.getURL();
+  check('ログインが要るときは login.path の画面を開く', loginUrl.endsWith('/practice-login.html'), loginUrl);
 }
 
 app.whenReady()

@@ -1,18 +1,20 @@
 'use strict';
 // 設定ファイル（ウェブアプリごとの操作の方法）を読み、形を確かめる所。
-// 作品の形は 2026-11-02 の夜に決まる予定なので、ここでは最小の形だけを確かめる。
 //
 // 設定ファイルの形（JSON）:
 // {
 //   "id": "sample",                 // 英数字とハイフン
 //   "name": "練習用のアプリ",        // 読み上げで使う名前
 //   "url": "https://example.com/",  // 開くページ。"fixture:practice.html" なら test/fixtures/ の練習のページ
+//   "login": { "selector": "body.notloggedin", "path": "/login/index.php" },
+//                                   // 任意。selector が当たったらログインが要ると見なし、path（任意）のログインの画面を開く
 //   "cards": [
 //     {
 //       "id": "inbox",
 //       "title": "受信箱",
 //       "action": "read" | "click",
 //       "selector": "main ul.messages",  // どこを読む・何を押すか
+//       "path": "/my/",                  // 任意。url から見た、開くページ（/ で始まる）
 //       "description": "任意の補足"
 //     }
 //   ]
@@ -43,6 +45,13 @@ function validateConfig(config) {
   if (typeof config.url !== 'string' || !(/^https?:\/\//.test(config.url) || FIXTURE_PATTERN.test(config.url))) {
     add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が要ります');
   }
+  if (config.login !== undefined) {
+    if (config.login === null || typeof config.login !== 'object' || typeof config.login.selector !== 'string' || config.login.selector.trim() === '') {
+      add('login.selector', '空でない文字列が要ります');
+    } else if (config.login.path !== undefined && (typeof config.login.path !== 'string' || !/^\/(?!\/)/.test(config.login.path))) {
+      add('login.path', '/ で始まる文字列が要ります（// で始まるものは不可）');
+    }
+  }
   if (!Array.isArray(config.cards) || config.cards.length === 0) {
     add('cards', '1枚以上のカードの配列が要ります');
     return errors;
@@ -70,6 +79,9 @@ function validateConfig(config) {
     }
     if (typeof card.selector !== 'string' || card.selector.trim() === '') {
       add(`${at}.selector`, '空でない文字列が要ります');
+    }
+    if (card.path !== undefined && (typeof card.path !== 'string' || !/^\/(?!\/)/.test(card.path))) {
+      add(`${at}.path`, '/ で始まる文字列が要ります（// で始まるものは不可）');
     }
     if (card.description !== undefined && typeof card.description !== 'string') {
       add(`${at}.description`, '文字列が要ります');
