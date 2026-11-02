@@ -23,8 +23,10 @@ test('頼みの文には、当たらない行と構造が入る', () => {
 
 test('鍵が無いときは hasApiKey が false', () => {
   assert.equal(hasApiKey({}), false);
-  assert.equal(hasApiKey({ ANTHROPIC_API_KEY: '  ' }), false);
-  assert.equal(hasApiKey({ ANTHROPIC_API_KEY: 'x' }), true);
+  assert.equal(hasApiKey({ CARDS_ANTHROPIC_API_KEY: '  ' }), false);
+  assert.equal(hasApiKey({ CARDS_ANTHROPIC_API_KEY: 'x' }), true);
+  // Claude Code 自身が拾う名前の鍵は、作品では使わない。
+  assert.equal(hasApiKey({ ANTHROPIC_API_KEY: 'x' }), false);
 });
 
 test('既定のモデルは claude-opus-5-5', () => {

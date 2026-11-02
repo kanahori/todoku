@@ -1,5 +1,6 @@
 'use strict';
 // 画面が変わって当たらなくなった行について、直しの案を作る所。
+// 鍵は CARDS_ANTHROPIC_API_KEY、モデルは既定 claude-opus-5-5（CARDS_REPAIR_MODEL で変えられる）。
 // 一巡: 当たらない行（checkCards）→ ページの構造を集める（structure.js）→ Claude に案を頼む
 //       → 案をページで試す → 人が「採る／採らない」を選ぶ → 設定ファイルを書き直す。
 // Claude に送るのは、当たらない行（場所・カードの題・操作・前のセレクタ）とページの構造だけ。ページの文字は送らない。
@@ -23,17 +24,20 @@ const RepairSchema = z.object({
   ),
 });
 
+// 作品が読む鍵の名前。Claude Code 自身が拾う ANTHROPIC_API_KEY とは分けておく。
+const API_KEY_ENV = 'CARDS_ANTHROPIC_API_KEY';
+
 function hasApiKey(env = process.env) {
-  return typeof env.ANTHROPIC_API_KEY === 'string' && env.ANTHROPIC_API_KEY.trim() !== '';
+  return typeof env[API_KEY_ENV] === 'string' && env[API_KEY_ENV].trim() !== '';
 }
 
 // 本物の Claude を呼ぶ関数を作る。試しでは、同じ形の偽の関数を渡す。
 // 返すのは async ({ system, user }) => { proposals } 。
 function createClaudeCaller({ model = process.env.CARDS_REPAIR_MODEL || DEFAULT_MODEL, fetch } = {}) {
-  // 鍵は環境変数 ANTHROPIC_API_KEY から読む（SDK が読む）。
+  // 鍵は環境変数 CARDS_ANTHROPIC_API_KEY から読み、明示して渡す。
   const Anthropic = require('@anthropic-ai/sdk');
   const { betaZodOutputFormat } = require('@anthropic-ai/sdk/helpers/beta/zod');
-  const client = new Anthropic(fetch ? { fetch } : {});
+  const client = new Anthropic({ apiKey: process.env[API_KEY_ENV], ...(fetch ? { fetch } : {}) });
   return async ({ system, user }) => {
     const response = await client.beta.messages.parse({
       model,
@@ -129,4 +133,4 @@ function saveConfigFile(file, config, backupDir) {
   fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
 }
 
-module.exports = { RepairSchema, hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile, DEFAULT_MODEL };
+module.exports = { API_KEY_ENV, RepairSchema, hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile, DEFAULT_MODEL };

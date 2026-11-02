@@ -71,7 +71,7 @@ ipcMain.handle('cards:check', async (_event, appId) => {
 ipcMain.handle('repair:propose', async (_event, appId) => {
   const config = configs.get(appId);
   if (!config) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
-  if (!hasApiKey()) return { ok: false, message: '鍵が無いので案を作れません（環境変数 ANTHROPIC_API_KEY が空です）' };
+  if (!hasApiKey()) return { ok: false, message: '鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）' };
   try {
     const problems = await checkCards(BrowserWindow, config);
     if (problems.length === 0) return { ok: true, proposals: [], errors: [] };
