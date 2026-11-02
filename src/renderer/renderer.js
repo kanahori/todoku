@@ -93,10 +93,12 @@ function renderMaintenance(config) {
 }
 
 async function checkApp(config, area, button) {
-  button.disabled = true;
+  // 使用不能にせず aria-busy にする（NVDA で「使用不能」と読まれたため）。押されている間の二度目は無視する。
+  if (button.getAttribute('aria-busy') === 'true') return;
+  button.setAttribute('aria-busy', 'true');
   announce('点検しています。');
   const result = await window.cardsApi.checkCards(config.id);
-  button.disabled = false;
+  button.removeAttribute('aria-busy');
   if (!result.ok) {
     area.replaceChildren(el('p', { text: result.message }));
     announce(result.message);
@@ -119,10 +121,11 @@ function showProblems(config, area, problems) {
 }
 
 async function propose(config, area, button) {
-  button.disabled = true;
+  if (button.getAttribute('aria-busy') === 'true') return;
+  button.setAttribute('aria-busy', 'true');
   announce('直しの案を作っています。しばらくかかります。');
   const result = await window.cardsApi.proposeRepairs(config.id);
-  button.disabled = false;
+  button.removeAttribute('aria-busy');
   if (!result.ok) {
     area.append(el('p', { text: result.message }));
     announce(result.message);

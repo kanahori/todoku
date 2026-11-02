@@ -72,7 +72,7 @@ h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; }
   outline: 4px solid #003a8c;
   outline-offset: 3px;
 }
-.tool-button:disabled { color: #000000; border-style: dashed; cursor: wait; }
+.tool-button[aria-busy="true"] { border-style: dashed; cursor: wait; }
 
 .proposals fieldset {
   border: 2px solid #000000;
