@@ -36,6 +36,25 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
     }
   };
   const deadline = Date.now() + waitMs;
+  if (action === 'list') {
+    // 当たる項目を全部、番号を付けて読む。隠れているスライドも読む（textContent）。
+    for (;;) {
+      let items;
+      try {
+        items = [...document.querySelectorAll(selector)];
+      } catch (e) {
+        return { found: false, reason: 'invalid' };
+      }
+      if (items.length > 0) {
+        const lines = items.map((it, i) => `${i + 1}件目: ${(it.textContent || '').replace(/\s+/g, ' ').trim()}`);
+        const text = `${items.length}件あります。\n` + lines.join('\n');
+        return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
+      }
+      if (loginSelector && query(loginSelector).el) return { found: false, reason: 'login' };
+      if (Date.now() >= deadline) return { found: false, reason: 'none' };
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
   let el = null;
   for (;;) {
     const q = query(selector);

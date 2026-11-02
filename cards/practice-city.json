@@ -1,0 +1,32 @@
+{
+  "id": "practice-city",
+  "name": "みどり市のホームページ（作り物）",
+  "url": "fixture:city-top.html",
+  "cards": [
+    {
+      "id": "carousel",
+      "title": "大きな画像のお知らせを全部読む",
+      "action": "list",
+      "selector": ".hero .slide",
+      "description": "自動で切り替わるお知らせを、番号を付けて全部読みます"
+    },
+    {
+      "id": "news",
+      "title": "新着情報を読む",
+      "action": "list",
+      "selector": ".news-list li"
+    },
+    {
+      "id": "garbage",
+      "title": "ごみの日を読む",
+      "action": "list",
+      "selector": "table.garbage tr"
+    },
+    {
+      "id": "counter",
+      "title": "窓口の案内を読む",
+      "action": "read",
+      "selector": ".counter-info"
+    }
+  ]
+}

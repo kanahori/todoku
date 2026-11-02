@@ -12,7 +12,7 @@
 //     {
 //       "id": "inbox",
 //       "title": "受信箱",
-//       "action": "read" | "click",
+//       "action": "read" | "click" | "list",   // list は当たる項目を全部、番号を付けて読む
 //       "selector": "main ul.messages",  // どこを読む・何を押すか
 //       "path": "/my/",                  // 任意。url から見た、開くページ（/ で始まる）
 //       "description": "任意の補足"
@@ -24,7 +24,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-const ACTIONS = new Set(['read', 'click']);
+const ACTIONS = new Set(['read', 'click', 'list']);
 const FIXTURE_PATTERN = /^fixture:[a-z0-9][a-z0-9-]*\.html$/;
 
 // 形を確かめ、当たらない所を「どの行か（パス）と理由」の一覧で返す。ページの中身は扱わない。
@@ -75,7 +75,7 @@ function validateConfig(config) {
       add(`${at}.title`, '空でない文字列が要ります');
     }
     if (!ACTIONS.has(card.action)) {
-      add(`${at}.action`, '"read" か "click" が要ります');
+      add(`${at}.action`, '"read"・"click"・"list" のどれかが要ります');
     }
     if (typeof card.selector !== 'string' || card.selector.trim() === '') {
       add(`${at}.selector`, '空でない文字列が要ります');

@@ -2,7 +2,7 @@
   "id": "moodle-demo",
   "name": "学習のサイト（公式デモ）",
   "url": "https://school.moodledemo.net/",
-  "login": { "selector": "a[href$=\"/login/index.php\"]", "path": "/login/index.php" },
+  "login": { "selector": "[data-region=\"usermenu\"] a[href$=\"/login/index.php\"]", "path": "/login/index.php" },
   "cards": [
     {
       "id": "next-deadlines",

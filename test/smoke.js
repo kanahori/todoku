@@ -63,6 +63,14 @@ async function main() {
   const loginUrl = BrowserWindow.getAllWindows()[0].webContents.getURL();
   check('ログインが要るときは login.path の画面を開く', loginUrl.endsWith('/practice-login.html'), loginUrl);
 
+  // 自治体風のページ: 自動で切り替わるカルーセルの、隠れているスライドも全部読める。
+  const city = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-city.json')).config;
+  const carousel = await runCard(BrowserWindow, city, 'carousel');
+  check('カルーセルの 4件を番号付きで全部読める',
+    carousel.ok && carousel.text.startsWith('4件あります。') && carousel.text.includes('4件目: 市の図書館'), carousel);
+  const garbage = await runCard(BrowserWindow, city, 'garbage');
+  check('ごみの日の表を 3行読める', garbage.ok && garbage.text.startsWith('3件あります。'), garbage);
+
   // 画面が変わる前と後: 同じ設定ファイルで点検し、当たらない行だけが返るか。
   const course = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-course.json')).config;
   const before = await checkCards(BrowserWindow, course, { settleMs: 100 });
