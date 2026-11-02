@@ -135,16 +135,18 @@ async function propose(config, area, button) {
   result.proposals.forEach((p, i) => {
     const name = `choice-${config.id}-${i}`;
     const canUse = p.newSelector && p.matches > 0;
-    const yes = el('input', { type: 'radio', name, value: 'yes', id: `${name}-yes` });
-    const no = el('input', { type: 'radio', name, value: 'no', id: `${name}-no` });
+    // 読み上げで案の欄に入ったとき、題とボタンだけでなく、案と理由もその場で読まれるようにする。
+    const described = `${name}-proposal ${name}-reason`;
+    const yes = el('input', { type: 'radio', name, value: 'yes', id: `${name}-yes`, 'aria-describedby': described });
+    const no = el('input', { type: 'radio', name, value: 'no', id: `${name}-no`, 'aria-describedby': described });
     no.checked = true;
     if (!canUse) yes.disabled = true;
     const matchText = !p.newSelector ? '案はありません' : p.matches < 0 ? '書き方が正しくありません' : `今のページで ${p.matches}か所に当たります`;
     form.append(el('fieldset', { 'data-where': p.where }, [
       el('legend', { text: `${p.title}（${p.where}）` }),
       el('p', { text: `前: ${p.oldSelector}` }),
-      el('p', { text: `案: ${p.newSelector || 'なし'}。${matchText}。` }),
-      el('p', { text: `理由: ${p.reason}` }),
+      el('p', { id: `${name}-proposal`, text: `案: ${p.newSelector || 'なし'}。${matchText}。` }),
+      el('p', { id: `${name}-reason`, text: `理由: ${p.reason}` }),
       el('label', { for: `${name}-yes` }, [yes, ' 採る']),
       el('label', { for: `${name}-no` }, [no, ' 採らない']),
     ]));
