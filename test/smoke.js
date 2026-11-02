@@ -68,6 +68,10 @@ async function main() {
   const carousel = await runCard(BrowserWindow, city, 'carousel');
   check('カルーセルの 4件を番号付きで全部読める',
     carousel.ok && carousel.text.startsWith('4件あります。') && carousel.text.includes('4件目: 市の図書館'), carousel);
+  check('画像だけのスライドも、画像の説明（alt）で読める',
+    carousel.ok && carousel.text.includes('2件目: マイナンバーカードの休日窓口'), carousel);
+  check('aria-hidden の付いた見えないスライドも読める',
+    carousel.ok && carousel.text.includes('3件目: 冬の道路の通行止め'), carousel);
   const garbage = await runCard(BrowserWindow, city, 'garbage');
   check('ごみの日の表を 3行読める', garbage.ok && garbage.text.startsWith('3件あります。'), garbage);
 

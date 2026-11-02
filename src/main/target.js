@@ -28,6 +28,34 @@ function resolveUrl(url, cardPath) {
 // 後から出てくる所に備えて、当たるまで少しずつ待つ。
 async function pageAction(selector, action, loginSelector, limit, waitMs) {
   const readText = (el) => (el.innerText || el.textContent || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  // 画面読み上げが読む文に近づける: 中の文字に加えて、画像の説明（alt）と aria-label も読む。
+  // 隠れている要素（自動で切り替わるスライドの見えない分）も読む。aria-hidden="true" の中と script・style は読まない。
+  // 本物の自治体のカルーセルは、文字が画像の alt だけのことが多い（2026-11-02 Mac の確かめ）。
+  const accessibleText = (root) => {
+    const parts = [];
+    // 当たった項目そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
+    const walk = (node, isRoot = false) => {
+      if (node.nodeType === 3) { parts.push(node.nodeValue); return; }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return;
+      if (!isRoot && node.getAttribute('aria-hidden') === 'true') return;
+      const label = (node.getAttribute('aria-label') || '').trim();
+      if (tag === 'IMG' || (node.getAttribute('role') === 'img')) {
+        const alt = (node.getAttribute('alt') || label).trim();
+        if (alt) parts.push(' ' + alt + ' ');
+        return;
+      }
+      const before = parts.length;
+      for (const child of node.childNodes) walk(child);
+      const inner = parts.slice(before).join('').trim();
+      if (label && !inner) parts.push(' ' + label + ' ');
+    };
+    walk(root, true);
+    const words = parts.join('').replace(/\s+/g, ' ').trim();
+    // 同じ文が続けて二度出たら一度にする（画像の alt とその下の文字が同じときなど）。
+    return words.replace(/(\S.{3,}?) \1(?= |$)/g, '$1');
+  };
   const query = (s) => {
     try {
       return { el: document.querySelector(s) };
@@ -37,7 +65,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
   };
   const deadline = Date.now() + waitMs;
   if (action === 'list') {
-    // 当たる項目を全部、番号を付けて読む。隠れているスライドも読む（textContent）。
+    // 当たる項目を全部、番号を付けて読む。隠れているスライドも、画像の説明（alt）も読む。
     for (;;) {
       let items;
       try {
@@ -46,7 +74,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
         return { found: false, reason: 'invalid' };
       }
       if (items.length > 0) {
-        const lines = items.map((it, i) => `${i + 1}件目: ${(it.textContent || '').replace(/\s+/g, ' ').trim()}`);
+        const lines = items.map((it, i) => `${i + 1}件目: ${accessibleText(it)}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
         return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
       }
@@ -60,7 +88,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
     const q = query(selector);
     if (q.invalid) return { found: false, reason: 'invalid' };
     el = q.el;
-    if (el && (action === 'click' || readText(el) !== '')) break;
+    if (el && (action === 'click' || readText(el) !== '' || accessibleText(el) !== '')) break;
     if (!el && loginSelector) {
       const login = query(loginSelector);
       if (login.el) return { found: false, reason: 'login' };
@@ -73,7 +101,9 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
     el.click();
     return { found: true };
   }
-  const text = readText(el);
+  // ふだんは見えている文（改行を保つ innerText）。文が無いときと、画像の説明があるときは、画像の説明も入る形で読む。
+  let text = readText(el);
+  if (!text || el.querySelector('img[alt]:not([alt=""]), [role="img"][aria-label]')) text = accessibleText(el);
   return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
 }
 
