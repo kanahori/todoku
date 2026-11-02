@@ -5,4 +5,5 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('cardsApi', {
   loadConfigs: () => ipcRenderer.invoke('configs:load'),
+  runCard: (appId, cardId) => ipcRenderer.invoke('card:run', String(appId), String(cardId)),
 });

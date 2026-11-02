@@ -1,7 +1,7 @@
 {
   "id": "sample",
   "name": "練習用のアプリ（作り物）",
-  "url": "https://example.com/",
+  "url": "fixture:practice.html",
   "cards": [
     {
       "id": "inbox",

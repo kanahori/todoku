@@ -51,6 +51,8 @@ h2 { font-size: 1.3rem; margin: 1.5rem 0 0.5rem; }
 .card-title { display: block; font-weight: bold; font-size: 1.2rem; }
 .card-description { display: block; margin-top: 0.25rem; }
 
+.result-body { white-space: pre-line; }
+
 #problems-list { color: #8b0000; background: #ffffff; }
 
 .visually-hidden {

@@ -21,6 +21,38 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
+// カードを押したときの処理。結果は「結果」の欄に書き、読み上げにも知らせる。
+async function runCard(config, card, button) {
+  if (button.getAttribute('aria-busy') === 'true') return;
+  button.setAttribute('aria-busy', 'true');
+  announce(`${card.title}。動かしています。`);
+  let result;
+  try {
+    result = await window.cardsApi.runCard(config.id, card.id);
+  } catch (e) {
+    result = { ok: false, where: '(なし)', message: e.message };
+  }
+  button.removeAttribute('aria-busy');
+
+  const heading = document.getElementById('result-heading');
+  const body = document.getElementById('result-body');
+  document.getElementById('result').hidden = false;
+  heading.textContent = `結果: ${card.title}`;
+
+  let message;
+  if (!result.ok) {
+    message = `うまくいきませんでした。設定ファイルの ${result.where} が当たりません。${result.message}。`;
+  } else if (result.action === 'click') {
+    message = '押しました。';
+  } else if (!result.text) {
+    message = '読む所は見つかりましたが、文字がありません。';
+  } else {
+    message = result.text + (result.truncated ? '（長いので、ここで切りました）' : '');
+  }
+  body.textContent = message;
+  announce(`${card.title}。${message}`);
+}
+
 function renderApp(config) {
   const headingId = `app-${config.id}`;
   const list = el('ul', { class: 'cards' });
@@ -30,10 +62,7 @@ function renderApp(config) {
       children.push(el('span', { class: 'card-description', text: card.description }));
     }
     const button = el('button', { type: 'button', class: 'card', 'data-card': card.id }, children);
-    button.addEventListener('click', () => {
-      // 操作はまだつないでいないので、そのことを知らせる。
-      announce(`${card.title}。この操作はまだ作っていません。`);
-    });
+    button.addEventListener('click', () => runCard(config, card, button));
     list.append(el('li', {}, [button]));
   }
   return el('section', { 'aria-labelledby': headingId }, [

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ。人名・授業名・内容は全部作り物。本物のサイトの文字は入れない。 -->
+<!-- 対比の最小: 文字 21:1（#000000 と #ffffff）。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>練習のページ（作り物）</title>
+  <style>
+    body { font-family: system-ui, sans-serif; color: #000000; background: #ffffff; margin: 1rem 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>練習のページ</h1>
+    <button type="button" class="compose">新しい知らせを書く</button>
+  </header>
+  <main>
+    <h2>受信箱</h2>
+    <ul class="messages">
+      <li>山田花子（作り物）: 明日の打ち合わせは 10時からです。</li>
+      <li>鈴木一郎（作り物）: 資料を共有しました。</li>
+    </ul>
+    <section id="assignments">
+      <h2>課題の一覧</h2>
+      <ul>
+        <li>情報処理の練習（作り物）: 11月9日まで</li>
+        <li>英語の練習（作り物）: 11月12日まで</li>
+      </ul>
+    </section>
+    <section id="compose-area" hidden>
+      <h2>新しい知らせ</h2>
+      <label>本文 <textarea id="compose-body"></textarea></label>
+    </section>
+  </main>
+  <script>
+    document.querySelector('button.compose').addEventListener('click', () => {
+      document.getElementById('compose-area').hidden = false;
+      document.body.dataset.composed = 'yes';
+    });
+  </script>
+</body>
+</html>

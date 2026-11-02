@@ -4,8 +4,12 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { loadConfigDir } = require('./config');
+const { runCard } = require('./target');
 
 const CARDS_DIR = path.join(__dirname, '..', '..', 'cards');
+
+// 読めた設定ファイル（id → 中身）。カードを動かすときに使う。
+const configs = new Map();
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -26,11 +30,25 @@ function createWindow() {
 
 ipcMain.handle('configs:load', () => {
   // 読めたものと、当たらない所の一覧の両方を返す。
-  return loadConfigDir(CARDS_DIR).map((r) => ({
-    file: path.basename(r.file),
-    config: r.config ?? null,
-    errors: r.errors ?? [],
-  }));
+  configs.clear();
+  return loadConfigDir(CARDS_DIR).map((r) => {
+    if (r.config) configs.set(r.config.id, r.config);
+    return {
+      file: path.basename(r.file),
+      config: r.config ?? null,
+      errors: r.errors ?? [],
+    };
+  });
+});
+
+ipcMain.handle('card:run', async (_event, appId, cardId) => {
+  const config = configs.get(appId);
+  if (!config) return { ok: false, where: '(なし)', message: `アプリ「${appId}」の設定ファイルがありません` };
+  try {
+    return await runCard(BrowserWindow, config, cardId);
+  } catch (e) {
+    return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
+  }
 });
 
 app.whenReady().then(() => {

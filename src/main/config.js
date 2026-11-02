@@ -6,7 +6,7 @@
 // {
 //   "id": "sample",                 // 英数字とハイフン
 //   "name": "練習用のアプリ",        // 読み上げで使う名前
-//   "url": "https://example.com/",  // 開くページ
+//   "url": "https://example.com/",  // 開くページ。"fixture:practice.html" なら test/fixtures/ の練習のページ
 //   "cards": [
 //     {
 //       "id": "inbox",
@@ -23,6 +23,7 @@ const path = require('node:path');
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ACTIONS = new Set(['read', 'click']);
+const FIXTURE_PATTERN = /^fixture:[a-z0-9][a-z0-9-]*\.html$/;
 
 // 形を確かめ、当たらない所を「どの行か（パス）と理由」の一覧で返す。ページの中身は扱わない。
 function validateConfig(config) {
@@ -39,8 +40,8 @@ function validateConfig(config) {
   if (typeof config.name !== 'string' || config.name.trim() === '') {
     add('name', '空でない文字列が要ります');
   }
-  if (typeof config.url !== 'string' || !/^https?:\/\//.test(config.url)) {
-    add('url', 'http:// か https:// で始まる文字列が要ります');
+  if (typeof config.url !== 'string' || !(/^https?:\/\//.test(config.url) || FIXTURE_PATTERN.test(config.url))) {
+    add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が要ります');
   }
   if (!Array.isArray(config.cards) || config.cards.length === 0) {
     add('cards', '1枚以上のカードの配列が要ります');
