@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「みどり市」のトップページ）。本物の自治体の名前・ロゴ・画像は使わない。 -->
+<!-- わざと読みにくくしてある所: 自動で切り替わるカルーセルに停止ボタンが無い。今どのスライドかを読み上げに知らせない。 -->
+<!-- 見出しの順が飛んでいる。リンクの文字が「こちら」だけ。 -->
+<!-- 対比の最小: 文字 12.45:1（#ffffff と #0b3d0b）。2026-11-02 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>みどり市 公式ホームページ（作り物・画面が変わった後）</title>
+  <style>
+    body { font-family: system-ui, sans-serif; color: #000000; background: #ffffff; margin: 0; }
+    .site-header { background: #0b3d0b; color: #ffffff; padding: 0.5rem 1rem; }
+    .site-header a { color: #ffffff; }
+    .hero { position: relative; height: 10rem; overflow: hidden; border-bottom: 2px solid #000000; }
+    .hero .slide { display: none; padding: 1rem 2rem; font-size: 1.3rem; }
+    .hero .slide.is-active { display: block; }
+    .hero .vis-item { display: none; padding: 1rem 2rem; font-size: 1.3rem; }
+    .hero .vis-item.is-active { display: block; }
+    .wrap { padding: 0 1rem; }
+  </style>
+</head>
+<body>
+  <div class="site-header">
+    <span class="site-title">みどり市（作り物）</span>
+    <div class="global-nav">
+      <a href="#">くらし</a> <a href="#">子育て</a> <a href="#">健康・福祉</a> <a href="#">観光</a>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="slide is-active">市民まつりを 11月23日に中央公園で開きます。</div>
+    <div class="slide"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="1" height="1" alt="マイナンバーカードの休日窓口を 11月30日に開きます。"></div><!-- 本物の自治体のカルーセルのように、文字が画像の説明（alt）だけのスライド -->
+    <div class="slide" aria-hidden="true">冬の道路の通行止めの予定をお知らせします。</div><!-- カルーセルの部品のように、見えないスライドに aria-hidden が付いた形 -->
+    <div class="slide">市の図書館の改修のため、12月は休館します。</div>
+  </div>
+
+  <div class="wrap">
+    <h4>新着情報</h4>
+    <ul class="news-list">
+      <li><span class="date">11月1日</span> 粗大ごみの受付の方法が変わります。詳しくは<a href="#">こちら</a></li>
+      <li><span class="date">10月28日</span> インフルエンザの予防接種の助成について。詳しくは<a href="#">こちら</a></li>
+      <li><span class="date">10月20日</span> 市役所の駐車場の工事のお知らせ。詳しくは<a href="#">こちら</a></li>
+    </ul>
+
+    <h4>ごみの日</h4>
+    <table class="garbage">
+      <tr><td>燃えるごみ</td><td>月曜と木曜</td></tr>
+      <tr><td>資源ごみ</td><td>水曜</td></tr>
+      <tr><td>燃えないごみ</td><td>第2・第4金曜</td></tr>
+    </table>
+
+    <h4>窓口の案内</h4>
+    <div class="counter-info">市役所の窓口は、平日の 8時30分から 17時15分までです。第2土曜の午前は、住民票の窓口だけ開いています。</div>
+  </div>
+
+  <script>
+    // 「画面が変わった後」の版: ページを開いた後に、カルーセルの部品が作りを組み替える（本物の自治体のサイトで見た形を、作り物で再現した）。
+    // .hero .slide を div.vis-track > div.vis-item に作り直し、前後に複製（.is-clone）を足し、見えない物に aria-hidden を付ける。
+    const hero = document.querySelector('.hero');
+    const olds = [...hero.querySelectorAll('.slide')];
+    const track = document.createElement('div');
+    track.className = 'vis-track';
+    const make = (src, clone) => {
+      const d = document.createElement('div');
+      d.className = 'vis-item' + (clone ? ' is-clone' : '');
+      d.innerHTML = src.innerHTML;
+      if (clone || !src.classList.contains('is-active')) d.setAttribute('aria-hidden', 'true');
+      return d;
+    };
+    track.append(make(olds[olds.length - 1], true));
+    olds.forEach((o) => track.append(make(o, false)));
+    track.append(make(olds[0], true));
+    hero.replaceChildren(track);
+    const items = [...track.querySelectorAll('.vis-item:not(.is-clone)')];
+    items[0].classList.add('is-active');
+    let i = 0;
+    setInterval(() => {
+      items[i].classList.remove('is-active');
+      items[i].setAttribute('aria-hidden', 'true');
+      i = (i + 1) % items.length;
+      items[i].classList.add('is-active');
+      items[i].removeAttribute('aria-hidden');
+    }, 3000);
+  </script>
+</body>
+</html>

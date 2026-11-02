@@ -85,6 +85,17 @@ async function main() {
     JSON.stringify(whereAfter) === JSON.stringify(['cards[0].selector', 'cards[1].selector']), after);
   check('点検の結果にページの中身が入っていない', !JSON.stringify(after).includes('第3回'), after);
 
+  // みどり市の「画面が変わった後」: カルーセルの部品が作りを組み替えると、カルーセルのカードだけが当たらなくなる（本物の自治体で見た形）。
+  const city2 = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-city.json')).config;
+  const cityAfter = await checkCards(BrowserWindow, { ...city2, id: 'practice-city-after', url: 'fixture:city-top-after.html' }, { settleMs: 100 });
+  check('みどり市の後の版では、カルーセルのカード（cards[0].selector）だけが当たらない',
+    JSON.stringify(cityAfter.map((p) => p.where)) === JSON.stringify(['cards[0].selector']), cityAfter);
+  const cityFixed = { ...city2, id: 'practice-city-fixed', url: 'fixture:city-top-after.html',
+    cards: city2.cards.map((c, n) => (n === 0 ? { ...c, selector: '.hero .vis-item:not(.is-clone)' } : c)) };
+  const carousel2 = await runCard(BrowserWindow, cityFixed, 'carousel');
+  check('組み替えた後の作りに合わせた selector なら、4件とも読める（複製は読まない・aria-hidden を越える）',
+    carousel2.ok && carousel2.text.startsWith('4件あります。') && carousel2.text.includes('2件目: マイナンバーカードの休日窓口'), carousel2);
+
   // 直しの一巡（Claude を呼ぶ所は偽の返事）: 当たらない → 構造を集める → 案 → 採る → 設定ファイルが直る → 当たる。
   const os = require('node:os');
   const fs = require('node:fs');
