@@ -65,7 +65,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## How Claude is used
 
 - In the app: Claude (default `claude-opus-5-5`) proposes repaired selectors from the page structure, as described above.
-- In development: the app was built with Claude Code. One Claude Code session on Windows wrote most of the app and tested it with NVDA; another on macOS reviewed the changes, wrote this README and the configs, and checked names and personal data before each push.
+- In development: the app was built with Claude Code. One Claude Code session on Windows wrote most of the app and tested it with NVDA; another on macOS reviewed the changes, wrote this README and the private local configs, and checked names and personal data before each push.
 
 ## Third-party software
 
