@@ -83,7 +83,14 @@ function renderApp(config) {
 function renderMaintenance(config) {
   const headingId = `maint-${config.id}`;
   const area = el('div', { class: 'maint-area' });
-  const checkButton = el('button', { type: 'button', class: 'tool-button', text: '画面が変わっていないか点検する' });
+  // ボタンの一覧（VoiceOver のローター・NVDA+F7）でどのアプリの点検か分かるよう、名前にアプリ名を含める。
+  // 見える文は名前の一部のまま（見える文と読まれる名前を合わせる）。
+  const checkButton = el('button', {
+    type: 'button',
+    class: 'tool-button',
+    'aria-label': `${config.name}の画面が変わっていないか点検する`,
+    text: '画面が変わっていないか点検する',
+  });
   checkButton.addEventListener('click', () => checkApp(config, area, checkButton));
   return el('section', { class: 'maint', 'aria-labelledby': headingId }, [
     el('h3', { id: headingId, text: `${config.name} の設定の点検` }),

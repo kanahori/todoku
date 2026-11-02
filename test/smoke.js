@@ -1,5 +1,5 @@
 'use strict';
-// Electron の上で、cards/sample.json のカードを練習のページに当てる試し。
+// Electron の上で、test/fixtures/sample.json のカードを練習のページに当てる試し（sample.json は試しのためだけのもので、作品の画面には出さない）。
 // 動かし方: npm run smoke（Electron で動かす）。node --test から呼ばれたときは飛ばす。
 
 if (!process.versions.electron) {
@@ -19,7 +19,7 @@ function check(name, ok, detail) {
 }
 
 async function main() {
-  const { config, errors } = loadConfigFile(path.join(__dirname, '..', 'cards', 'sample.json'));
+  const { config, errors } = loadConfigFile(path.join(__dirname, 'fixtures', 'sample.json'));
   if (!config) throw new Error(`sample.json を読めません: ${JSON.stringify(errors)}`);
 
   const inbox = await runCard(BrowserWindow, config, 'inbox');

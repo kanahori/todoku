@@ -5,13 +5,13 @@
   "cards": [
     {
       "id": "deadlines",
-      "title": "次の締め切りを読む",
+      "title": "講座の締め切りを読む",
       "action": "read",
       "selector": ".block-deadlines .deadline-items"
     },
     {
       "id": "news",
-      "title": "お知らせを読む",
+      "title": "講座のお知らせを読む",
       "action": "read",
       "selector": ".block-news .news-item"
     },

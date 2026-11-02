@@ -35,7 +35,7 @@ test('手元の置き場も読み、id が重なったものは読まない', ()
   try {
     const mine = { ...good(), id: 'local-app' };
     fs.writeFileSync(path.join(local, 'a.json'), JSON.stringify(mine));
-    fs.writeFileSync(path.join(local, 'b.json'), JSON.stringify({ ...good(), id: 'sample' }));
+    fs.writeFileSync(path.join(local, 'b.json'), JSON.stringify({ ...good(), id: 'moodle-demo' }));
     const results = loadConfigSources([
       { dir: path.join(__dirname, '..', 'cards'), label: 'cards' },
       { dir: local, label: '手元' },
