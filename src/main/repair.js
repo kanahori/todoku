@@ -1,0 +1,132 @@
+'use strict';
+// 画面が変わって当たらなくなった行について、直しの案を作る所。
+// 一巡: 当たらない行（checkCards）→ ページの構造を集める（structure.js）→ Claude に案を頼む
+//       → 案をページで試す → 人が「採る／採らない」を選ぶ → 設定ファイルを書き直す。
+// Claude に送るのは、当たらない行（場所・カードの題・操作・前のセレクタ）とページの構造だけ。ページの文字は送らない。
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { z } = require('zod');
+const { SYSTEM_PROMPT, buildRepairRequest } = require('./repair-prompt');
+const { buildSkeletonScript, looksTextFree } = require('./structure');
+const { resolveUrl, openTarget } = require('./target');
+
+const DEFAULT_MODEL = 'claude-opus-5-5';
+
+const RepairSchema = z.object({
+  proposals: z.array(
+    z.object({
+      where: z.string(),
+      selector: z.string(),
+      reason: z.string(),
+    }),
+  ),
+});
+
+function hasApiKey(env = process.env) {
+  return typeof env.ANTHROPIC_API_KEY === 'string' && env.ANTHROPIC_API_KEY.trim() !== '';
+}
+
+// 本物の Claude を呼ぶ関数を作る。試しでは、同じ形の偽の関数を渡す。
+// 返すのは async ({ system, user }) => { proposals } 。
+function createClaudeCaller({ model = process.env.CARDS_REPAIR_MODEL || DEFAULT_MODEL, fetch } = {}) {
+  // 鍵は環境変数 ANTHROPIC_API_KEY から読む（SDK が読む）。
+  const Anthropic = require('@anthropic-ai/sdk');
+  const { betaZodOutputFormat } = require('@anthropic-ai/sdk/helpers/beta/zod');
+  const client = new Anthropic(fetch ? { fetch } : {});
+  return async ({ system, user }) => {
+    const response = await client.beta.messages.parse({
+      model,
+      max_tokens: 16000,
+      // 安全の判定で断られたときは、サーバーの側で別のモデルに回す。
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'high', format: betaZodOutputFormat(RepairSchema) },
+      system,
+      messages: [{ role: 'user', content: user }],
+    });
+    if (response.stop_reason === 'refusal') {
+      throw new Error('Claude が案を作るのを断りました');
+    }
+    if (!response.parsed_output) {
+      throw new Error(`案を読み取れませんでした（stop_reason: ${response.stop_reason}）`);
+    }
+    return response.parsed_output;
+  };
+}
+
+// ページの中で動く関数。セレクタごとに、当たる要素の数だけを返す。
+function pageCount(selectors) {
+  return selectors.map((s) => {
+    try {
+      return document.querySelectorAll(s).length;
+    } catch (e) {
+      return -1;
+    }
+  });
+}
+
+// 当たらない行の一覧（checkCards の結果）から、直しの案を作る。
+// 結果は { proposals: [{ where, index, title, action, oldSelector, newSelector, reason, matches }], errors: [{ where, message }] }。
+async function proposeRepairs({ BrowserWindow, config, problems, callModel }) {
+  const proposals = [];
+  const errors = [];
+  // selector の行だけを扱う。カードの位置ごとにまとめ、開くページごとに分ける。
+  const byUrl = new Map();
+  for (const p of problems) {
+    const m = /^cards\[(\d+)\]\.selector$/.exec(p.where);
+    if (!m) {
+      errors.push({ where: p.where, message: 'この行は案の対象にしていません' });
+      continue;
+    }
+    const index = Number(m[1]);
+    const card = config.cards[index];
+    const url = resolveUrl(config.url, card.path);
+    if (!byUrl.has(url)) byUrl.set(url, []);
+    byUrl.get(url).push({ where: p.where, index, title: card.title, action: card.action, oldSelector: card.selector });
+  }
+
+  for (const [url, items] of byUrl) {
+    const win = await openTarget(BrowserWindow, config, url);
+    const { skeleton, nodes, truncated } = await win.webContents.executeJavaScript(buildSkeletonScript());
+    if (!looksTextFree(skeleton)) {
+      for (const it of items) errors.push({ where: it.where, message: '構造に文字が混ざったので、送りませんでした' });
+      continue;
+    }
+    let answer;
+    try {
+      answer = await callModel({ system: SYSTEM_PROMPT, user: buildRepairRequest(items, skeleton), meta: { nodes, truncated } });
+    } catch (e) {
+      for (const it of items) errors.push({ where: it.where, message: `案を作れませんでした: ${e.message}` });
+      continue;
+    }
+    const byWhere = new Map((answer.proposals || []).map((p) => [p.where, p]));
+    const candidates = items.map((it) => ({ ...it, newSelector: (byWhere.get(it.where)?.selector || '').trim(), reason: byWhere.get(it.where)?.reason || '案がありませんでした' }));
+    // 案をページで試し、当たる数を添える（人が採るかを決める手がかり）。
+    const counts = await win.webContents.executeJavaScript(`(${pageCount.toString()})(${JSON.stringify(candidates.map((c) => c.newSelector || ':not(*)'))})`);
+    candidates.forEach((c, k) => proposals.push({ ...c, matches: c.newSelector ? counts[k] : 0 }));
+  }
+  return { proposals, errors };
+}
+
+// 採った案を設定ファイルの中身に当てる。元の中身は変えずに、新しい中身を返す。
+function applyRepairs(config, accepted) {
+  const next = JSON.parse(JSON.stringify(config));
+  for (const a of accepted) {
+    if (!next.cards[a.index]) continue;
+    next.cards[a.index].selector = a.newSelector;
+  }
+  return next;
+}
+
+// 設定ファイルを書き直す。書く前の中身を backupDir にコピーしておく。
+function saveConfigFile(file, config, backupDir) {
+  if (backupDir) {
+    fs.mkdirSync(backupDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    fs.copyFileSync(file, path.join(backupDir, `${path.basename(file, '.json')}.${stamp}.json`));
+  }
+  fs.writeFileSync(file, JSON.stringify(config, null, 2) + '\n', 'utf8');
+}
+
+module.exports = { RepairSchema, hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile, DEFAULT_MODEL };

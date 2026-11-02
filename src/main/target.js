@@ -190,4 +190,4 @@ async function checkCards(BrowserWindow, config, options = {}) {
   return problems;
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, runCard, checkCards };
+module.exports = { resolveUrl, buildScript, pageAction, runCard, checkCards, openTarget };

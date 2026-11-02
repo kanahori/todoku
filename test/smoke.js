@@ -80,6 +80,43 @@ async function main() {
   check('後の版では cards[0] と cards[1] の selector だけが当たらない',
     JSON.stringify(whereAfter) === JSON.stringify(['cards[0].selector', 'cards[1].selector']), after);
   check('点検の結果にページの中身が入っていない', !JSON.stringify(after).includes('第3回'), after);
+
+  // 直しの一巡（Claude を呼ぶ所は偽の返事）: 当たらない → 構造を集める → 案 → 採る → 設定ファイルが直る → 当たる。
+  const os = require('node:os');
+  const fs = require('node:fs');
+  const { proposeRepairs, applyRepairs, saveConfigFile } = require('../src/main/repair');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'repair-smoke-'));
+  try {
+    const file = path.join(tmp, 'practice-course.json');
+    const afterConfig = { ...course, id: 'practice-course-repair', url: 'fixture:course-after.html' };
+    fs.writeFileSync(file, JSON.stringify(afterConfig, null, 2));
+    const loaded = loadConfigFile(file).config;
+    const problems = await checkCards(BrowserWindow, loaded, { settleMs: 100 });
+    let sentUser = '';
+    const fakeModel = async ({ system, user }) => {
+      sentUser = user;
+      return {
+        proposals: [
+          { where: 'cards[0].selector', selector: '[data-region="deadline-list"]', reason: '締め切りの一覧が data-region に変わったため。' },
+          { where: 'cards[1].selector', selector: '[data-region="announcement"]', reason: 'お知らせが data-region に変わったため。' },
+        ],
+      };
+    };
+    const { proposals, errors } = await proposeRepairs({ BrowserWindow, config: loaded, problems, callModel: fakeModel });
+    check('Claude に送る文に、ページの文字が入っていない',
+      sentUser.includes('data-region=deadline-list') && !sentUser.includes('第3回') && !sentUser.includes('担当教員') && !sentUser.includes('授業の資料'), sentUser.slice(0, 300));
+    check('案が 2件でき、どちらも今のページで 1か所に当たる',
+      errors.length === 0 && proposals.length === 2 && proposals.every((p) => p.matches === 1), { proposals, errors });
+    saveConfigFile(file, applyRepairs(loaded, proposals), path.join(tmp, 'backups'));
+    const fixed = loadConfigFile(file).config;
+    const recheck = await checkCards(BrowserWindow, fixed, { settleMs: 100 });
+    check('採った案を書いた後は、全部のカードが当たる', recheck.length === 0, recheck);
+    const read = await runCard(BrowserWindow, fixed, 'deadlines');
+    check('直したカードで締め切りを読める', read.ok && read.text.includes('第3回'), read);
+    check('書く前の設定ファイルを控えに残した', fs.readdirSync(path.join(tmp, 'backups')).length === 1, fs.readdirSync(path.join(tmp, 'backups')));
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 app.whenReady()

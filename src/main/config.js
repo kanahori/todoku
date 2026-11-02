@@ -125,7 +125,7 @@ function loadConfigSources(sources) {
         continue;
       }
       if (r.config) ids.add(r.config.id);
-      results.push({ file, config: r.config ?? null, errors: r.errors ?? [] });
+      results.push({ file, path: r.file, config: r.config ?? null, errors: r.errors ?? [] });
     }
   }
   return results;

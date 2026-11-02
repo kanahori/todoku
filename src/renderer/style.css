@@ -53,6 +53,34 @@ h2 { font-size: 1.3rem; margin: 1.5rem 0 0.5rem; }
 
 .result-body { white-space: pre-line; }
 
+.maint { margin-top: 1rem; }
+h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; }
+
+.tool-button {
+  font: inherit;
+  color: #000000;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 0.25rem;
+  padding: 0.4rem 0.8rem;
+  margin: 0.25rem 0;
+  cursor: pointer;
+}
+.tool-button:hover { background: #e6edf9; }
+.tool-button:focus-visible,
+.proposals input:focus-visible {
+  outline: 4px solid #003a8c;
+  outline-offset: 3px;
+}
+.tool-button:disabled { color: #000000; border-style: dashed; cursor: wait; }
+
+.proposals fieldset {
+  border: 2px solid #000000;
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+}
+.proposals label { margin-right: 1.5rem; }
+
 #problems-list { color: #8b0000; background: #ffffff; }
 
 .visually-hidden {

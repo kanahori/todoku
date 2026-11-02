@@ -70,7 +70,100 @@ function renderApp(config) {
   return el('section', { 'aria-labelledby': headingId }, [
     el('h2', { id: headingId, text: config.name }),
     list,
+    renderMaintenance(config),
   ]);
+}
+
+// 設定ファイルの点検と、直しの案を選ぶ所。
+function renderMaintenance(config) {
+  const headingId = `maint-${config.id}`;
+  const area = el('div', { class: 'maint-area' });
+  const checkButton = el('button', { type: 'button', class: 'tool-button', text: '画面が変わっていないか点検する' });
+  checkButton.addEventListener('click', () => checkApp(config, area, checkButton));
+  return el('section', { class: 'maint', 'aria-labelledby': headingId }, [
+    el('h3', { id: headingId, text: `${config.name} の設定の点検` }),
+    checkButton,
+    area,
+  ]);
+}
+
+async function checkApp(config, area, button) {
+  button.disabled = true;
+  announce('点検しています。');
+  const result = await window.cardsApi.checkCards(config.id);
+  button.disabled = false;
+  if (!result.ok) {
+    area.replaceChildren(el('p', { text: result.message }));
+    announce(result.message);
+    return;
+  }
+  showProblems(config, area, result.problems);
+}
+
+function showProblems(config, area, problems) {
+  if (problems.length === 0) {
+    area.replaceChildren(el('p', { text: '全部のカードが当たりました。直すところはありません。' }));
+    announce('全部のカードが当たりました。');
+    return;
+  }
+  const list = el('ul', {}, problems.map((p) => el('li', { text: `${p.title ?? p.where}（${p.where}）: ${p.message}` })));
+  const proposeButton = el('button', { type: 'button', class: 'tool-button', text: '直しの案を作る' });
+  proposeButton.addEventListener('click', () => propose(config, area, proposeButton));
+  area.replaceChildren(el('p', { text: `当たらないカードが ${problems.length}枚あります。` }), list, proposeButton);
+  announce(`当たらないカードが ${problems.length}枚あります。直しの案を作るボタンがあります。`);
+}
+
+async function propose(config, area, button) {
+  button.disabled = true;
+  announce('直しの案を作っています。しばらくかかります。');
+  const result = await window.cardsApi.proposeRepairs(config.id);
+  button.disabled = false;
+  if (!result.ok) {
+    area.append(el('p', { text: result.message }));
+    announce(result.message);
+    return;
+  }
+  const form = el('form', { class: 'proposals' });
+  result.proposals.forEach((p, i) => {
+    const name = `choice-${config.id}-${i}`;
+    const canUse = p.newSelector && p.matches > 0;
+    const yes = el('input', { type: 'radio', name, value: 'yes', id: `${name}-yes` });
+    const no = el('input', { type: 'radio', name, value: 'no', id: `${name}-no` });
+    no.checked = true;
+    if (!canUse) yes.disabled = true;
+    const matchText = !p.newSelector ? '案はありません' : p.matches < 0 ? '書き方が正しくありません' : `今のページで ${p.matches}か所に当たります`;
+    form.append(el('fieldset', { 'data-where': p.where }, [
+      el('legend', { text: `${p.title}（${p.where}）` }),
+      el('p', { text: `前: ${p.oldSelector}` }),
+      el('p', { text: `案: ${p.newSelector || 'なし'}。${matchText}。` }),
+      el('p', { text: `理由: ${p.reason}` }),
+      el('label', { for: `${name}-yes` }, [yes, ' 採る']),
+      el('label', { for: `${name}-no` }, [no, ' 採らない']),
+    ]));
+  });
+  for (const e of result.errors) form.append(el('p', { text: `${e.where}: ${e.message}` }));
+  const apply = el('button', { type: 'submit', class: 'tool-button', text: '採った案を設定ファイルに書く' });
+  form.append(apply);
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const wheres = [...form.querySelectorAll('fieldset')]
+      .filter((fs) => fs.querySelector('input[value="yes"]').checked)
+      .map((fs) => fs.getAttribute('data-where'));
+    const r = await window.cardsApi.applyRepairs(config.id, wheres);
+    if (!r.ok) {
+      announce(r.message);
+      form.append(el('p', { text: r.message }));
+      return;
+    }
+    const rest = r.problems.length === 0 ? '全部のカードが当たるようになりました。' : `まだ当たらないカードが ${r.problems.length}枚あります。`;
+    const msg = `${r.written}件の案を設定ファイルに書きました。${rest}`;
+    area.replaceChildren(el('p', { text: msg }));
+    announce(msg);
+  });
+  area.append(form);
+  announce(`直しの案が ${result.proposals.length}件できました。1件ずつ、採るか採らないかを選んでください。`);
+  const firstChoice = form.querySelector('input');
+  if (firstChoice) firstChoice.focus();
 }
 
 function renderProblems(results) {
