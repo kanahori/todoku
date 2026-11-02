@@ -7,17 +7,17 @@
     {
       "id": "next-deadlines",
       "title": "次の締め切りを読む",
-      "action": "read",
+      "action": "list",
       "path": "/my/",
-      "selector": ".block_timeline [data-region=\"event-list-container\"]",
+      "selector": ".block_timeline [data-region=\"event-list-item\"]",
       "description": "ダッシュボードのタイムラインを読みます"
     },
     {
       "id": "my-courses",
       "title": "講座の一覧を読む",
-      "action": "read",
+      "action": "list",
       "path": "/my/courses.php",
-      "selector": ".block_myoverview [data-region=\"courses-view\"]"
+      "selector": ".block_myoverview [data-region=\"course-content\"] .coursename"
     },
     {
       "id": "announcements",
