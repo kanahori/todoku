@@ -1,0 +1,26 @@
+{
+  "id": "sample",
+  "name": "練習用のアプリ（作り物）",
+  "url": "https://example.com/",
+  "cards": [
+    {
+      "id": "inbox",
+      "title": "受信箱を読む",
+      "action": "read",
+      "selector": "main ul.messages",
+      "description": "新しい知らせを上から順に読みます"
+    },
+    {
+      "id": "new-message",
+      "title": "新しい知らせを書く",
+      "action": "click",
+      "selector": "button.compose"
+    },
+    {
+      "id": "assignments",
+      "title": "課題の一覧を読む",
+      "action": "read",
+      "selector": "section#assignments"
+    }
+  ]
+}

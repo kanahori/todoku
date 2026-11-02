@@ -1,0 +1,65 @@
+/* 色の対比は index.html の頭のコメントを参照。 */
+:root {
+  color: #000000;
+  background: #ffffff;
+  font-family: "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0;
+  padding: 1rem 2rem;
+}
+
+h1 { font-size: 1.6rem; margin: 0 0 1rem; }
+h2 { font-size: 1.3rem; margin: 1.5rem 0 0.5rem; }
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: block;
+  width: 100%;
+  min-height: 6rem;
+  padding: 1rem;
+  text-align: left;
+  font: inherit;
+  color: #000000;
+  background: #ffffff;
+  border: 3px solid #000000;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.card:hover,
+.card:active {
+  background: #e6edf9;
+}
+
+.card:focus-visible {
+  outline: 4px solid #003a8c;
+  outline-offset: 3px;
+}
+
+.card-title { display: block; font-weight: bold; font-size: 1.2rem; }
+.card-description { display: block; margin-top: 0.25rem; }
+
+#problems-list { color: #8b0000; background: #ffffff; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

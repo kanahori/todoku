@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!-- 対比の最小: 文字 10.01:1（#8b0000 と #ffffff）、線 10.59:1（フォーカスの枠 #003a8c と #ffffff）。2026-11-02 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>カードの画面</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>カードの画面</h1>
+  </header>
+  <main id="main">
+    <p id="loading">設定ファイルを読んでいます。</p>
+    <div id="apps"></div>
+    <section id="problems" aria-labelledby="problems-heading" hidden>
+      <h2 id="problems-heading">読めなかった設定ファイル</h2>
+      <ul id="problems-list"></ul>
+    </section>
+  </main>
+  <!-- 読み上げに知らせる所。中身を書き換えると読まれる。 -->
+  <div id="status" role="status" aria-live="polite" class="visually-hidden"></div>
+  <script src="renderer.js"></script>
+</body>
+</html>
