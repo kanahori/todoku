@@ -1,6 +1,6 @@
 'use strict';
 // 直しの案の欄（採る／採らない）を、鍵が無くても画面に出して確かめるための起こし方。
-// 動かし方: npm run ui:repair（Electron で動かす）。node --test から呼ばれたときは飛ばす。
+// 動かし方: npm run ui:repair（Electron で動かす）。本物の Claude で確かめるときは UI_REPAIR_REAL=1 を足す。node --test から呼ばれたときは飛ばす。
 // 作品のコードは変えない。Claude を呼ぶ所だけを、決まった案を返す偽物に差し替える。
 // 手元の置き場には、画面が変わった後の練習のページを指す設定ファイルを、一時のフォルダに置く。
 
@@ -22,17 +22,20 @@ fs.writeFileSync(
 process.env.CARDS_LOCAL_DIR = local;
 
 // main.js が読み込む前に、Claude を呼ぶ所を差し替える。
+// UI_REPAIR_REAL=1 のときは差し替えず、本物の Claude を呼ぶ（鍵 CARDS_ANTHROPIC_API_KEY が要る）。
 const repair = require('../src/main/repair');
-repair.hasApiKey = () => true;
-repair.createClaudeCaller = () => async () => {
-  await new Promise((r) => setTimeout(r, 1500)); // 本物らしく少し待つ
-  return {
-    proposals: [
-      { where: 'cards[0].selector', selector: '[data-region="deadline-list"]', reason: '締め切りの一覧の作りが、class から data-region に変わったためです。' },
-      { where: 'cards[1].selector', selector: '[data-region="announcement"]', reason: 'お知らせの作りが、class から data-region に変わったためです。' },
-    ],
+if (process.env.UI_REPAIR_REAL !== '1') {
+  repair.hasApiKey = () => true;
+  repair.createClaudeCaller = () => async () => {
+    await new Promise((r) => setTimeout(r, 1500)); // 本物らしく少し待つ
+    return {
+      proposals: [
+        { where: 'cards[0].selector', selector: '[data-region="deadline-list"]', reason: '締め切りの一覧の作りが、class から data-region に変わったためです。' },
+        { where: 'cards[1].selector', selector: '[data-region="announcement"]', reason: 'お知らせの作りが、class から data-region に変わったためです。' },
+      ],
+    };
   };
-};
+}
 
 process.on('exit', () => fs.rmSync(local, { recursive: true, force: true }));
 require('../src/main/main');
@@ -51,7 +54,11 @@ if (process.env.UI_REPAIR_AUTO === '1') {
     await wait(3000);
     console.log('点検の後: ' + (await status()));
     await js(`[...${section}.querySelectorAll('button')].find((b) => b.textContent === '直しの案を作る').click()`);
-    await wait(5000);
+    await wait(500);
+    // 本物の Claude は数十秒かかるので、知らせが「案を作っています」から変わるまで待つ（最長 180 秒）。
+    // 知らせは、いったん空にしてから入れる作りなので、空のあいだも待つ。
+    for (let i = 0; i < 180 && /^$|作っています/.test(await status()); i++) await wait(1000);
+    await wait(1000);
     console.log('案の後: ' + (await status()));
     console.log('案の欄: ' + (await js(`[...${section}.querySelectorAll('fieldset')].map((f) => f.querySelector('legend').textContent + ' / ' + [...f.querySelectorAll('p')].map((p) => p.textContent).join(' / ')).join('\\n')`)));
     console.log('フォーカス: ' + (await js(`document.activeElement.id + ' ' + document.activeElement.type`)));
