@@ -1,0 +1,23 @@
+{
+  "name": "hackathon2026",
+  "version": "1.0.0",
+  "description": "Card-based accessible front end for web apps (Electron)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kanahori/hackathon2026.git"
+  },
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/kanahori/hackathon2026/issues"
+  },
+  "homepage": "https://github.com/kanahori/hackathon2026#readme",
+  "devDependencies": {
+    "electron": "^45.2.1"
+  },
+  "private": true
+}
