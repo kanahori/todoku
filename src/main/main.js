@@ -3,10 +3,12 @@
 
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain } = require('electron');
-const { loadConfigDir } = require('./config');
+const { loadConfigSources } = require('./config');
 const { runCard } = require('./target');
 
 const CARDS_DIR = path.join(__dirname, '..', '..', 'cards');
+// 手元の設定ファイルの置き場（公開しないもの）。場所は環境変数 CARDS_LOCAL_DIR で渡す。
+const CARDS_LOCAL_DIR = process.env.CARDS_LOCAL_DIR || null;
 
 // 読めた設定ファイル（id → 中身）。カードを動かすときに使う。
 const configs = new Map();
@@ -30,15 +32,12 @@ function createWindow() {
 
 ipcMain.handle('configs:load', () => {
   // 読めたものと、当たらない所の一覧の両方を返す。
+  const sources = [{ dir: CARDS_DIR, label: 'cards' }];
+  if (CARDS_LOCAL_DIR) sources.push({ dir: CARDS_LOCAL_DIR, label: '手元' });
+  const results = loadConfigSources(sources);
   configs.clear();
-  return loadConfigDir(CARDS_DIR).map((r) => {
-    if (r.config) configs.set(r.config.id, r.config);
-    return {
-      file: path.basename(r.file),
-      config: r.config ?? null,
-      errors: r.errors ?? [],
-    };
-  });
+  for (const r of results) if (r.config) configs.set(r.config.id, r.config);
+  return results;
 });
 
 ipcMain.handle('card:run', async (_event, appId, cardId) => {

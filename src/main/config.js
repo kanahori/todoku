@@ -112,4 +112,23 @@ function loadConfigDir(dir) {
     .map((name) => loadConfigFile(path.join(dir, name)));
 }
 
-module.exports = { validateConfig, loadConfigFile, loadConfigDir };
+// いくつかの置き場（[{ dir, label }]）を順に読む。id が前の置き場と重なったものは読まない。
+// 結果は [{ file: 'label/名前.json', config | null, errors }]。
+function loadConfigSources(sources) {
+  const ids = new Set();
+  const results = [];
+  for (const { dir, label } of sources) {
+    for (const r of loadConfigDir(dir)) {
+      const file = `${label}/${path.basename(r.file)}`;
+      if (r.config && ids.has(r.config.id)) {
+        results.push({ file, config: null, errors: [{ where: 'id', message: `「${r.config.id}」は別の設定ファイルと重なっています` }] });
+        continue;
+      }
+      if (r.config) ids.add(r.config.id);
+      results.push({ file, config: r.config ?? null, errors: r.errors ?? [] });
+    }
+  }
+  return results;
+}
+
+module.exports = { validateConfig, loadConfigFile, loadConfigDir, loadConfigSources };

@@ -1,0 +1,31 @@
+{
+  "id": "practice-course",
+  "name": "練習の講座（作り物）",
+  "url": "fixture:course-before.html",
+  "cards": [
+    {
+      "id": "deadlines",
+      "title": "次の締め切りを読む",
+      "action": "read",
+      "selector": ".block-deadlines .deadline-items"
+    },
+    {
+      "id": "news",
+      "title": "お知らせを読む",
+      "action": "read",
+      "selector": ".block-news .news-item"
+    },
+    {
+      "id": "materials",
+      "title": "授業の資料を読む",
+      "action": "read",
+      "selector": ".block-materials .material-items"
+    },
+    {
+      "id": "grades",
+      "title": "成績を開く",
+      "action": "click",
+      "selector": ".course-nav .nav-grades"
+    }
+  ]
+}

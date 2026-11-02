@@ -129,4 +129,46 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   return { ok: true, action: card.action, text: result.text, truncated: result.truncated };
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, runCard };
+// ページの中で動く関数（点検用）。selector が当たるかだけを返し、中身は読まない。
+function pageProbe(selectors) {
+  return selectors.map((s) => {
+    try {
+      return document.querySelector(s) ? 'ok' : 'none';
+    } catch (e) {
+      return 'invalid';
+    }
+  });
+}
+
+// 全部のカードを点検し、当たらない行の一覧を返す。押さない・読まない。
+// 結果は [{ where, message }]。ページの中身は入れない（Claude に送ってよいのはこの一覧だけ）。
+async function checkCards(BrowserWindow, config, options = {}) {
+  const problems = [];
+  // 開くページごとにまとめて、読み込みを少なくする。
+  const byUrl = new Map();
+  config.cards.forEach((card, index) => {
+    let url;
+    try {
+      url = resolveUrl(config.url, card.path);
+    } catch (e) {
+      problems.push({ where: card.path ? `cards[${index}].path` : 'url', message: e.message });
+      return;
+    }
+    if (!byUrl.has(url)) byUrl.set(url, []);
+    byUrl.get(url).push({ card, index });
+  });
+  for (const [url, items] of byUrl) {
+    const win = await openTarget(BrowserWindow, config, url);
+    // 後から出てくる所に備えて、少し待ってから見る。
+    await new Promise((r) => setTimeout(r, options.settleMs ?? 1500));
+    const selectors = items.map((i) => i.card.selector);
+    const states = await win.webContents.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify(selectors)})`);
+    items.forEach(({ index }, k) => {
+      if (states[k] === 'none') problems.push({ where: `cards[${index}].selector`, message: 'ページの中に当たる所がありません' });
+      if (states[k] === 'invalid') problems.push({ where: `cards[${index}].selector`, message: 'selector の書き方が正しくありません' });
+    });
+  }
+  return problems;
+}
+
+module.exports = { resolveUrl, buildScript, pageAction, runCard, checkCards };

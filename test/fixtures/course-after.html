@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（画面が変わった後の版）。中身は前の版と同じで、作りだけが変わっている。 -->
+<!-- 変わった所: 締め切りとお知らせの class が data-region に変わった。資料の欄はそのまま。 -->
+<!-- 対比の最小: 文字 21:1（#000000 と #ffffff）。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>講座のページ（作り物・後の版）</title>
+  <style>
+    body { font-family: system-ui, sans-serif; color: #000000; background: #ffffff; margin: 1rem 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>情報処理の練習（作り物）</h1>
+    <nav class="course-nav">
+      <a href="#" class="nav-grades">成績</a>
+      <a href="#" class="nav-participants">参加者</a>
+    </nav>
+  </header>
+  <main>
+    <div class="layout-columns">
+      <aside data-region="upcoming-deadlines" aria-labelledby="dl-heading">
+        <h2 id="dl-heading">次の締め切り</h2>
+        <ol data-region="deadline-list">
+          <li>第3回の課題: 11月9日 23時59分</li>
+          <li>小テスト2: 11月12日 12時00分</li>
+        </ol>
+      </aside>
+      <section data-region="announcements" aria-labelledby="news-heading">
+        <h2 id="news-heading">お知らせ</h2>
+        <div data-region="announcement">田中先生（作り物）: 来週の授業は教室を変えます。</div>
+      </section>
+    </div>
+    <section class="block-materials">
+      <h2>授業の資料</h2>
+      <ul class="material-items">
+        <li>第1回の資料</li>
+        <li>第2回の資料</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

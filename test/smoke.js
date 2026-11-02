@@ -10,7 +10,7 @@ if (!process.versions.electron) {
 const path = require('node:path');
 const { app, BrowserWindow } = require('electron');
 const { loadConfigFile } = require('../src/main/config');
-const { runCard } = require('../src/main/target');
+const { runCard, checkCards } = require('../src/main/target');
 
 const checks = [];
 function check(name, ok, detail) {
@@ -62,6 +62,16 @@ async function main() {
   check('ログインしていないときは needLogin を返す', !login.ok && login.needLogin === true && login.where === undefined, login);
   const loginUrl = BrowserWindow.getAllWindows()[0].webContents.getURL();
   check('ログインが要るときは login.path の画面を開く', loginUrl.endsWith('/practice-login.html'), loginUrl);
+
+  // 画面が変わる前と後: 同じ設定ファイルで点検し、当たらない行だけが返るか。
+  const course = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-course.json')).config;
+  const before = await checkCards(BrowserWindow, course, { settleMs: 100 });
+  check('前の版では当たらない行が無い', before.length === 0, before);
+  const after = await checkCards(BrowserWindow, { ...course, id: 'practice-course-after', url: 'fixture:course-after.html' }, { settleMs: 100 });
+  const whereAfter = after.map((p) => p.where);
+  check('後の版では cards[0] と cards[1] の selector だけが当たらない',
+    JSON.stringify(whereAfter) === JSON.stringify(['cards[0].selector', 'cards[1].selector']), after);
+  check('点検の結果にページの中身が入っていない', !JSON.stringify(after).includes('第3回'), after);
 }
 
 app.whenReady()
