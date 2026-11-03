@@ -204,6 +204,18 @@ const loginFocus = new Set();
 let homeWindow = null;
 function setHomeWindow(win) { homeWindow = win; }
 
+// 試しの台本（test/headless.js）が TODOKU_TEST_HEADLESS=1 を立てたときは、窓を画面に出さず、焦点も動かさない。
+// 試しの窓が開いて、人が別のアプリで打っていた文字がその窓に入ったことがあった（2026-11-03）。アプリとして起こしたときは立たない。
+function testHeadless() {
+  return process.env.TODOKU_TEST_HEADLESS === '1';
+}
+
+// 前に出さずに見せる（試しのときは見せない）。
+function showQuietly(win) {
+  if (testHeadless() || win.isVisible()) return;
+  win.showInactive();
+}
+
 function keepUnfocusable(id, win) {
   loginFocus.delete(id);
   if (win.isFocusable()) win.setFocusable(false);
@@ -246,7 +258,7 @@ async function openTarget(BrowserWindow, config, url) {
   // 読み込み直すと、ページの中で出した表が消えるため。
   if (!isSamePage(win.webContents.getURL(), url)) await win.loadURL(url);
   // カードの画面からフォーカスを奪わないように、前に出さずに見せる。
-  if (!win.isVisible()) win.showInactive();
+  showQuietly(win);
   return win;
 }
 
@@ -288,7 +300,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
         return { ok: false, where: 'login.path', message: `ログインの画面を開けませんでした: ${e.message}` };
       }
     }
-    if (!win.isVisible()) win.showInactive();
+    showQuietly(win);
     return { ok: false, needLogin: true, message: 'ログインが要ります。ウェブアプリの窓でログインしてから、もう一度カードを押してください' };
   }
   if (!result.found) {
@@ -364,8 +376,10 @@ function showTarget(appId) {
   if (!win.isFocusable()) win.setFocusable(true);
   // Windows では焦点を取れない窓はタスクバーに出ないので、ログインの間は出す。
   if (process.platform === 'win32') win.setSkipTaskbar(false);
-  win.show();
-  win.focus();
+  if (!testHeadless()) {
+    win.show();
+    win.focus();
+  }
   return true;
 }
 
@@ -377,5 +391,5 @@ function closeTarget(appId) {
 }
 
 module.exports = {
-  resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow,
+  resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
 };

@@ -11,6 +11,8 @@ if (!process.versions.electron) {
   return;
 }
 
+// 窓を画面に出さず、前のアプリから焦点を奪わない（--show-windows を付けたときだけ窓を出す）。
+require('./headless');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');

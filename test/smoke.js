@@ -7,6 +7,8 @@ if (!process.versions.electron) {
   return;
 }
 
+// 窓を画面に出さず、前のアプリから焦点を奪わない（--show-windows を付けたときだけ窓を出す）。
+const { headless } = require('./headless');
 const path = require('node:path');
 const { app, BrowserWindow } = require('electron');
 // 落ちたときに、エラーのダイアログを出して止まらないようにする（試しは画面の前に人がいない前提で動くため）。
@@ -251,17 +253,22 @@ async function main() {
 // ウェブアプリの窓が焦点を奪わないか、と、読む文の区切り。作り物のページ（test/fixtures/focus-grab.html）は、
 // 読み込んだら自分で window.focus() を呼び、ページの中の欄に焦点を当てる（本物のつくば市のトップで見た動きをまねる）。
 // 2026-11-03 の Windows の確かめでは、つくば市のトップのカードを読んだ直後に NVDA がつくば市の窓へ移り、使う人が取り残された。
+// ふだん（窓を出さない試し）は、隠れた窓のまま、ウェブアプリの窓が焦点を取れない窓であること・焦点の知らせが一度も来ないこと・
+// ページの中で焦点を取ろうとしてもページが焦点を持たないことを確かめる。
+// 窓が OS の上で前に出ないことまで確かめるのは npm run smoke:windows（窓が前に出るので、Mac を使っている人がいないときだけ）。
 async function focusAndSeparatorChecks() {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  // Todoku の窓の代わりに、見える窓を一つ開いて前に出す。
-  const home = new BrowserWindow({ width: 480, height: 320, title: 'Todoku（試し）' });
+  // Todoku の窓の代わりに、窓を一つ開く。窓を出す試しのときだけ、見せて前に出す。
+  const home = new BrowserWindow({ width: 480, height: 320, title: 'Todoku（試し）', show: !headless });
   try {
     await home.loadURL('data:text/html;charset=utf-8,<title>Todoku</title><p>試し</p>');
     setHomeWindow(home);
-    if (app.focus) app.focus({ steal: true });
-    home.focus();
+    if (!headless) {
+      if (app.focus) app.focus({ steal: true });
+      home.focus();
+    }
     await wait(300);
-    const before = BrowserWindow.getFocusedWindow() === home;
+    const before = headless || BrowserWindow.getFocusedWindow() === home;
     // 焦点を得た窓を順に控える（この機械でほかのアプリが前に出て、Todoku のどの窓にも焦点が無くなることがあるため、
     // 「いま焦点のある窓」だけでなく、ウェブアプリの窓に一度でも焦点が来たかで見る）。
     const focusLog = [];
@@ -277,15 +284,20 @@ async function focusAndSeparatorChecks() {
     const target = BrowserWindow.getAllWindows().find((w) => w !== home && w.getTitle() === '焦点を取るページ（作り物）');
     const focused = BrowserWindow.getFocusedWindow();
     app.removeListener('browser-window-focus', onFocus);
+    // 窓を出さない試しでは、ウェブアプリの窓は隠れたままで、ページも焦点を持たない。窓を出す試しでは、前に出さずに見せる。
+    const pageHasFocus = target ? await target.webContents.executeJavaScript('document.hasFocus()') : null;
+    const shownAsExpected = target && (headless ? !target.isVisible() && pageHasFocus === false && !target.webContents.isFocused() : target.isVisible());
     check('焦点: 自分で焦点を取るページのカードを読んだ後も、ウェブアプリの窓に一度も焦点が来ず、Todoku の窓から焦点が移らない（ウェブアプリの窓は焦点を取れない窓）',
-      before && target && target.isVisible() && target.isFocusable() === false && !focusLog.includes(target.getTitle()) && focused !== target
+      before && shownAsExpected && target.isFocusable() === false && !focusLog.includes(target.getTitle()) && focused !== target
         && (focused === home || focused === null),
-      { before, focused: focused ? focused.getTitle() : null, focusLog, focusable: target ? target.isFocusable() : null });
+      { headless, before, focused: focused ? focused.getTitle() : null, focusLog, focusable: target ? target.isFocusable() : null,
+        visible: target ? target.isVisible() : null, pageHasFocus });
 
     // 守りの二つ目: それでもウェブアプリの窓に焦点が来たら、Todoku の窓へ返す。
     let homeFocusCalls = 0;
     const homeFocus = home.focus.bind(home);
-    home.focus = () => { homeFocusCalls += 1; homeFocus(); };
+    // 窓を出さない試しでは、数えるだけで、本当には焦点を動かさない。
+    home.focus = () => { homeFocusCalls += 1; if (!headless) homeFocus(); };
     target.emit('focus');
     home.focus = homeFocus;
     check('焦点: ウェブアプリの窓に焦点が来たと知らされたら、Todoku の窓へ返す', homeFocusCalls === 1, { homeFocusCalls });
@@ -301,8 +313,10 @@ async function focusAndSeparatorChecks() {
     check('区切り: 一覧の一件の中で、日付と題の間に空白か読点が入る（字の飾りの所は区切らず、aria-hidden の中は読まない）',
       news.ok && JSON.stringify(news.items) === JSON.stringify(['2026年11月3日 Open Day のご案内', '2026年11月1日 重要：図書館の休館日', '2026年10月30日、ごみの出し方が変わります']),
       news.items);
-    home.focus();
-    await wait(200);
+    if (!headless) {
+      home.focus();
+      await wait(200);
+    }
     const office = await runCard(BrowserWindow, grab, 'office');
     check('区切り: 読むカードは、見出し・画像の説明・段落の中の改行ごとに別の行になる（見えない所は読まない）',
       office.ok && office.text === '役場の窓口\n役場の写真 あおば町役場\n電話 （作り物の番号）\n窓口 8時30分から17時15分', office.text);

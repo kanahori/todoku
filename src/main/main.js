@@ -4,7 +4,7 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { checkCards, showTarget, closeTarget, setHomeWindow } = require('./target');
+const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
@@ -78,6 +78,8 @@ function createWindow() {
     width: 1000,
     height: 760,
     title: 'Todoku',
+    // 試しの台本（test/headless.js）から起こしたときだけ、窓を画面に出さない。
+    show: !testHeadless(),
     backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),

@@ -26,6 +26,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
   - `npm test` runs the unit tests with Node's built-in test runner.
   - `npm run smoke` runs the end-to-end checks inside Electron against the bundled practice pages in `test/fixtures/` (no network access).
   - `npm run ui:repair` opens the card screen with a fake repair model, so you can try the "accept / reject" form without an API key. Set `UI_REPAIR_AUTO=1` to run it unattended.
+  - `npm run smoke`, `npm run ui:repair` and `npm run real:tsukuba` keep their windows hidden and never take the keyboard focus from the app in front (on macOS they also stay out of the Dock), so they are safe to run while someone is typing. Add `-- --show-windows` to show the windows (for example, to look at the `ui:repair` screen).
+  - `npm run smoke:windows` runs the same smoke checks with the windows shown, so the focus checks also cover the real window manager. Its windows come to the front, so run it only when nobody is using the computer.
 - Build Windows installers: `npm run dist:win`
   - Produces an installer (`dist/Todoku Setup 1.0.0.exe`) and a portable build (`dist/Todoku 1.0.0.exe`), each containing both x64 and Arm64.
   - The builds are not code-signed, so Windows SmartScreen may show an "unknown publisher" warning.

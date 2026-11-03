@@ -6,6 +6,8 @@
 
 // 2026-11-03: 画面を基のカード型ページの形に作り直している途中で、点検と直しの案の欄は、まだ新しい画面にない。
 // 直しの案を利用者の画面と保守の画面に作り直したら（作る順の (5)）、この起こし方も作り直す。
+// 窓を画面に出さず、前のアプリから焦点を奪わない（--show-windows を付けたときだけ窓を出す）。
+if (process.versions.electron) require('./headless');
 if (process.versions.electron) {
   console.log('直しの案の欄は、新しい画面で作り直している途中です。npm run ui:repair は、作り直すまで使えません。');
   require('electron').app.exit(0);
