@@ -57,6 +57,33 @@ async function main() {
   const invalid = await runCard(BrowserWindow, bad, 'bad', { waitMs: 500 });
   check('書き方の正しくない selector も cards[0].selector と返す', !invalid.ok && invalid.where === 'cards[0].selector', invalid);
 
+  // 0件と「読めません」を分ける: 入れ物（container）に当たって項目が無ければ 0件、入れ物にも当たらなければ当たらない。
+  const emptyCard = { id: 'empty', title: '空の一覧', action: 'list', selector: '#compose-area li', container: '#compose-area' };
+  const empty = await runCard(BrowserWindow, { ...config, cards: [emptyCard] }, 'empty', { waitMs: 3000 });
+  check('入れ物に当たって項目が無ければ、0件として読める（items が空）',
+    empty.ok && empty.action === 'list' && Array.isArray(empty.items) && empty.items.length === 0, empty);
+  const noBox = { ...emptyCard, container: undefined };
+  const noBoxResult = await runCard(BrowserWindow, { ...config, cards: [noBox] }, 'empty', { waitMs: 500 });
+  check('container の無いカードは、今までどおり 0件を cards[0].selector の当たらない行として返す',
+    !noBoxResult.ok && noBoxResult.where === 'cards[0].selector', noBoxResult);
+  const goneBox = { ...emptyCard, container: '#no-such-box' };
+  const goneResult = await runCard(BrowserWindow, { ...config, cards: [goneBox] }, 'empty', { waitMs: 500 });
+  check('入れ物にも当たらなければ、cards[0].selector の当たらない行として返す',
+    !goneResult.ok && goneResult.where === 'cards[0].selector', goneResult);
+  const badBox = { ...emptyCard, container: 'ul[' };
+  const badBoxResult = await runCard(BrowserWindow, { ...config, cards: [badBox] }, 'empty', { waitMs: 500 });
+  check('書き方の正しくない container は cards[0].container と返す',
+    !badBoxResult.ok && badBoxResult.where === 'cards[0].container', badBoxResult);
+  // 入れ物が先に見え、1秒後に項目が出てくるページでも、0件と早まらずに項目を待って読む。
+  await wc.loadURL(wc.getURL());
+  const lateBox = { id: 'late-list', title: '次の締め切り', action: 'list', selector: '#deadline-list li', container: '#deadline-list' };
+  const lateBoxResult = await runCard(BrowserWindow, { ...config, cards: [lateBox] }, 'late-list');
+  check('入れ物が先に見えても、1秒後に出てくる項目を待って 1件読める',
+    lateBoxResult.ok && lateBoxResult.items.length === 1 && lateBoxResult.text.includes('23時59分'), lateBoxResult);
+  const emptyCheck = await checkCards(BrowserWindow, { ...config, cards: [emptyCard, noBox, goneBox] }, { settleMs: 100 });
+  check('点検では、入れ物に当たる 0件のカードは当たらない行に入れない',
+    JSON.stringify(emptyCheck.map((p) => p.where)) === JSON.stringify(['cards[1].selector', 'cards[2].selector']), emptyCheck);
+
   // ログインの画面に当たったら、「当たらない」ではなく「ログインが要る」と返す。
   const loginConfig = {
     ...config,

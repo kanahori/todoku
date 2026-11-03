@@ -26,7 +26,9 @@ function resolveUrl(url, cardPath) {
 
 // ページの中で動く関数。外の変数は使えないので、引数だけで動くようにする。
 // 後から出てくる所に備えて、当たるまで少しずつ待つ。
-async function pageAction(selector, action, loginSelector, limit, waitMs) {
+// container（list のカードだけ・任意）は、項目を入れる入れ物の selector。
+// 入れ物に当たって項目が 0件なら「0件」（found: true・items: []）、入れ物にも当たらなければ「当たらない」と返す。
+async function pageAction(selector, action, loginSelector, limit, waitMs, container) {
   const readText = (el) => (el.innerText || el.textContent || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   // 画面読み上げが読む文に近づける: 中の文字に加えて、画像の説明（alt）と aria-label も読む。
   // 隠れている要素（自動で切り替わるスライドの見えない分）も読む。aria-hidden="true" の中と script・style は読まない。
@@ -66,6 +68,9 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
   const deadline = Date.now() + waitMs;
   if (action === 'list') {
     // 当たる項目を全部、番号を付けて読む。隠れているスライドも、画像の説明（alt）も読む。
+    // 入れ物が見えてから項目が出てくるページもあるので、入れ物に当たってからも少し（最長2秒）待ってから 0件とする。
+    const EMPTY_SETTLE_MS = Math.min(waitMs, 2000);
+    let containerSeenAt = null;
     for (;;) {
       let items;
       try {
@@ -88,6 +93,18 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
         return { found: true, text: text.slice(0, limit), truncated: text.length > limit, items: parts };
       }
       if (loginSelector && query(loginSelector).el) return { found: false, reason: 'login' };
+      if (container) {
+        const box = query(container);
+        if (box.invalid) return { found: false, reason: 'invalid', field: 'container' };
+        if (box.el) {
+          if (containerSeenAt === null) containerSeenAt = Date.now();
+          if (Date.now() - containerSeenAt >= EMPTY_SETTLE_MS || Date.now() >= deadline) {
+            return { found: true, text: '0件です。', truncated: false, items: [] };
+          }
+        } else {
+          containerSeenAt = null;
+        }
+      }
       if (Date.now() >= deadline) return { found: false, reason: 'none' };
       await new Promise((r) => setTimeout(r, 250));
     }
@@ -117,8 +134,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
 }
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
-function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS) {
-  const args = [selector, action, loginSelector, READ_LIMIT, waitMs].map((v) => JSON.stringify(v)).join(', ');
+function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null) {
+  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container].map((v) => JSON.stringify(v)).join(', ');
   return `(${pageAction.toString()})(${args})`;
 }
 
@@ -169,7 +186,8 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     return { ok: false, where: card.path ? `cards[${index}].path` : 'url', message: `ページを開けませんでした: ${e.message}` };
   }
   const loginSelector = config.login ? config.login.selector : null;
-  const result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs));
+  const container = card.action === 'list' && card.container ? card.container : null;
+  const result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container));
   if (result.reason === 'login') {
     // ログインは人が手で行う。ログインの画面を開いておく。
     // 窓を前に出すのは、利用者がカードの「ログインの窓を前に出す」を押したとき（showTarget）。
@@ -186,6 +204,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     return { ok: false, needLogin: true, message: 'ログインが要ります。ウェブアプリの窓でログインしてから、もう一度カードを押してください' };
   }
   if (!result.found) {
+    if (result.field === 'container') return { ok: false, where: `cards[${index}].container`, message: 'container の書き方が正しくありません' };
     const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に当たる所がありません';
     return { ok: false, where, message };
   }
@@ -193,13 +212,20 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
 }
 
 // ページの中で動く関数（点検用）。selector が当たるかだけを返し、中身は読まない。
-function pageProbe(selectors) {
-  return selectors.map((s) => {
+// 入れ物（container）のあるカードは、項目が 0件でも入れ物に当たれば 'ok'（0件は画面の変わりではない）。
+function pageProbe(selectors, containers = []) {
+  const probe = (s) => {
     try {
       return document.querySelector(s) ? 'ok' : 'none';
     } catch (e) {
       return 'invalid';
     }
+  };
+  return selectors.map((s, k) => {
+    const state = probe(s);
+    if (state !== 'none' || !containers[k]) return state;
+    const box = probe(containers[k]);
+    return box === 'invalid' ? 'invalid-container' : box;
   });
 }
 
@@ -225,8 +251,10 @@ async function checkCards(BrowserWindow, config, options = {}) {
     // 後から出てくる所に備えて、少し待ってから見る。
     await new Promise((r) => setTimeout(r, options.settleMs ?? 1500));
     const selectors = items.map((i) => i.card.selector);
-    const states = await win.webContents.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify(selectors)})`);
+    const containers = items.map((i) => (i.card.action === 'list' && i.card.container ? i.card.container : null));
+    const states = await win.webContents.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify(selectors)}, ${JSON.stringify(containers)})`);
     items.forEach(({ index }, k) => {
+      if (states[k] === 'invalid-container') problems.push({ where: `cards[${index}].container`, message: 'container の書き方が正しくありません' });
       if (states[k] === 'none') problems.push({ where: `cards[${index}].selector`, message: 'ページの中に当たる所がありません' });
       if (states[k] === 'invalid') problems.push({ where: `cards[${index}].selector`, message: 'selector の書き方が正しくありません' });
     });
@@ -243,4 +271,4 @@ function showTarget(appId) {
   return true;
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, runCard, checkCards, openTarget, showTarget };
+module.exports = { resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget };

@@ -79,3 +79,15 @@ test('頭に BOM の付いた設定ファイルも読める（Windows のメモ�
   assert.equal(r.errors, undefined);
   assert.equal(r.config.id, 'demo');
 });
+
+test('container は list のカードにだけ、空でない文字列で書ける', () => {
+  const c = good();
+  c.cards = [
+    { id: 'a', title: 'A', action: 'list', selector: 'ul.items li', container: 'ul.items' },
+    { id: 'b', title: 'B', action: 'read', selector: 'main', container: 'main' },
+    { id: 'c', title: 'C', action: 'list', selector: 'ol li', container: '' },
+  ];
+  const errors = validateConfig(c);
+  assert.deepEqual(errors.map((e) => e.where), ['cards[1].container', 'cards[2].container']);
+  assert.match(errors[0].message, /list/);
+});

@@ -201,7 +201,8 @@ async function readCard(card) {
     node.setAttribute('aria-busy', 'true');
     enterCard(node, true);
   }
-  announce(`「${card.title}」を読んでいます。`);
+  // 「〇〇を読んでいます。」の知らせは出さない。焦点が移る「読んでいます。…」の項目と、見出しの「（読んでいます）」・aria-busy で
+  // 同じことを言っているため（2026-11-03 の NVDA の確かめで、3回続けて聞こえた）。5秒ごとの知らせと、終わりの知らせは残す。
   // 5秒に一度だけ、たった秒を知らせる。見える項目の文も書き換える。
   const timer = setInterval(() => {
     const sec = Math.round((Date.now() - started) / 1000);
@@ -268,7 +269,8 @@ function unreadableText(card, result) {
   const message = String(result.message || '');
   if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
-  if (card.action === 'list') return '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。';
+  // 入れ物（container）のあるカードは、0件なら「（0件）」と出るので、ここに来るのは本当に見つからないときだけ。
+  if (card.action === 'list' && !card.hasContainer) return '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。';
   return '画面が変わったため、読む所が見つかりませんでした。';
 }
 
@@ -344,6 +346,7 @@ function appDeck(config, hasParent = true) {
       cardId: c.id,
       title: c.title,
       heading: c.title,
+      hasContainer: Boolean(c.container),
       note: c.description ? endSentence(c.description) : undefined,
       items: [],
     });

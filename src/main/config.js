@@ -15,6 +15,9 @@
 //       "action": "read" | "click" | "list",   // list は当たる項目を全部、番号を付けて読む
 //       "selector": "main ul.messages",  // どこを読む・何を押すか
 //       "path": "/my/",                  // 任意。url から見た、開くページ（/ で始まる）
+//       "container": "main ul.messages", // 任意・list のカードだけ。項目を入れる入れ物。
+//                                        // 入れ物に当たって項目が無ければ「0件」、入れ物にも当たらなければ「読めません」。
+//                                        // 無いカードは、項目が無ければ「読めません」（0件と画面の変わりを分けられない）
 //       "description": "任意の補足"
 //     }
 //   ]
@@ -82,6 +85,13 @@ function validateConfig(config) {
     }
     if (card.path !== undefined && (typeof card.path !== 'string' || !/^\/(?!\/)/.test(card.path))) {
       add(`${at}.path`, '/ で始まる文字列が要ります（// で始まるものは不可）');
+    }
+    if (card.container !== undefined) {
+      if (typeof card.container !== 'string' || card.container.trim() === '') {
+        add(`${at}.container`, '空でない文字列が要ります');
+      } else if (card.action !== 'list') {
+        add(`${at}.container`, 'action が "list" のカードにだけ使えます');
+      }
     }
     if (card.description !== undefined && typeof card.description !== 'string') {
       add(`${at}.description`, '文字列が要ります');
