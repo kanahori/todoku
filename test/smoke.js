@@ -324,6 +324,21 @@ async function main() {
       none.ok && Array.isArray(none.items) && none.items.length === 0, none);
   }
 
+  // 時間の上限（見直しの3）: 応えない口のページは、時間切れで読み込みを止め、「ページを開けませんでした」と返す（手元の作り物の http の口・外へは出ない）。
+  {
+    const http = require('node:http');
+    const server = http.createServer(() => {}); // 何も応えない
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const hangUrl = `http://127.0.0.1:${server.address().port}/`;
+    const started = Date.now();
+    const hung = await runCard(BrowserWindow, { id: 'hang', name: '応えないページ（作り物）', url: hangUrl, cards: [{ id: 'c', title: 'c', action: 'read', selector: '#x' }] }, 'c', { loadTimeoutMs: 1500 });
+    const ms = Date.now() - started;
+    closeTarget('hang');
+    server.close();
+    check('時間の上限: 応えない口のページは、時間切れで「ページを開けませんでした: 時間内に終わりませんでした」と返す（待ち続けない）',
+      !hung.ok && hung.message === 'ページを開けませんでした: 時間内に終わりませんでした' && ms < 5000, { hung, ms });
+  }
+
   await autoRepairChecks();
   await focusAndSeparatorChecks();
   await generateChecks();

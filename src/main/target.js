@@ -479,7 +479,36 @@ function keepUnfocusable(id, win) {
   if (win.isFocusable()) win.setFocusable(false);
 }
 
-async function openTarget(BrowserWindow, config, url) {
+// ページを開く・ページの中で読む文を流す、の時間の上限（見直しの3）。応えない口のページを読むと、60秒たっても終わらなかった
+// （手元の作り物の http の口で確かめた）。時間切れなら読み込みを止め、例外にする（runCard は「ページを開けませんでした」と返す）。
+const LOAD_TIMEOUT_MS = 30000;
+const SCRIPT_EXTRA_MS = 15000; // 読む文の待つ長さ（waitMs）の上に足す余り
+
+function withLimit(promise, ms, onTimeout) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      // 先に時間切れとして返してから止める（止めると読み込みの側が別の理由で失敗するので、その理由より先に返す）。
+      reject(new Error('時間内に終わりませんでした'));
+      try {
+        if (onTimeout) onTimeout();
+      } catch (e) {
+        // 止められなくても、時間切れとして返す
+      }
+    }, ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+async function loadWithLimit(win, url, ms = LOAD_TIMEOUT_MS) {
+  return withLimit(win.loadURL(url), ms, () => { if (!win.isDestroyed()) win.webContents.stop(); });
+}
+
+function runWithLimit(win, script, waitMs) {
+  return withLimit(win.webContents.executeJavaScript(script), (waitMs ?? WAIT_MS) + SCRIPT_EXTRA_MS);
+}
+
+async function openTarget(BrowserWindow, config, url, options = {}) {
   for (const [id, other] of windows) {
     if (id !== config.id && !other.isDestroyed() && other.isVisible()) other.hide();
   }
@@ -514,7 +543,7 @@ async function openTarget(BrowserWindow, config, url) {
   // 同じページにいるなら読み込み直さない（共用のデモサイトに負荷をかけないため）。
   // ページの中の動きで # から後だけが変わったとき（気象庁の「データを表示」の後など）も、同じページとして扱う。
   // 読み込み直すと、ページの中で出した表が消えるため。
-  if (!isSamePage(win.webContents.getURL(), url)) await win.loadURL(url);
+  if (!isSamePage(win.webContents.getURL(), url)) await loadWithLimit(win, url, options.loadTimeoutMs);
   // カードの画面からフォーカスを奪わないように、前に出さずに見せる。
   showQuietly(win);
   return win;
@@ -529,7 +558,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
 
   let win;
   try {
-    win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path));
+    win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path), options);
   } catch (e) {
     return { ok: false, where: card.path ? `cards[${index}].path` : 'url', message: `ページを開けませんでした: ${e.message}` };
   }
@@ -544,7 +573,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
-    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector, joinWith));
+    result = await runWithLimit(win, buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector, joinWith), options.waitMs);
   } catch (e) {
     if (watch) watch.cancel();
     throw e;
@@ -559,7 +588,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     if (config.login.path) {
       try {
         const loginUrl = resolveUrl(config.url, config.login.path);
-        if (!isSamePage(win.webContents.getURL(), loginUrl)) await win.loadURL(loginUrl);
+        if (!isSamePage(win.webContents.getURL(), loginUrl)) await loadWithLimit(win, loginUrl, options.loadTimeoutMs);
       } catch (e) {
         return { ok: false, where: 'login.path', message: `ログインの画面を開けませんでした: ${e.message}` };
       }
@@ -638,7 +667,7 @@ async function readItemTarget(BrowserWindow, config, cardId, index, options = {}
   if (card.action !== 'list' || !card.itemTarget) return { ok: false, where: `cards[${k}].itemTarget`, message: 'このカードには、項目を選んで読む所がありません' };
   let win;
   try {
-    win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path));
+    win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path), options);
   } catch (e) {
     return { ok: false, where: card.path ? `cards[${k}].path` : 'url', message: `ページを開けませんでした: ${e.message}` };
   }
@@ -652,7 +681,7 @@ async function readItemTarget(BrowserWindow, config, cardId, index, options = {}
   }
   let result;
   try {
-    result = await win.webContents.executeJavaScript(buildScript(`[${ITEM_TARGET_ATTR}="${token}"]`, 'read', null, options.waitMs));
+    result = await runWithLimit(win, buildScript(`[${ITEM_TARGET_ATTR}="${token}"]`, 'read', null, options.waitMs), options.waitMs);
   } finally {
     await win.webContents.executeJavaScript(`document.querySelectorAll('[${ITEM_TARGET_ATTR}]').forEach((e) => e.removeAttribute('${ITEM_TARGET_ATTR}'))`);
   }
