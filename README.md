@@ -10,7 +10,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - **Repairs cards when a site changes.** When a card no longer finds what it should read or press, Claude proposes a new CSS selector for that one card. The app tries it on the open page and keeps it only if it fits; the fix stays on this computer and can be undone.
 - **Makes a deck of cards for a page that has no config file.** Claude proposes 4 to 8 cards from the page structure. The app tests every proposal on the page, drops the ones that do not fit, makes the titles itself, and adds one card per section of the main text.
-- **Claude never sees the page's words.** Only a text-free structure is sent (element names, id, class, role, aria-* and data-* attributes, nesting). No page text, URL, page title, link or form value is sent to Claude. Reading the page aloud is done locally, not by Claude.
+- **The page's words are removed before anything is sent.** Only a text-free structure is sent (element names, nesting, and only those id, class, role, aria-* and data-* values that are short plain-ASCII names). No page text, URL, page title, link or form value is sent to Claude. Reading the page aloud is done locally, not by Claude.
 - Without an API key everything except these two features still works.
 
 ## What it does
@@ -65,9 +65,11 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## What is sent to Claude
 
-- The app collects only the page structure: element names, id, class, role, aria-* and data-* attributes, and nesting. All page text, links, image sources and form values are removed; elements that contain text are only marked "(has text)". Before sending, the app checks again that the structure contains no page text (`looksTextFree`) and sends nothing if it does.
+- The app collects only the page structure: element names and nesting, plus id, class, role, aria-* and data-* values, `type` and `name`. All page text, links, image sources, `title`, `alt` and form values are removed, and `script`, `style`, `svg` and `iframe` are skipped; elements that contain text are only marked "(has text)". Attributes whose value is human-readable text (such as `aria-label`) are kept by name only.
+- A value is kept only if it is a short plain-ASCII name (letters, digits, `_`, `:` and `-`, up to 40 characters). Values that may identify a person or a record are dropped even then: anything with 5 or more digits in a row (such as a student-number-like id), GUIDs, and names of 12 or more characters that mix letters and digits. An id or class that fails these rules is left out; other attributes keep only their name. This applies to `role` too.
+- Before sending, the app checks the whole request text (`looksTextFree`): if it contains any Japanese character (hiragana, katakana, kanji, full-width characters or Japanese punctuation), nothing is sent. This is done for repairs and for new decks. The check cannot recognize English words that happen to be valid names, so an English page's id or class names can still reach Claude as names.
 - For a repair, Claude also receives the failing line (location in the config, the card id if it is plain ASCII, action, and the old selector with any non-ASCII text replaced by "…") and returns a proposed selector with a short reason (structured output). Card titles are not sent, because the titles of generated decks come from the page's headings.
-- The whole request text sent to Claude is checked again before sending: if it contains any Japanese character, it is not sent and the card says it could not be repaired. Selectors that the app makes itself never use ids that are not plain ASCII.
+- If the check fails during a repair, the card says it could not be repaired. Selectors that the app makes itself never use ids that are not plain ASCII names.
 - A supporter decides what is distributed: a fix is written into a config file only from the supporter card (see below), and the previous file is backed up to the app's user data folder (`config-backups`). The earlier screen also had a form to check every card and accept or reject proposals one by one; it is being rebuilt for the card screen.
 
 ## Automatic repair on the user's side
@@ -166,7 +168,7 @@ Claude がしていること（まとめ）
 
 - サイトの画面が変わってカードが当たらなくなったとき、そのカードの直しの案を作ります。アプリが開いているページで試し、合うときだけ採ります。直しはその機械の中だけに残り、戻せます。
 - 設定ファイルの無いページでは、カードの束の案（4〜8枚）を作ります。アプリが案を一枚ずつページで試して合わないものを落とし、題を手元で作り、本文の見出しごとの節のカードを足します。
-- Claude に送るのは、文字を全部落としたページの作りだけです。ページの文字・URL・題・リンク・入力した値は送りません。直しのときも、カードの題は送らず、前のセレクタの中の文字は「…」に伏せ、送る文の全体に日本語の文字が一つでもあれば送りません。ページを読み上げるのは、Claude ではなくアプリです。
+- Claude に送るのは、文字を全部落としたページの作りだけです。ページの文字・URL・題・リンク・入力した値は送りません。id・class・role・aria-*・data-* の値は、40字までの英数字の名前のときだけ残し、5桁以上の数字の並び・GUID の形・数字を含む12字以上の英数字は落とします（学籍番号のような値を送らないため）。直しのときも、カードの題は送らず、前のセレクタの中の文字は「…」に伏せます。束を作るときも直すときも、送る文の全体に日本語の文字が一つでもあれば送りません。ただし、英語のページの英単語の id や class は、名前として送られることがあります。ページを読み上げるのは、Claude ではなくアプリです。
 - 鍵（CARDS_ANTHROPIC_API_KEY）が無くても、この二つのほかは全部使えます。
 
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをカードの束の画面にします。上下の矢印でカードを移り、Enter か Space でカードを開いて読み、結果は上下の矢印で一件ずつ読めます（最後の項目で下矢印なら「ここが最後です。」、最初の項目で上矢印なら「ここが一番上です。」と知らせます）。Esc で戻ります。ウェブアプリの窓は、カードの画面の後ろの別の窓にあり、焦点を取りません（ログインのときだけ、使う人が前に出せます）。
