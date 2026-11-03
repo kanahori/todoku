@@ -417,7 +417,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     }
     main = best;
   }
-  if (!main) return { sections: [], mainLists: [] };
+  if (!main) return { sections: [], mainLists: [], whole: [] };
   const order = new Map();
   [...document.querySelectorAll('*')].forEach((e, i) => order.set(e, i));
   const selectorOf = (el) => {
@@ -439,17 +439,37 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     const sel = parts.join(' > ');
     return document.querySelector(sel) === el ? sel : null;
   };
+  // 見出しの段（h2。無ければ h3・h4）。
+  let level = 0;
+  for (const l of [2, 3, 4]) {
+    if ([...main.querySelectorAll(`h${l}`)].some((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h))) {
+      level = l;
+      break;
+    }
+  }
+  const sectionHeads = level ? [...main.querySelectorAll(`h${level}`)].filter((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h)) : [];
+  // 本文を丸ごと読むカード（Claude の案で、節の見出しを二つ以上含む読むカード）は、節のカードに分ける。
+  // 自転車のページで、本文を丸ごと読むカードがあり、重なりの判断で節のカードが全部はじかれた（2026-11-04 の Windows の確かめ）。
   const takenEls = [];
+  const whole = [];
   for (const s of taken) {
+    let els = [];
     try {
-      takenEls.push(...document.querySelectorAll(s));
+      els = [...document.querySelectorAll(s)];
     } catch (e) {
       // 書き方の誤りのある selector は、もう落としてある
     }
+    if (els.length === 1 && sectionHeads.filter((h) => els[0].contains(h)).length >= 2) whole.push(s);
+    else takenEls.push(...els);
   }
   // 本文の主な表・一覧。
   const outside = (el) => Boolean(el.closest('nav, header, footer, aside, [role="navigation"]')) || hidden(el);
   const overlapsTaken = (el) => takenEls.some((t) => el === t || el.contains(t) || t.contains(el));
+  // 目次（同じページの中を指すリンクの一覧）は、主な一覧にしない。
+  const tocLike = (l) => {
+    const links = [...l.querySelectorAll('a[href]')];
+    return links.length >= 2 && links.filter((a) => /^#./.test(a.getAttribute('href'))).length / links.length >= 0.8;
+  };
   const lists = [];
   for (const t of main.querySelectorAll('table')) {
     const rows = [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td')).length;
@@ -457,7 +477,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   }
   for (const l of main.querySelectorAll('ul, ol')) {
     const rows = [...l.children].filter((c) => c.tagName === 'LI').length;
-    if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol')) lists.push({ el: l, rows, table: false });
+    if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol') && !tocLike(l)) lists.push({ el: l, rows, table: false });
   }
   const firstTable = lists.filter((x) => x.table).sort((a, b) => order.get(a.el) - order.get(b.el))[0];
   const largest = lists.slice().sort((a, b) => b.rows - a.rows || order.get(a.el) - order.get(b.el))[0];
@@ -486,15 +506,8 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     });
   }
   const holdsMust = (nodes) => mainLists.some((m) => nodes.some((n) => n === m.el || n.contains(m.el)));
-  let level = 0;
-  for (const l of [2, 3, 4]) {
-    if ([...main.querySelectorAll(`h${l}`)].some((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h))) {
-      level = l;
-      break;
-    }
-  }
   const plain = () => mainLists.map(({ el, ...rest }) => rest);
-  if (!level) return { sections: [], mainLists: plain() };
+  if (!level) return { sections: [], mainLists: plain(), whole: [] };
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
   const out = [];
@@ -529,7 +542,8 @@ function pageSections(taken, maxSections, minChars, maxMust) {
       out.push({ selector: sel, until, title, chars, pos: order.get(anchor) });
     }
   }
-  return { sections: out, mainLists: plain() };
+  // 節のカードができたときだけ、丸ごとのカードを外す（節ができなければ、丸ごとのカードを残す）。
+  return { sections: out, mainLists: plain(), whole: out.length > 0 ? whole : [] };
 }
 
 function buildSectionsScript(taken) {
@@ -757,7 +771,9 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
   const taken = picked.filter((c) => c.action !== 'click').map((c) => c.selector);
   const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
-  const withMain = addMainListCards(picked, extras && extras.mainLists);
+  const whole = new Set(extras && Array.isArray(extras.whole) ? extras.whole : []);
+  const kept = picked.filter((c) => !(c.action === 'read' && whole.has(c.selector)));
+  const withMain = addMainListCards(kept, extras && extras.mainLists);
   const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
   if (cards.length === 0) return fail('no-cards');
   // 行き先が変わった（転送された）ときは、行き着いたページの URL を残す（http:// と https:// のときだけ）。
@@ -784,6 +800,7 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
     tried: candidates.length,
     dropped: candidates.length - picked.length,
     sections: cards.filter((c) => c.id.startsWith('section-')).length,
+    split: picked.length - kept.length,
     mainLists: withMain.length - picked.length,
     structure: { nodes, chars: limited.text.length, cut: truncated || limited.cut },
     at: now().toISOString(),

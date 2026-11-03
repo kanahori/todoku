@@ -366,6 +366,10 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
   }
   let lines = parts.flatMap((p) => textLines(p, true));
   if (lines.length === 0) lines = parts.flatMap((p) => textLines(p));
+  // 「目次に戻る」「ページの先頭へ」のような、ページの中を戻るだけの一行は読まない（ほかに読む行があるとき）。
+  const BACKLINK = /^(目次|ページの(先頭|上|トップ)|このページの(先頭|上|トップ)|先頭|トップ)(へ|に)?(戻る)?$/;
+  const kept = lines.filter((l) => !BACKLINK.test(l));
+  if (kept.length > 0) lines = kept;
   const text = lines.join('\n');
   return { found: true, text: text.slice(0, limit), truncated: text.length > limit, ...(partial ? { partial: true } : {}) };
 }

@@ -592,6 +592,19 @@ async function generateChecks() {
         ride.ok && ride.text === '乗り方\n貸し場所の機械にカードをかざすと、鍵が外れます。返すときは、自転車を台に戻して鍵をかけてください。', ride.text);
       store.remove(cycle.config.id);
     }
+    // 本文を丸ごと読むカード（Claude の案）があっても、節のカードに分ける（丸ごとのカードは作らない）。頭の目次と「目次に戻る」は読まない。
+    const wholeDeck = await generateDeck({
+      BrowserWindow, url: 'fixture:cycle-guide.html', callModel: async () => ({ cards: [noTitle('main', 'read', 'main')] }), store, allowFixtures: true,
+    });
+    check('カードを作る: 本文を丸ごと読むカードは、見出しごとの節のカードに分ける（目次の一覧は主な一覧にしない）',
+      wholeDeck.ok && wholeDeck.split === 1
+        && JSON.stringify(wholeDeck.config.cards.map((c) => c.title)) === JSON.stringify(['貸し自転車とは', '料金', '借りられる場所', '乗り方']),
+      wholeDeck.ok ? { split: wholeDeck.split, cards: wholeDeck.config.cards } : wholeDeck);
+    if (wholeDeck.ok) {
+      const about2 = await runCard(BrowserWindow, wholeDeck.config, wholeDeck.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: 節のカードは「目次に戻る」を読まない', about2.ok && !about2.text.includes('目次に戻る') && about2.text.endsWith('返すときは、どの貸し場所に返しても構いません。'), about2.text);
+      store.remove(wholeDeck.config.id);
+    }
 
     // 待ち方: 主な区画（main）が空のうちと、ページが変わり続けているうちは、構造を集めない（表を後から描くページ）。
     let lateStructure = '';
