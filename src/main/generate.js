@@ -320,7 +320,7 @@ function pageInspect(tryOne, cards) {
     } catch (e) {
       return '';
     }
-    return clean(els.map((e) => e.innerText || e.textContent).join(' ')).slice(0, 80);
+    return clean(els.map((e) => e.innerText || e.textContent).join(' ')).slice(0, 400);
   };
   const firstShortText = (region) => {
     const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
@@ -419,6 +419,13 @@ function pageInspect(tryOne, cards) {
       headingOnly: c.action === 'read' && headingOnly(one(c.selector)),
       toggle: c.action === 'click' && probe.count === 1 ? toggleKind(one(c.selector)) : '',
       chrome: probe.count > 0 ? chromeOf(c, region || one(c.selector)) : false,
+      menu: c.action === 'list' && probe.count >= 5 && !isToc(region) ? (() => {
+        try {
+          return linkOnlyItems([...document.querySelectorAll(c.selector)]);
+        } catch (e) {
+          return false;
+        }
+      })() : false,
       pos: region && order.has(region) ? order.get(region) : (one(c.selector) && order.get(one(c.selector))) || 0,
     };
   });
@@ -656,7 +663,8 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     mainLists.push({
       el: top.el, selector: top.table ? rowsOf(top.el) : `${sel} > li`, container: sel, table: top.table,
       ...(joinSel ? { joinWith: `${joinSel} tr:has(td, th):not(thead tr)` } : {}),
-      title: cap || label || heading || rowTitle || near, pos: order.get(top.el),
+      title: cap || label || heading || rowTitle || near, alts: [cap, label, rowTitle, heading, near].filter(Boolean),
+      text: textOf(top.el).slice(0, 400), pos: order.get(top.el),
     });
   }
   // 節の中に必ず作る一覧（ul・ol）があれば、節を残して一覧の方を作らない（節が一覧も読むため）。必ず作る表のときは、今までどおり節を作らない。
@@ -768,10 +776,18 @@ function addMainListCards(cards, mainLists) {
   return out;
 }
 
+// 題がほかのカードと重なるときは、題の取り方が違う疑いとして扱う: 中身がそのカードの中身に含まれるなら作らない。
+// 含まれなければ、ほかの取り方の題（表の題・aria-label・表の頭の行・見出し・前の短い文）から、重ならないものを使う（頼み18 の確かめ）。
 function addMainListCard(cards, mainList) {
   if (!mainList || !mainList.selector) return cards;
   const titles = new Set(cards.map((c) => c.title));
-  const title = cleanTitle(mainList.title) || (mainList.table ? '表を読む' : '一覧を読む');
+  let title = cleanTitle(mainList.title) || (mainList.table ? '表を読む' : '一覧を読む');
+  if (titles.has(title)) {
+    const same = cards.find((c) => c.title === title);
+    if (same && same.body && squeezeText(same.body).includes(squeezeText(mainList.text).slice(0, 200))) return cards;
+    const alt = (Array.isArray(mainList.alts) ? mainList.alts : []).map((t) => cleanTitle(t)).find((t) => t && !titles.has(t));
+    if (alt) title = alt;
+  }
   let unique = title;
   for (let n = 2; titles.has(unique); n++) unique = `${title} ${n}`;
   const card = { id: `${mainList.table ? 'table' : 'list'}-${cards.length + 1}`, title: unique, action: 'list', selector: mainList.selector, container: mainList.container };
@@ -883,9 +899,14 @@ function pickCards(candidates, probes, rejects = null) {
     if (c.action === 'click' && title && probe.toggle) title = `${probe.toggle === 'table' ? '表を替える' : '表示を替える'}（${title}）`;
     else if (c.action === 'click' && title) title = clickTitle(title);
     if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
+    // リンクやボタンだけが5件以上並ぶ一覧（メニュー）は、本文と紛らわしい題にせず「〇〇のメニュー」にして、束の後ろへ回す。
+    // 気象庁の警報のページで、防災情報のメニュー（リンク43件）が「警報・注意報」の題で来た（頼み18 の確かめ）。
+    if (probe.menu && title !== '目次を読む') title = /メニュー$/.test(title) ? title : `${title || ''}のメニュー`.replace(/^の/, '');
     // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
     // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。
     if (!title) return drop('no-title');
+    // 題が重なり、中身が同じ題のカードの中身に含まれるなら作らない（同じ所を二度読むカードに番号が付いた。頼み18 の確かめ）。
+    if (titles.has(title) && body && cards.some((x) => x.title === title && squeezeText(x.body).includes(squeezeText(body)))) return drop('subset');
     // 題が重なったら、番号を付ける前に、場所の中の見出し・直前の見出し・中の短い文字から、まだ使っていない題を探す。
     let unique = title;
     if (titles.has(unique)) {
@@ -898,10 +919,16 @@ function pickCards(candidates, probes, rejects = null) {
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
     if (c.action === 'list' && c.container && probe.containerOk) card.container = c.container;
     Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
-    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome), enumerable: false });
+    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome) || Boolean(probe.menu), enumerable: false });
+    Object.defineProperty(card, 'body', { value: body, enumerable: false });
     cards.push(card);
   });
   return cards;
+}
+
+// 比べるための文字: 空白と記号を除く。
+function squeezeText(t) {
+  return String(t || '').replace(/[\s、。，．・：:（）()「」『』【】［］[\]!！?？]/g, '');
 }
 
 // 中身が題とほぼ同じ一行か（空白・記号を除いて比べ、同じか、片方が他方を含み、違いが4字までのとき）。

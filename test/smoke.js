@@ -697,6 +697,13 @@ async function generateChecks() {
       check('読む: 別々の要素の「利用料」と「（税込）」を、題と同じく空白無しで読む', false, rateDeck);
     }
 
+    // Claude の案にリンクだけの一覧（メニュー）が入る回: 題を「〇〇のメニュー」にして、束の後ろへ回す。
+    const menuDeck = await generateDeck({
+      BrowserWindow, url: 'fixture:warnings-wide.html', store, allowFixtures: true, callModel: async () => ({ cards: [noTitle('menu', 'list', '.bosai-menu li')] }),
+    });
+    check('カードを作る: リンクだけの一覧（メニュー）の Claude のカードは、題を「〇〇のメニュー」にして束の後ろに置く',
+      menuDeck.ok && menuDeck.config.cards[menuDeck.config.cards.length - 1].title === '警報・注意報のメニュー', menuDeck.ok ? menuDeck.config.cards.map((c) => c.title) : menuDeck);
+    if (menuDeck.ok) store.remove(menuDeck.config.id);
     const wrapped = await generateDeck({ BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.container')] }), store, allowFixtures: true });
     check('カードを作る（後戻りの組み合わせ）: ページ全体を包む読むカードがあっても、必ず作る二つの表を作る',
       wrapped.ok && wrapped.config.cards.filter((c) => c.joinWith).length === 2, wrapped.ok ? wrapped.config.cards.map((c) => c.title) : wrapped);
