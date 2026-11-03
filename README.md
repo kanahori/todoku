@@ -6,13 +6,20 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 日本語の説明は、このページの後半にあります。
 
+## What Claude does, in short
+
+- **Repairs cards when a site changes.** When a card no longer finds what it should read or press, Claude proposes a new CSS selector for that one card. The app tries it on the open page and keeps it only if it fits; the fix stays on this computer and can be undone.
+- **Makes a deck of cards for a page that has no config file.** Claude proposes 4 to 8 cards from the page structure. The app tests every proposal on the page, drops the ones that do not fit, makes the titles itself, and adds one card per section of the main text.
+- **Claude never sees the page's words.** Only a text-free structure is sent (element names, id, class, role, aria-* and data-* attributes, nesting). No page text, URL, page title, link or form value is sent to Claude. Reading the page aloud is done locally, not by Claude.
+- Without an API key everything except these two features still works.
+
 ## What it does
 
 - Each web app (a learning site, a city website, ...) has a small config file that says, card by card, where to read and what to press.
-- The app turns that config into a screen of plain buttons. A screen reader user moves with Tab and presses Enter or Space; the result is read out.
+- The app turns that config into a deck of cards. Up and Down Arrow move between cards, Enter or Space opens a card or reads the web app, Up and Down Arrow then read the result item by item, and Esc goes back. Tab stops only on the current card. The web app itself stays in a separate window behind the card screen and never takes the keyboard focus (except for a login, when the user asks for it).
 - `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...". Text in images is read from their `alt` text and `aria-label`, and slides that a carousel hides with `aria-hidden` are still read, because the person asked for them.
-- When a web app changes its screen and a config line no longer matches, the app reports only which line fails. Claude then proposes a repaired selector from the page structure (with all text removed), and a person accepts or rejects each proposal.
-- On the user's side, the repair can also happen on the spot: when a card cannot find what it should read or press, and an API key is set, the app asks Claude for that one card, tries the proposal on the page that is already open, and adopts it only if it looks right. The fix is kept locally (see "Automatic repair on the user's side" below) and can be undone from the card.
+- When a web app changes its screen and a config line no longer matches, the app reports only which line fails. With an API key, the repair happens on the spot (see "Automatic repair on the user's side"); a supporter can then write the fix into the config file to distribute it.
+- When a page is still being written (for example a chat reply that appears bit by bit), the card waits until it is finished; see "Pages that are still being written".
 
 ## Getting started (Windows)
 
@@ -20,12 +27,12 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - Install dependencies: `npm ci`
   - Behind an HTTP proxy, the Electron binary download may fail with "fetch failed". Setting `NODE_USE_ENV_PROXY=1` (Node 24.5 or later) together with `HTTPS_PROXY` lets the download use the proxy.
 - Start the app: `npm start`
-  - The card screen opens. Each web app gets its own section; each card is a regular button that works with Tab, Enter and Space alone.
-  - Results are announced to screen readers through a `role="status"` live region and also shown in the "Result" area.
+  - The first screen ("Todoku") opens. Its cards are the app's introduction, display settings, search, one card per web app, and "新しいページからカードを作る".
+  - Results are announced through a `role="status"` live region (errors through `role="alert"`), and the result items are put inside the card so they can be read again with the arrow keys.
 - Run the tests:
   - `npm test` runs the unit tests with Node's built-in test runner.
   - `npm run smoke` runs the end-to-end checks inside Electron against the bundled practice pages in `test/fixtures/` (no network access).
-  - `npm run ui:repair` opens the card screen with a fake repair model, so you can try the "accept / reject" form without an API key. Set `UI_REPAIR_AUTO=1` to run it unattended.
+  - `npm run ui:repair` was for the "accept / reject" proposal form of the earlier screen. That form is being rebuilt for the card screen, so for now the script only prints that and exits.
   - `npm run smoke`, `npm run ui:repair` and `npm run real:tsukuba` keep their windows hidden and never take the keyboard focus from the app in front (on macOS they also stay out of the Dock), so they are safe to run while someone is typing. Add `-- --show-windows` to show the windows (for example, to look at the `ui:repair` screen).
   - `npm run smoke:windows` runs the same smoke checks with the windows shown, so the focus checks also cover the real window manager. Its windows come to the front, so run it only when nobody is using the computer.
 - Build Windows installers: `npm run dist:win`
@@ -52,12 +59,11 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - When pressing a card starts a download in the web app window, the app saves the file to the user's Downloads folder under its original name (adding " (1)", " (2)", ... if the name is taken), or under the card's `saveAs` name if the config gives one, without a save dialog, and announces "「file name」をダウンロードのフォルダに保存しました。" (or that it could not be saved).
 
-## How repair works (what is sent to Claude)
+## What is sent to Claude
 
-- "Check whether the screen has changed" tests every card's CSS selector against the current page, without clicking or reading anything.
-- For each selector that no longer matches, the app collects only the page structure: element names, id, class, role, aria-* and data-* attributes, and nesting. All page text, links, image sources and form values are removed; elements that contain text are only marked "(has text)".
-- Claude receives the failing lines (location in the config, card title, action, old selector) and that structure, and returns a proposed selector with a short reason (structured output).
-- Each proposal is tried on the current page and shown with the number of matches. A person chooses "accept" or "reject" for each one; only accepted proposals are written to the config file, and the previous file is backed up to the app's user data folder (`config-backups`).
+- The app collects only the page structure: element names, id, class, role, aria-* and data-* attributes, and nesting. All page text, links, image sources and form values are removed; elements that contain text are only marked "(has text)". Before sending, the app checks again that the structure contains no page text (`looksTextFree`) and sends nothing if it does.
+- For a repair, Claude also receives the failing line (location in the config, card title, action, old selector) and returns a proposed selector with a short reason (structured output).
+- A supporter decides what is distributed: a fix is written into a config file only from the supporter card (see below), and the previous file is backed up to the app's user data folder (`config-backups`). The earlier screen also had a form to check every card and accept or reject proposals one by one; it is being rebuilt for the card screen.
 
 ## Automatic repair on the user's side
 
@@ -73,13 +79,20 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## Cards for a page without a config file
 
 - The first screen ("Todoku") has a card "新しいページからカードを作る" (make cards from a new page). Pressing Enter or Space on it moves to a labeled URL field ("ページのURL（http か https で始まるもの）"). Only `http://` and `https://` addresses are accepted. Enter in the field, or the "作り始める" button, starts.
-- The app opens the page, waits until the number of elements stops changing (at most 8 seconds), and collects the same text-free structure as for repairs (`looksTextFree` must pass). Claude receives only that structure: no page text, no URL, no page title. The structure is capped at 2,500 elements by `structure.js` and at 120,000 characters before sending; if it is cut, Claude is told so.
+- The app opens the page, waits until the number of elements, the amount of text and the loaded resources stop changing (at most 15 seconds), and collects the same text-free structure as for repairs (`looksTextFree` must pass). Claude receives only that structure: no page text, no URL, no page title. The structure is capped at 2,500 elements by `structure.js` and at 120,000 characters before sending; if it is cut, Claude is told so.
 - Claude returns 4 to 8 cards in the config-file shape (structured output with zod): `role` (heading, main, list, notice, table, menu, search, button, link, other), `action` (`read` / `list` / `click`), `selector`, `container` (list cards only), `titleSelector` (the element whose text should become the card title) and a one-sentence reason.
-- Card titles are made on this computer, never by Claude: the app reads the text of the `titleSelector` element (its `aria-label`, an image's `alt`, or a heading's text). For a `click` card without one, it uses the name of the element to press. If there is no usable text, the title is the role in Japanese with a number, such as "一覧 1". The deck name is the page's `<title>`, also used only on this computer.
-- Each proposed card is tried on the page, and dropped if it does not fit: `read` must match an element with text, `list` at least one item, `click` exactly one element. Duplicates are dropped, and at most 8 cards are kept.
+- Card titles are made on this computer, never by Claude: the app uses the `titleSelector` element only when it belongs to the card's place (inside it, or the heading just before it), and otherwise the heading, `aria-labelledby`, landmark label or first short text of the place. A `click` card is titled with the name of the element to press, made clearer when it is one word ("市町村選択" becomes "市町村を選ぶ", a place name becomes "地域を選ぶ（…）", "検索" becomes "サイト内を検索する"). Long titles are cut at a word boundary. The deck name is the page's `<title>` without the site name part, also used only on this computer.
+- Each proposed card is tried on the page, and dropped if it does not fit: `read` must match an element with text, `list` at least one item, `click` exactly one element. The app also drops cards it cannot title, `click` cards whose element has no name, cards whose content is a single word or just a heading line, breadcrumbs, and duplicates; a table of contents becomes one card "目次を読む". At most 8 of Claude's cards are kept.
+- Guards that do not depend on Claude: the largest table or list (3 or more rows) of the main area always gets a card, even when Claude did not propose it; up to 6 cards are added, one per heading section of the main text (`until` reads from the heading to the next heading; sections under 40 characters are skipped); and the cards are ordered by their position on the page. Claude's proposals vary from run to run (the model, `claude-opus-5-5`, does not accept a `temperature` setting), so these guards keep the deck the same: in the smoke test, two runs with different proposals for the same practice page give the same deck.
 - The remaining cards are saved as a new config file in the app's user data folder (`generated/<id>.json`) and appear on the first screen at the next start too. While Claude works, the usual progress messages say how many seconds have passed. The whole process times out after 90 seconds. When done, the app opens the new deck and announces once "「{name}」のカードを{N}枚作りました。"; on failure it announces one sentence with the reason and shows the URL field again.
 - The first card of a generated deck has two extra buttons: "設定ファイルとして書き出す（支援者向け）" writes the deck as `todoku-<id>.json` into the Downloads folder, so a supporter can check it and distribute it as a regular config file; "このカードの束を消す" deletes the deck and its local repairs.
 - The first screen is now always shown, even when there is only one config, because it holds this entry point.
+
+## Pages that are still being written
+
+- While the element a card reads, or an element around or inside it, has `aria-busy="true"` (for example a chat reply that is being written), the card waits until it is removed, up to its usual waiting time (8 seconds).
+- If it is still being written after that, the card reads what is there and says so: "「{title}」を読みました。まだ書いている途中です。", with one more item in the card: "まだ書いている途中でした。ここまでを読みました。もう一度読むと、続きが読めます。"
+- Pages that do not mark this with `aria-busy` are read as they are at that moment.
 
 ## Display settings and search
 
@@ -99,7 +112,9 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - `cards/moodle-demo.json`: the public Moodle demo site (https://school.moodledemo.net/). The demo is shared by many people and is reset every hour; the app only opens it when a person presses a card.
 - `cards/tsukuba-city.json`: the official website of Tsukuba City (https://www.city.tsukuba.lg.jp/), a real city site. Cards read the emergency information, the new pages, the notices, this month's events (from the event calendar page), every slide of the large rotating banner and of the pickup banner (the copies a carousel makes for looping are skipped), and the life-situation links. There is no card for the site search: the search box is an embedded search service, and Todoku cards cannot type text yet. The app's first card says "出典：つくば市公式ウェブサイト。" and has a button that opens the official site (`sourceUrl`). The app opens the city's pages in its own window and reads the text as it is; it does not change the pages and does not put them in a frame. `npm run real:tsukuba` checks every card and the automatic repair (with a fake model and `test/tsukuba-city-old-line-for-test.json`, a copy with one deliberately outdated selector) against the real site; it loads the site three times, so run it by hand, not in a loop.
+- `cards/jma-forecast.json`, `cards/jma-daily.json`, `cards/jma-obsdl.json`: pages of the Japan Meteorological Agency (forecast for Tokyo, daily past weather data, and the past weather data download form, with click cards for each step of the form).
 - `cards/practice-city.json` and `test/fixtures/city-top.html`: a made-up city website ("Midori City") with an auto-rotating carousel and other common barriers. It is fictional and not based on any real city's site.
+- `cards/practice-chat.json` and `test/fixtures/chat.html`: a made-up chat screen ("ことのはチャット") with 12 rounds of questions and replies, a list of past chats, and a last reply that is written bit by bit. Cards read the last reply, all of your questions, every message in order (Up and Down Arrow move between messages), the list of past chats, and the code blocks in the last reply.
 - `cards/practice-course.json` and `test/fixtures/course-before.html` / `course-after.html`: a made-up course page before and after a layout change, used to show the repair flow.
 - All names in the practice pages are fictional.
 
@@ -107,7 +122,20 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - In the app: Claude (default `claude-opus-5-5`) proposes repaired selectors from the page structure, as described above.
 - In the app: Claude also proposes a whole deck of cards for a page that has no config file, from the same text-free structure.
+- Not by Claude: reading the page, making card titles, testing proposals, and deciding what is kept are all done by the app on this computer.
 - In development: the app was built with Claude Code. One Claude Code session on Windows wrote most of the app and tested it with NVDA; another on macOS reviewed the changes, wrote this README and the private local configs, and checked names and personal data before each push.
+
+## Tests
+
+- `npm test`: 106 tests, 101 passed, 5 skipped (the Electron-only scripts), 0 failed.
+- `npm run smoke`: 136 checks, 136 passed, against the practice pages only.
+- `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
+- Measured on macOS on 2026-11-04 at commit `bbe0a07`.
+
+## Future
+
+- A browser for people who use the web by voice: the goal is that any page can be reached, not only the sites someone has written a config file for. Making cards for a new page and repairing them on the spot are the first steps.
+- Going back and forth through a conversation in a chat screen. We tried this only on a made-up chat screen (`test/fixtures/chat.html`). We have not used it on real chat services, because their terms of use forbid reading their screens automatically.
 
 ## Third-party software
 
@@ -129,12 +157,23 @@ Licenses were read from each package's `package.json` in `node_modules`.
 
 Todoku（とどく）は、視覚に障害のある方が、カードの簡単な画面からウェブアプリを使えるようにする、Windows と macOS のアプリです。Built with Claude: Japan 2026（2026年11月2日〜8日）の期間中に作りました。テーマ2「本来、誰にでも届くべきもの」に当たります。開発中です。
 
-- ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをふつうのボタンのカードの画面にします。画面読み上げソフトの利用者は、Tab で移り、Enter か Space で押すと、結果が読み上げられます。
+Claude がしていること（まとめ）
+
+- サイトの画面が変わってカードが当たらなくなったとき、そのカードの直しの案を作ります。アプリが開いているページで試し、合うときだけ採ります。直しはその機械の中だけに残り、戻せます。
+- 設定ファイルの無いページでは、カードの束の案（4〜8枚）を作ります。アプリが案を一枚ずつページで試して合わないものを落とし、題を手元で作り、本文の見出しごとの節のカードを足します。
+- Claude に送るのは、文字を全部落としたページの作りだけです。ページの文字・URL・題・リンク・入力した値は送りません。ページを読み上げるのは、Claude ではなくアプリです。
+- 鍵（CARDS_ANTHROPIC_API_KEY）が無くても、この二つのほかは全部使えます。
+
+- ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをカードの束の画面にします。上下の矢印でカードを移り、Enter か Space でカードを開いて読み、結果は上下の矢印で一件ずつ読めます。Esc で戻ります。ウェブアプリの窓は、カードの画面の後ろの別の窓にあり、焦点を取りません（ログインのときだけ、使う人が前に出せます）。
 - `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。
-- ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。Claude が、文字を全部落としたページの構造から直したセレクタの案を作り、人が案ごとに「採る／採らない」を選びます。
-- 設定ファイルの無いページでも、カードを作れます。はじめの画面の「新しいページからカードを作る」で URL（http か https）を入れると、アプリがそのページを開き、文字を全部落としたページの作りだけを Claude に送ります。Claude はカードの束の案（4〜8枚）を返し、アプリはその案をページで試して、当たらないカードや中身の空のカードを落とします。カードの題と束の名前は、アプリが手元でページの見出し・aria-label・alt・title から作り、Claude には送りません。作った束はその機械の中に残り、次の起動でも一覧に出ます。束のはじめのカードのボタンで、支援者向けに設定ファイルとして書き出したり、束を消したりできます。待つのは長くて90秒です。
+- ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。鍵があれば、その場で直します（下の「使う人の側でも」）。直しを設定ファイルに書いて配るかは、支援者が「自動で直した所（支援者向け）」のカードで決めます。前の画面にあった、全部のカードを点検して案ごとに「採る／採らない」を選ぶ欄は、カードの画面に作り直している途中です。
+- 設定ファイルの無いページでも、カードを作れます。はじめの画面の「新しいページからカードを作る」で URL（http か https）を入れると、アプリがそのページを開き、文字を全部落としたページの作りだけを Claude に送ります。Claude はカードの束の案（4〜8枚）を返し、アプリはその案をページで試して、当たらないカードや中身の空のカードを落とします。カードの題と束の名前は、アプリが手元でページの見出し・aria-label・alt・title から作り、Claude には送りません。題を作れないカード、名前の無いボタン、中身が一語か見出し一行だけのカード、パンくずは作らず、目次は「目次を読む」の一枚にまとめます。本文の主な表・一覧（3行以上）は、Claude の案に無くても必ず一枚作り、本文の見出しごとの節を読むカード（6枚まで）を足し、ページの上からの順に並べます。Claude の案は作るたびに変わるので、これらの守りで同じ束になるようにしています。作った束はその機械の中に残り、次の起動でも一覧に出ます。束のはじめのカードのボタンで、支援者向けに設定ファイルとして書き出したり、束を消したりできます。待つのは長くて90秒です。
 - 使う人の側でも、その場で直せます。カードが読む所・押す所を見つけられず、鍵（CARDS_ANTHROPIC_API_KEY）があるときは、いま開いているページの構造からそのカードの案だけを作り、ページで試して確からしいときだけ採ります。直しはその機械の中だけに残り、カードの中の「直す前に戻す」ボタンで戻せます。
 - はじめの画面の二枚目は「表示設定」、三枚目は「カードを探す」です。表示設定は、授業の教材のカード型ページと同じ三つ（読みやすさの「標準」「ゆったり」、1列リフロー表示、配色の「標準（配色変更なし）」「高コントラスト（白地）」「高コントラスト（黒地）」）です。変えると一文で一度だけ知らせ、次の起動でも残ります。文字の大きさは、Ctrlキー（macOSではCommandキー）とプラス・マイナス・0で変えます。「カードを探す」は、全部のアプリのカードを題と説明から探し、アプリごとに見つかったカードを並べて、見つかった数を知らせます。
-- 動かし方・設定・使った部品は、上の英語の節をご覧ください。
+- 書いている途中のページ（少しずつ描かれるチャットの返事など）は、読む所に aria-busy="true" が付いている間、書き終わるのを待って読みます（8秒まで）。待っても終わらなければ、そこまでを読み、「まだ書いている途中です。」と知らせます。aria-busy を付けないページは、そのときの文を読みます。
+- 試しを Electron で走らせる間（`npm run smoke` など）は、窓を画面に出さず、前のアプリから焦点を奪いません。
+- 起動のとき、使うプロキシの入口に届くかを2秒で試し、届かなければ、OS の設定は変えずにアプリの中だけ直に繋ぎます。
+- 動かし方・設定・使った部品・試しの数は、上の英語の節をご覧ください。
 - 同梱の例に、本物のつくば市公式ウェブサイト（https://www.city.tsukuba.lg.jp/ ）の設定ファイル（`cards/tsukuba-city.json`）があります。緊急情報・新着情報・お知らせ・今月のイベント情報（イベントカレンダーのページから）・大きな画像のお知らせとピックアップの全部（切り替えのために作られた写しは読みません）・くらしの情報（こんなときは）を読めます。サイト内の検索は、検索の欄が外の検索サービスの部品で、Todoku のカードはまだ文字を入れられないので、カードにしていません。はじめのカードで「出典：つくば市公式ウェブサイト。」と読み、公式サイトを開くボタン（`sourceUrl`）が付きます。アプリは市のページを自分の窓で開き、書いてあるとおりに読むだけで、ページを書き換えたり、フレームの中に入れたりはしません。`npm run real:tsukuba` で、本物のサイトで全部のカードと自動の直し（偽の Claude と、古い行を一つ含む写し `test/tsukuba-city-old-line-for-test.json` を使う）を確かめられます。サイトを3回読み込むので、手で一度ずつ動かしてください。
-- 練習のページ（みどり市・講座のページ）は作り物で、実在の自治体や人とは関係ありません。
+- 練習のページ（みどり市・講座のページ・ことのはチャット）は作り物で、実在の自治体・サービス・人とは関係ありません。
+- これから（Future）: どんなページにも届く、音声で使う人のためのブラウザを目指しています。設定ファイルの無いページからカードを作ることと、その場で直すことは、その最初の一歩です。チャットの画面でやり取りを遡ったり追いかけたりする形は、作り物のチャットの画面でだけ試しました。本物のチャットのサービスには当てていません。各社の利用規約で、画面の自動の読み取りが禁じられているためです。
