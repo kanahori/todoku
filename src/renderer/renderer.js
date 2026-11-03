@@ -407,7 +407,7 @@ async function readCard(card) {
 // 読めなかったときの文。理由ごとに分け、黙らない。
 function unreadableText(card, result) {
   const message = String(result.message || '');
-  if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。';
+  if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。\nネットワークの場所が変わったときは、Todoku を起こし直してください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
   // 自動で直そうとして直せなかったときは、最後に理由つきの一文を足す（見つからない → 0件のことも → 直すこともできなかった、の順）。
   const notFixed = result.autoRepairFailed ? `\n${notFixedSentence(result)}` : '';

@@ -26,12 +26,14 @@ function proxySwitches(env = process.env) {
 // ---- システムのプロキシに届かないときは、直に繋ぐ ----
 // 学外で、Windows の全体のプロキシが学内の入口を指したままだと、Electron（Chromium）はページを開けない
 // （Node の fetch はシステムのプロキシを使わないので、直に届く）。2026-11-03 の Windows の確かめ。
-// 起動のときに、外のページに使われるプロキシの入口を Chromium に尋ね、短い時間切れで繋いでみる。
-// 入口のどれにも届かなければ、直に繋ぐ。学内（入口に届く）では、これまでどおりシステムのプロキシを使う。
+// 起動のときに、外のページに使われるプロキシの入口を Chromium に尋ね（環境変数 https_proxy があればそれ、無ければ OS の設定）、
+// 短い時間切れで繋いでみる。入口のどれにも届かなければ、この作品の中だけ直に繋ぐ（session.setProxy）。
+// OS の設定（インターネットのオプション・winhttp）は読むだけで、書き換えない。学内（入口に届く）では、これまでどおり。
+// 入口の名前はコードに書かない（公開のリポジトリに入るため）。
 const net = require('node:net');
 
 const PROBE_URL = 'https://www.example.com/';
-const CONNECT_TIMEOUT_MS = 1500;
+const CONNECT_TIMEOUT_MS = 2000;
 
 // Chromium の resolveProxy の答え（"PROXY host:port; DIRECT" など）から、入口の一覧を取り出す。
 function parseProxyList(text) {
@@ -72,9 +74,9 @@ async function chooseSystemProxy({ resolveProxy, setDirect, connect = canConnect
   }
   const { proxies } = parseProxyList(answer);
   if (proxies.length === 0) return 'none';
-  for (const p of proxies) {
-    if (await connect(p.host, p.port, timeoutMs)) return 'proxy';
-  }
+  // 入口が幾つあっても同時に試し、起動を止めるのは時間切れの一回分（2秒）までにする。
+  const reached = await Promise.all(proxies.map((p) => connect(p.host, p.port, timeoutMs)));
+  if (reached.some(Boolean)) return 'proxy';
   await setDirect();
   log(`システムのプロキシの入口（${proxies.map((p) => `${p.host}:${p.port}`).join('、')}）に届かないので、直に繋ぎます。`);
   return 'direct';

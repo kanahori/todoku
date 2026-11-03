@@ -330,14 +330,12 @@ function logLine(text) {
 }
 
 app.whenReady().then(async () => {
-  // 環境変数でプロキシを渡していないときは、システムのプロキシの入口に届くかを試し、届かなければ直に繋ぐ（学外のため）。
-  if (proxySwitches().length === 0) {
-    await chooseSystemProxy({
-      resolveProxy: (u) => session.defaultSession.resolveProxy(u),
-      setDirect: () => session.defaultSession.setProxy({ mode: 'direct' }),
-      log: logLine,
-    });
-  }
+  // プロキシの入口（環境変数 https_proxy か、OS の設定）に届くかを試し、届かなければこのアプリの中だけ直に繋ぐ（学外のため）。
+  await chooseSystemProxy({
+    resolveProxy: (u) => session.defaultSession.resolveProxy(u),
+    setDirect: () => session.defaultSession.setProxy({ mode: 'direct' }),
+    log: logLine,
+  });
   registerSettingsHandlers(ipcMain, settingsStore());
   // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
   // 押すカードの結果にならなかったもの（押してから遅れて始まったもの）は、終わったときに画面に知らせる。
