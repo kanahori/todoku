@@ -71,7 +71,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
   const settleAlts = (s) => {
     if (!s.includes(ALT_OPEN)) return s;
     const pieces = s.split(/(\u0001[^\u0002]*\u0002)/).map((t) => (t.startsWith(ALT_OPEN) ? { alt: true, t: t.slice(1, -1) } : { alt: false, t }));
-    const core = (t) => t.normalize('NFKC').toLowerCase().replace(/(の)?(ロゴマーク|ロゴ)\s*$/, '').replace(/[\s\p{P}\p{S}]+/gu, '');
+    const core = (t) => t.normalize('NFKC').toLowerCase().replace(/(の)?(ロゴマーク|ロゴ)\s*$/, '').replace(/[\s\p{P}\p{S}\p{Cc}]+/gu, '');
     // 二つの文の違い（足す・消す・置き換えるの字数）が2字までか。
     const near = (a, b) => {
       if (Math.min(a.length, b.length) < 8 || Math.abs(a.length - b.length) > 2) return false;
@@ -171,7 +171,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       const visible = !visibleOnly || cs.visibility === 'visible';
       const pre = PRE_SPACE.test(cs.whiteSpace || '');
       const block = cs.display === 'none' ? BLOCK.has(tag) : BLOCK.has(tag) || BLOCK_DISPLAY.test(cs.display);
-      const sep = block ? '\n' : INLINE.has(tag) ? '' : ' ';
+      // 要素の境目の区切りは、ページの文字の空白と分けて印（\u0007）で入れ、行を整えるときに空白にする。
+      const sep = block ? '\n' : INLINE.has(tag) ? '' : '\u0007';
       out += sep;
       // 番号の付いた一覧（ol）の項目は、頭に番号を付けて読む（画面に番号が出ているときだけ。list-style が none の ol は付けない）。
       // 手順が番号無しで読まれた（2026-11-04 の Windows の確かめ）。当たった要素そのもの（一覧のカードの一件）には付けない（「1件目」と重なるため）。
@@ -196,6 +197,10 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     const lines = [];
     for (const raw of out.split('\n')) {
       const line = settleAlts(raw)
+        // 要素の境目の区切りは、日本語の後ろの開き括弧の前では入れない（別々の要素の「利用料」「（税込）」が、題と違って空白つきで読まれた）。
+        // ページの文字にもとからある空白は、そのまま残す。
+        .replace(/([^\x00-\x7F])\u0007+(?=[（「『【])/g, '$1')
+        .replace(/\u0007/g, ' ')
         .replace(/[^\S\n]+/g, ' ')
         .trim()
         // 区切りに入れた空白が、句読点と括弧の内側に来たら外す。

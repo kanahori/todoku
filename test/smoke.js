@@ -643,7 +643,7 @@ async function generateChecks() {
     // 節は h2 と h3 の両方で区切る。Claude の読むカードが幾つもの要素に当たっても、重なりは読む最初の一つで見る。丸ごとのカードも節に分ける。
     // サイトのメニュー（header の中の nav）は束の後ろへ。目次の項目が指す見出し（a の name で指す、文字の少ない「利用料」）も節にし、
     // 3項目の一覧を含む「利用の流れ」は、一覧だけのカードでなく節にする。
-    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '利用料', '利用の流れ', '借りられる場所', 'お知らせ', 'サイトのメニュー', 'お問い合わせ'];
+    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '利用料（税込）', '利用の流れ', '借りられる場所', 'お知らせ', 'サイトのメニュー', 'お問い合わせ'];
     const multi = await generateDeck({
       BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('menu', 'list', '.site-menu li'), noTitle('main', 'read', '.wysiwyg')] }), store, allowFixtures: true,
     });
@@ -668,7 +668,7 @@ async function generateChecks() {
 
     // 頼み16 の後戻りの組み合わせ（Claude の案で、節や必ず作る表が消えたもの）。
     // 本文の子を全部項目にした一覧・目次の一覧の selector が節の中の一覧にも当たるもの・ページ全体を包む読むカード。
-    const sectionTitles = ['あおチャリとは', '料金', '利用料', '利用の流れ', '借りられる場所', 'お知らせ', 'お問い合わせ'];
+    const sectionTitles = ['あおチャリとは', '料金', '利用料（税込）', '利用の流れ', '借りられる場所', 'お知らせ', 'お問い合わせ'];
     for (const [label, cardsOf, expect] of [
       ['本文の子を全部項目にした一覧', [noTitle('list', 'list', '.free-layout-area > div > *')], sectionTitles],
       ['目次の一覧（節の中の一覧にも当たる selector）', [noTitle('list', 'list', '.wysiwyg ul li')], ['目次を読む', ...sectionTitles]],
@@ -686,6 +686,17 @@ async function generateChecks() {
     check('カードを作る（本物の Claude の案の形）: 最初の表と行の一番多い表を Claude のカードが読んでいれば、必ず作る枠は三つ目の表（市町村別）に使う',
       claimed.ok && claimed.config.cards.some((c) => c.title === '市町村別の警報・注意報' && c.joinWith), claimed.ok ? claimed.config.cards.map((c) => c.title) : claimed);
     if (claimed.ok) store.remove(claimed.config.id);
+    // 別々の要素の「利用料」「（税込）」の見出しを、題と同じく空白無しで読む。
+    const rateDeck = await generateDeck({ BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [] }), store, allowFixtures: true });
+    if (rateDeck.ok) {
+      const rateCard = rateDeck.config.cards.find((c) => c.title === '利用料（税込）');
+      const rate = rateCard ? await runCard(BrowserWindow, rateDeck.config, rateCard.id, { waitMs: 500 }) : null;
+      check('読む: 別々の要素の「利用料」と「（税込）」を、題と同じく空白無しで読む', Boolean(rate && rate.ok && rate.text.startsWith('利用料（税込）\n')), rate && rate.text);
+      store.remove(rateDeck.config.id);
+    } else {
+      check('読む: 別々の要素の「利用料」と「（税込）」を、題と同じく空白無しで読む', false, rateDeck);
+    }
+
     const wrapped = await generateDeck({ BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.container')] }), store, allowFixtures: true });
     check('カードを作る（後戻りの組み合わせ）: ページ全体を包む読むカードがあっても、必ず作る二つの表を作る',
       wrapped.ok && wrapped.config.cards.filter((c) => c.joinWith).length === 2, wrapped.ok ? wrapped.config.cards.map((c) => c.title) : wrapped);
