@@ -204,9 +204,11 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         // 同じ文が続けて二度出たら一度にする（画像の alt とその下の文字が同じときなど）。
         .replace(/(\S.{3,}?) \1(?= |$)/g, '$1');
       if (!line || line === lines[lines.length - 1]) continue;
-      // 前の行が「・」「／」などのつなぎで終わるか、この行がそれで始まるときは、一つの名前の続きなので前の行につなぐ。
+      // 前の行が「・」「／」で終わるか、この行がそれで始まるときは、一つの名前の続きなので前の行につなぐ（どちらかが記号だけの行ならつながない）。
+      // 前は「-」「＋」などもつなぎにしていて、気象庁の早期注意情報の表で「-」の升目で終わる行が次の行とつながった（2026-11-04 の Windows の確かめ）。
       const last = lines[lines.length - 1];
-      if (last !== undefined && (/[・／/＆&＋+－-]$/.test(last) || /^[・／/＆&＋+－-]/.test(line))) lines[lines.length - 1] = last + line;
+      const joins = last !== undefined && last.length > 1 && line.length > 1 && (/[・／]$/.test(last) || /^[・／]/.test(line));
+      if (joins) lines[lines.length - 1] = last + line;
       else lines.push(line);
     }
     return lines;
@@ -216,7 +218,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
   // 一つの名前が二つの要素に分かれているときは区切らない: 前の行が「・」「／」などのつなぎで終わるか、次の行がそれで始まるときは
   // そのままつなぎ、前の行の終わりと次の行の頭がどちらも英数字なら空白でつなぐ（「在宅医療・、介護連携」「TSUKUBA、OPEN DATA」と読んだ）。
   const joint = (acc, line) => {
-    if (/[・／/＆&＋+－\-ー]$/.test(acc) || /^[・／/＆&＋+－\-]/.test(line)) return '';
+    if (acc.length > 1 && line.length > 1 && (/[・／]$/.test(acc) || /^[・／]/.test(line))) return '';
     if (/[A-Za-z0-9]$/.test(acc) && /^[A-Za-z0-9]/.test(line)) return ' ';
     return /[、。，．！？：:,.;；]$/.test(acc) ? ' ' : '、';
   };

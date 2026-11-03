@@ -513,7 +513,8 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     const u = sib ? (sib.matches('table') ? sib : sib.querySelector('table')) : null;
     if (u && u !== t && tables.includes(u) && !paired.has(u) && dataRows(u) === dataRows(t) && dataRows(t) >= 3) {
       paired.add(u);
-      pairOf.set(t, u);
+      // 二つが同じ中身の写し（固定の列と流れる列を、同じ表を二つ描いて見せるページ。気象庁の早期注意情報）なら、つながず一つだけ読む。
+      if (clean(t.textContent) !== clean(u.textContent)) pairOf.set(t, u);
     }
   }
   for (const t of tables) {
@@ -850,8 +851,8 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   }
   if (signal.aborted) return fail('timeout');
   const candidates = normalizeCandidates(answer);
-  if (candidates.length === 0) return fail('no-cards');
-  const probes = await win.webContents.executeJavaScript(buildInspectScript(candidates));
+  // Claude の案が一枚も無くても、手元で必ず作る表と本文の節のカードがあれば束にする（最後に一枚も無ければ作らない）。
+  const probes = candidates.length > 0 ? await win.webContents.executeJavaScript(buildInspectScript(candidates)) : [];
   const picked = pickCards(candidates, probes);
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
   const taken = picked.filter((c) => c.action !== 'click').map((c) => [c.selector, c.action]);

@@ -621,6 +621,19 @@ async function generateChecks() {
     }
     if (second.ok) store.remove(second.config.id);
 
+    // 同じ中身の表を二つ描くページ（早期注意情報）: 二つをつながず一つだけ読み、「-」の升目で終わる行を次の行とつながない。
+    const dup = await generateDeck({ BrowserWindow, url: 'fixture:warnings-dup.html', callModel: async () => ({ cards: [] }), store, allowFixtures: true });
+    check('カードを作る: 同じ中身の写しの二つの表は、つながずに一つの表のカードにする', dup.ok && dup.config.cards.length === 1 && !dup.config.cards[0].joinWith, dup.ok ? dup.config.cards : dup);
+    if (dup.ok) {
+      const dupRows = await runCard(BrowserWindow, dup.config, dup.config.cards[0].id, { waitMs: 500 });
+      check('表の行: 「-」の升目は空白で区切り、行ごとに一件で読む（二重に読まない）',
+        dupRows.ok && JSON.stringify(dupRows.items) === JSON.stringify(['あおば市 - - 大雨', 'みどり市 - 雷 -', 'さくら町 - - -', 'やまなみ町 大雨 - -', 'かわべ村 - - -']), dupRows.items);
+      const dupRead = await runCard(BrowserWindow, { ...dup.config, cards: [{ id: 'r', title: '表', action: 'read', selector: '#prob .wide-scroll table' }] }, 'r', { waitMs: 500 });
+      check('表の行: 読むカードでも、「-」で終わる行を次の行とつながず、一行ずつ読む',
+        dupRead.ok && dupRead.text.split('\n').length === 6 && dupRead.text.split('\n')[1] === 'あおば市 - - 大雨', dupRead.text);
+      store.remove(dup.config.id);
+    }
+
     // 本文の大半が最初の h2 より前の h3 の節にあり、本文を同じ class の div で書くページ（市の案内のページの作り）。
     // 節は h2 と h3 の両方で区切る。Claude の読むカードが幾つもの要素に当たっても、重なりは読む最初の一つで見る。丸ごとのカードも節に分ける。
     const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '借りられる場所', 'お知らせ', 'お問い合わせ'];
