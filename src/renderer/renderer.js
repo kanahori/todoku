@@ -365,6 +365,8 @@ async function readCard(card) {
       card.heading = card.title;
     }
     if (result.truncated) card.items.push({ text: '長いので、ここまでで切りました。' });
+    // ページがまだ書いている途中だった（チャットの返事など）。待っても書き終わらなかったので、ここまでを読んだ。
+    if (result.partial) card.items.push({ text: 'まだ書いている途中でした。ここまでを読みました。もう一度読むと、続きが読めます。' });
   } else if (result.needLogin) {
     card.heading = `${card.title}（ログインが要ります）`;
     card.items = [
@@ -398,8 +400,9 @@ async function readCard(card) {
     return;
   }
   if (!node) return;
-  if (result.ok && result.action === 'list') announce(count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`);
-  else if (result.ok) announce(`「${card.title}」を読みました。`);
+  const midway = result.ok && result.partial ? 'まだ書いている途中です。' : '';
+  if (result.ok && result.action === 'list') announce((count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`) + midway);
+  else if (result.ok) announce(`「${card.title}」を読みました。${midway}`);
   else if (result.needLogin) announce(`「${card.title}」は、ログインが要ります。`);
   else announce(`「${card.title}」を読めませんでした。`);
 }

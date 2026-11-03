@@ -171,6 +171,32 @@ async function main() {
   check('画像の説明: 読むカードでも、行の中の重なりを一度だけ読む', altRead.ok && altRead.text === altReadExpected.join('\n'), altRead.text);
   closeTarget('alt-text');
 
+  // 作り物のチャットの画面（cards/practice-chat.json）: 返事が描かれている最中（aria-busy="true"）に読んだら、書き終わるのを待って読む。
+  // 待つ長さの内に書き終わらなければ、そこまでを読み、途中だと返す（partial）。
+  {
+    const chat = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-chat.json')).config;
+    const startedAt = Date.now();
+    const last = await runCard(BrowserWindow, chat, 'last-reply');
+    check('チャット: 返事を書いている最中に「最後の返事を読む」を押すと、書き終わるのを待ってから全部読む（途中の印は付かない）',
+      last.ok && last.partial === undefined && last.text.startsWith('持ち物を確かめる手順') && last.text.endsWith('楽しい旅になりますように。')
+        && Date.now() - startedAt >= 2000, { last, ms: Date.now() - startedAt });
+    const code = await runCard(BrowserWindow, chat, 'last-code');
+    check('チャット: 最後の返事のコードの塊だけを読む（1件）', code.ok && code.items.length === 1 && code.items[0].includes('切符: 済'), code.items);
+    const questions = await runCard(BrowserWindow, chat, 'questions');
+    check('チャット: 自分の質問を12件、古い順に読む', questions.ok && questions.items.length === 12 && questions.items[0].startsWith('週末に一泊で山の宿へ行きます。'), questions.items);
+    const turns = await runCard(BrowserWindow, chat, 'all-turns');
+    check('チャット: やり取りを24件、質問と返事を交互に読む（一件ずつ移れる）',
+      turns.ok && turns.items.length === 24 && turns.items[0].startsWith('あなた') && turns.items[1].startsWith('ことのは'), turns.items.slice(0, 2));
+    const history = await runCard(BrowserWindow, chat, 'history');
+    check('チャット: 過去のチャットの一覧を5件読む', history.ok && history.items.length === 5 && history.items[0] === '旅の持ち物の相談', history.items);
+    // 読み込み直して、書き終わる前に待つ長さが切れたとき。
+    closeTarget('practice-chat');
+    const early = await runCard(BrowserWindow, chat, 'last-reply', { waitMs: 700 });
+    check('チャット: 待つ長さの内に書き終わらなければ、そこまでを読み、途中だと返す（partial）',
+      early.ok && early.partial === true && early.text.length > 0 && !early.text.includes('楽しい旅'), early);
+    closeTarget('practice-chat');
+  }
+
   // 日だけの表: 日付の要素の id か datetime に書かれた年・月・日から「11月6日」と読む。読めない行は書いてあるまま。
   const calConfig = { id: 'calendar', name: 'あおば町のイベントカレンダー（作り物）', url: 'fixture:calendar.html',
     cards: [{ id: 'events', title: 'イベント', action: 'list', selector: '#events tr.row', dateSelector: 'td.date' }] };

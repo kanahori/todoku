@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空のチャットのサービス「ことのはチャット」）。サービスの名前も発言も作り物で、本物のサービスの見た目や文言はまねていない。 -->
+<!-- 利用者の質問と AI の返事が交互に12往復。返事には見出し・箇条書き・コードの塊・表が混じる。左に過去のチャットの一覧。 -->
+<!-- 最後の返事は、読み込んでから少しずつ描かれる（書いている間は、その発言に aria-busy="true" が付き、描き終わると外れる）。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>ことのはチャット（作り物）</title>
+  <style>
+    body { color: #000000; background: #ffffff; display: flex; gap: 16px; font-family: sans-serif; }
+    aside { width: 14em; }
+    main { flex: 1; }
+    .log { list-style: none; padding: 0; }
+    .turn { border-top: 1px solid #000000; padding: 8px 0; }
+    .who { font-weight: bold; margin: 0 0 4px; }
+    pre { border: 1px solid #000000; padding: 8px; }
+  </style>
+</head>
+<body>
+  <aside class="history" aria-label="過去のチャット">
+    <h2>過去のチャット</h2>
+    <ul class="history-list">
+      <li><a href="#c1">旅の持ち物の相談</a></li>
+      <li><a href="#c2">お弁当のおかずの案</a></li>
+      <li><a href="#c3">表計算の関数の使い方</a></li>
+      <li><a href="#c4">英語の手紙の書き出し</a></li>
+      <li><a href="#c5">庭の花の育て方</a></li>
+    </ul>
+  </aside>
+  <main class="chat">
+    <h1>ことのはチャット（作り物）</h1>
+    <ol class="log">
+      <li class="turn user" id="m1"><p class="who">あなた</p><div class="body"><p>週末に一泊で山の宿へ行きます。持ち物を考えるのを手伝ってください。</p></div></li>
+      <li class="turn ai" id="m2"><p class="who">ことのは</p><div class="body">
+        <h3>持ち物の案</h3>
+        <ul><li>雨具（山は天気が変わりやすいため）</li><li>重ね着のできる上着</li><li>歩きやすい靴</li></ul>
+        <p>宿で借りられる物があるかも、先に確かめておくと荷物が減ります。</p>
+      </div></li>
+      <li class="turn user" id="m3"><p class="who">あなた</p><div class="body"><p>雨具は傘と雨合羽のどちらがよいですか。</p></div></li>
+      <li class="turn ai" id="m4"><p class="who">ことのは</p><div class="body"><p>山道を歩くなら、両手の空く雨合羽をおすすめします。宿の近くを歩くだけなら、折りたたみの傘でも足ります。</p></div></li>
+      <li class="turn user" id="m5"><p class="who">あなた</p><div class="body"><p>宿までの電車の乗り換えを、表にまとめてもらえますか。</p></div></li>
+      <li class="turn ai" id="m6"><p class="who">ことのは</p><div class="body">
+        <h3>乗り換えの表（作り物の駅）</h3>
+        <table><tr><th>乗る駅</th><th>降りる駅</th><th>かかる時間</th></tr>
+          <tr><td>あおば駅</td><td>みどり駅</td><td>40分</td></tr>
+          <tr><td>みどり駅</td><td>やまなみ駅</td><td>25分</td></tr></table>
+        <p>みどり駅では、乗り換えに10分ほど見ておくと安心です。</p>
+      </div></li>
+      <li class="turn user" id="m7"><p class="who">あなた</p><div class="body"><p>持ち物の一覧を、表計算に入れるための書き方にしてください。</p></div></li>
+      <li class="turn ai" id="m8"><p class="who">ことのは</p><div class="body">
+        <p>一行に一つずつ、品物と数を読点で区切って書くと、そのまま貼り付けられます。</p>
+        <pre><code>品物,数
+雨合羽,1
+上着,1
+靴下,2</code></pre>
+      </div></li>
+      <li class="turn user" id="m9"><p class="who">あなた</p><div class="body"><p>宿で夕食の後に、子どもと遊べることはありますか。</p></div></li>
+      <li class="turn ai" id="m10"><p class="who">ことのは</p><div class="body">
+        <ul><li>星を見る（晴れていれば、山の上はよく見えます）</li><li>しりとりや、言葉を使った遊び</li></ul>
+      </div></li>
+      <li class="turn user" id="m11"><p class="who">あなた</p><div class="body"><p>帰りの日の朝に、近くを少し歩きたいです。気をつけることは。</p></div></li>
+      <li class="turn ai" id="m12"><p class="who">ことのは</p><div class="body"><p>朝は道がぬれていることがあるので、足もとに気をつけてください。出かける前に、宿の方に道の様子を聞くと安心です。</p></div></li>
+      <li class="turn user" id="m13"><p class="who">あなた</p><div class="body"><p>旅の費用を合計する式を教えてください。</p></div></li>
+      <li class="turn ai" id="m14"><p class="who">ことのは</p><div class="body">
+        <h3>合計の式</h3>
+        <p>費用を一つの列に並べて、その列を足し合わせます。</p>
+        <pre><code>=SUM(B2:B10)</code></pre>
+      </div></li>
+      <li class="turn user" id="m15"><p class="who">あなた</p><div class="body"><p>宿に着く時刻を、家の人に伝える文を作ってください。</p></div></li>
+      <li class="turn ai" id="m16"><p class="who">ことのは</p><div class="body"><p>「午後3時ごろに宿に着く予定です。着いたら、また連絡します。」のように書くと伝わります。</p></div></li>
+      <li class="turn user" id="m17"><p class="who">あなた</p><div class="body"><p>山の宿で気をつける体調のことはありますか。</p></div></li>
+      <li class="turn ai" id="m18"><p class="who">ことのは</p><div class="body">
+        <ul><li>夜は冷えるので、温かくして眠る</li><li>水をこまめに飲む</li></ul>
+        <p>具合が悪くなったら、無理をせず宿の方に相談してください。</p>
+      </div></li>
+      <li class="turn user" id="m19"><p class="who">あなた</p><div class="body"><p>お土産の予算を決めたいです。考え方を教えてください。</p></div></li>
+      <li class="turn ai" id="m20"><p class="who">ことのは</p><div class="body"><p>渡す人の数と、一人あたりの金額を先に決めると、全体の予算が決まります。</p></div></li>
+      <li class="turn user" id="m21"><p class="who">あなた</p><div class="body"><p>写真の名前を日付でそろえる方法はありますか。</p></div></li>
+      <li class="turn ai" id="m22"><p class="who">ことのは</p><div class="body">
+        <p>写真を撮った日を、名前の頭に付けると並べやすくなります。</p>
+        <pre><code>2026-11-07_山の宿_01.jpg</code></pre>
+      </div></li>
+      <li class="turn user" id="m23"><p class="who">あなた</p><div class="body"><p>最後に、持ち物を確かめる手順を短くまとめてください。</p></div></li>
+      <li class="turn ai" id="m24" aria-busy="true"><p class="who">ことのは</p><div class="body" id="streaming"></div></li>
+    </ol>
+    <form class="compose"><label>質問を入れる <textarea></textarea></label><button type="button">送る</button></form>
+  </main>
+  <script>
+    // 最後の返事を、少しずつ描く（書いている間は aria-busy="true"。描き終わったら外す）。
+    const pieces = [
+      '<h3>持ち物を確かめる手順</h3>',
+      '<ol>',
+      '<li>前の日の夜に、一覧と見比べる</li>',
+      '<li>雨合羽と上着を、かばんの上の方に入れる</li>',
+      '<li>出かける前に、切符と財布を確かめる</li>',
+      '</ol>',
+      '<pre><code>持ち物: 済\n切符: 済</code></pre>',
+      '<p>これで忘れ物が減ります。楽しい旅になりますように。</p>',
+    ];
+    let html = '';
+    let k = 0;
+    const turn = document.getElementById('m24');
+    const body = document.getElementById('streaming');
+    const step = () => {
+      html += pieces[k];
+      k += 1;
+      body.innerHTML = html;
+      if (k < pieces.length) setTimeout(step, 300);
+      else turn.removeAttribute('aria-busy');
+    };
+    setTimeout(step, 300);
+  </script>
+</body>
+</html>

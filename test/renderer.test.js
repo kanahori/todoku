@@ -22,6 +22,11 @@ test('読み込み中に同じことを3回言わない（「〇〇を読んで�
   assert.match(readCardBody, /を読めませんでした。/);
 });
 
+test('書いている途中までを読んだとき（partial）は、カードの最後の一文と知らせの両方で、途中だと言う', () => {
+  assert.match(readCardBody, /if \(result\.partial\) card\.items\.push\(\{ text: 'まだ書いている途中でした。ここまでを読みました。もう一度読むと、続きが読めます。' \}\)/);
+  assert.match(readCardBody, /result\.partial \? 'まだ書いている途中です。' : ''/);
+});
+
 test('0件のときは、見出し「〇〇（0件）」と中の一文を出す', () => {
   assert.match(readCardBody, /\(count === 0\)/);
   assert.match(readCardBody, /（0件）/);

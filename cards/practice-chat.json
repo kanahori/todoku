@@ -1,0 +1,47 @@
+{
+  "id": "practice-chat",
+  "name": "ことのはチャットの画面（作り物）",
+  "description": "出典：作り物のチャットの画面。チャットのやり取りを、カードで遡ったり追いかけたりする練習です。",
+  "url": "fixture:chat.html",
+  "cards": [
+    {
+      "id": "last-reply",
+      "title": "最後の返事を読む",
+      "action": "read",
+      "selector": ".log > li.ai:last-child .body",
+      "description": "いちばん新しい返事を読みます。返事を書いている途中なら、書き終わるのを待ってから読みます。待っても書き終わらないときは、途中までを読み、途中までだと知らせます"
+    },
+    {
+      "id": "questions",
+      "title": "自分の質問を全部読む",
+      "action": "list",
+      "selector": ".log > li.user .body",
+      "container": ".log",
+      "description": "自分が送った質問を、古い順に、番号を付けて全部読みます。無いときは、0件と読みます"
+    },
+    {
+      "id": "all-turns",
+      "title": "やり取りを全部読む",
+      "action": "list",
+      "selector": ".log > li.turn",
+      "container": ".log",
+      "description": "質問と返事を、古い順に、番号を付けて全部読みます。一件ずつ上下の矢印キーで前の発言、次の発言へ移れます"
+    },
+    {
+      "id": "history",
+      "title": "過去のチャットの一覧を読む",
+      "action": "list",
+      "selector": ".history-list > li",
+      "container": ".history-list",
+      "description": "前に話したチャットの題を、番号を付けて全部読みます。無いときは、0件と読みます"
+    },
+    {
+      "id": "last-code",
+      "title": "最後の返事のコードを読む",
+      "action": "list",
+      "selector": ".log > li.ai:last-child .body pre",
+      "container": ".log > li.ai:last-child .body",
+      "description": "いちばん新しい返事の中の、コードの塊だけを、番号を付けて読みます。無いときは、0件と読みます"
+    }
+  ]
+}

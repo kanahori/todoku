@@ -36,6 +36,8 @@ function resolveUrl(url, cardPath) {
 // （一日に催しが幾つもある行で、催しを一件ずつ読むため）。
 // tagSelector（list のカードだけ・任意）は、項目の中の分類の言葉の要素の selector。題の前でなく、後ろに括弧で読む（「…を開催します！（催し、健康）」）。
 // つくば市のイベントカレンダーで、分類の言葉が題の前に続いて聞き分けにくかった（2026-11-04 の Windows の確かめ）。
+// 書いている途中の所（チャットの返事など）: 読む所か、それを囲む要素・中の要素に aria-busy="true" が付いている間は、外れるまで待つ（待つ長さの内）。
+// 待っても外れなければ、そこまでを読み、partial: true を返す（画面が「書いている途中です」と知らせる）。
 // until（read のカードだけ・任意）は、節の終わりの selector。当たった要素から、後に続く兄弟の要素を、until に当たる要素の手前まで読む
 // （見出しから次の同じ段の見出しの手前までの節。作った束の、本文の節を読むカード）。
 async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until, tagSelector) {
@@ -205,6 +207,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     }
   };
   const deadline = Date.now() + waitMs;
+  const busyAt = (el) => Boolean(el && (el.closest('[aria-busy="true"]') || el.querySelector('[aria-busy="true"]')));
   if (action === 'list') {
     // 当たる項目を全部、番号を付けて読む。隠れているスライドも、画像の説明（alt）も読む。
     // 入れ物が見えてから項目が出てくるページもあるので、入れ物に当たってからも少し（最長2秒）待ってから 0件とする。
@@ -225,6 +228,12 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         return Boolean(d.invalid || (d.el && dateLabel(d.el)));
       });
       if (items.length > 0 && dateSelector && !dateReady() && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 250));
+        continue;
+      }
+      // 書いている途中の所（項目か入れ物に aria-busy）があれば、書き終わるまで待つ。
+      const busy = items.some(busyAt) || (container && busyAt(query(container).el));
+      if (busy && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 250));
         continue;
       }
@@ -265,16 +274,21 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           parts.push(t.slice(0, left));
           left -= t.length;
         }
-        return { found: true, text: text.slice(0, limit), truncated: text.length > limit, items: parts };
+        return { found: true, text: text.slice(0, limit), truncated: text.length > limit, items: parts, ...(busy ? { partial: true } : {}) };
       }
       if (loginSelector && query(loginSelector).el) return { found: false, reason: 'login' };
       if (container) {
         const box = query(container);
         if (box.invalid) return { found: false, reason: 'invalid', field: 'container' };
         if (box.el) {
+          // 入れ物が書いている途中なら、0件と決めずに待つ。
+          if (busyAt(box.el) && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 250));
+            continue;
+          }
           if (containerSeenAt === null) containerSeenAt = Date.now();
           if (Date.now() - containerSeenAt >= EMPTY_SETTLE_MS || Date.now() >= deadline) {
-            return { found: true, text: '0件です。', truncated: false, items: [] };
+            return { found: true, text: '0件です。', truncated: false, items: [], ...(busyAt(box.el) ? { partial: true } : {}) };
           }
         } else {
           containerSeenAt = null;
@@ -302,6 +316,13 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     el.click();
     return { found: true };
   }
+  // 書いている途中なら、書き終わるまで待つ（その間に要素が置き換わることがあるので、当たり直す）。
+  while (busyAt(el) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 250));
+    const again = query(selector).el;
+    if (again) el = again;
+  }
+  const partial = busyAt(el);
   // ふだんは見えている文を、行ごとに読む（画面の項目は行ごとに一つ）。見えている文が無いときは、隠れている所も読む。
   const parts = [el];
   if (until) {
@@ -319,7 +340,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
   let lines = parts.flatMap((p) => textLines(p, true));
   if (lines.length === 0) lines = parts.flatMap((p) => textLines(p));
   const text = lines.join('\n');
-  return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
+  return { found: true, text: text.slice(0, limit), truncated: text.length > limit, ...(partial ? { partial: true } : {}) };
 }
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
@@ -486,7 +507,10 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     const download = await watch.wait({ startMs: options.downloadStartMs ?? 1000 });
     return { ok: true, action: card.action, ...(download ? { download } : {}) };
   }
-  return { ok: true, action: card.action, text: result.text, truncated: result.truncated, ...(result.items ? { items: result.items } : {}) };
+  return {
+    ok: true, action: card.action, text: result.text, truncated: result.truncated,
+    ...(result.items ? { items: result.items } : {}), ...(result.partial ? { partial: true } : {}),
+  };
 }
 
 // ページの中で動く関数（点検用）。selector が当たるかだけを返し、中身は読まない。
