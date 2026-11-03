@@ -74,7 +74,8 @@ async function undoRepair(card) {
   }
   repairsOf(card.appId).delete(card.cardId);
   card.items = (card.items || []).filter((it) => !it.repairItem);
-  refreshCard(card);
+  // 押したボタンは消えるので、焦点はカードの中の最初の項目に置く（カードの上に戻すと、続けて Esc を押したとき束から出てしまう）。
+  refreshCard(card, { focusFirst: true });
   announce(`「${card.title}」の${placeWord(card.action)}を、直す前に戻しました。`);
 }
 
@@ -248,7 +249,8 @@ async function activateCard(card, node) {
 // 焦点のある要素は、DOM から外す前に焦点を移す（外してから移すと、NVDA が見失って「Todoku ドキュメント」から読み直した。
 // 2026-11-03 の Windows の確かめで 11回中9回）。新しい項目を先に入れ、焦点を移してから、古い項目を外す。
 // focusResult のときは、新しい項目の結果の最初（無ければ最初の項目）へ焦点を移す。
-function refreshCard(card, { focusResult = false } = {}) {
+// focusFirst のときは、焦点がこのカードにあれば、新しい項目の最初へ焦点を移す（押したボタンが消えるときにカードの中に留める）。
+function refreshCard(card, { focusResult = false, focusFirst = false } = {}) {
   const deck = current();
   const index = deck.cards.indexOf(card);
   if (index < 0 || !card.node || !card.node.isConnected) return null;
@@ -262,6 +264,9 @@ function refreshCard(card, { focusResult = false } = {}) {
   if (focusResult) {
     const target = newBox.querySelector('[data-result]') || newBox.querySelector('[data-item]');
     (target || node).focus();
+  } else if (focusFirst && node.contains(document.activeElement)) {
+    // 焦点がこのカード（か、その中）にあるときだけ、中の最初の項目へ移す。待つ間に別の所へ移っていたら動かさない。
+    (newBox.querySelector('[data-item]') || node).focus();
   } else if (focusWasInside) {
     // 中の項目に焦点があったなら、カードへ戻しておく（消える要素に焦点を残さない）。
     node.focus();
@@ -378,11 +383,17 @@ function unreadableText(card, result) {
   const message = String(result.message || '');
   if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
-  // 自動で直そうとして直せなかったとき（鍵が無い・Claude が失敗した・確からしくない）は、一文足す。
-  const notFixed = result.autoRepairFailed ? '\n自動で直せませんでした。' : '';
+  // 自動で直そうとして直せなかったときは、最後に理由つきの一文を足す（見つからない → 0件のことも → 直すこともできなかった、の順）。
+  const notFixed = result.autoRepairFailed ? `\n${notFixedSentence(result)}` : '';
   // 入れ物（container）のあるカードは、0件なら「（0件）」と出るので、ここに来るのは本当に見つからないときだけ。
-  if (card.action === 'list' && !card.hasContainer) return `画面が変わったため、読む所が見つかりませんでした。${notFixed}\n本当に0件のこともあります。`;
+  if (card.action === 'list' && !card.hasContainer) return `画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。${notFixed}`;
   return `画面が変わったため、読む所が見つかりませんでした。${notFixed}`;
+}
+
+// 自動で直せなかったときの一文。理由（鍵が無い・時間切れ・確かな案が無い・Claude が失敗した）があれば括弧で添える。
+function notFixedSentence(result) {
+  const why = result.autoRepairReasonText ? `（${result.autoRepairReasonText}）` : '';
+  return `自動で直すこともできませんでした${why}。`;
 }
 
 // ---- 押すカード（押す前に確かめる二段）----
@@ -420,7 +431,7 @@ function showClickConfirm(card, node) {
         }
         // 押した結果ダウンロードが始まったときは、保存したか（できなかったか）を知らせる。
         if (r.ok && r.download) announce(r.download.message, !r.download.ok);
-        else announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}${r.autoRepairFailed ? '。自動で直せませんでした。' : ''}`, !r.ok);
+        else announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}${r.autoRepairFailed ? `。${notFixedSentence(r)}` : ''}`, !r.ok);
       },
     },
     ...repairItems(card),

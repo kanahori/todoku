@@ -65,7 +65,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - After adopting, a `read` / `list` card is read again and the screen reader hears "画面が変わったので、読む所を直しました。" once. A `click` card is not pressed again; the user is told that it was fixed and decides whether to press it.
 - The fix applies only on this computer. The bundled `cards/*.json` are not changed. Each app gets an override file in the app's user data folder (`repairs/<app id>.json`) with the card, the original and the new selector, Claude's reason and the time, so the fix still works after a restart. If a newer config file changes that selector, the override is ignored.
 - Undo: the repaired card has a "直す前に戻す" button. Supporters can open the "自動で直した所（支援者向け）" card at the end of the app's cards to see every automatic fix, write one into the config file (the same way as accepted proposals, with a backup in `config-backups`), or undo it.
-- Without an API key, or when Claude fails, times out or the proposal does not look right, the card says "cannot read" as before with one more sentence: "自動で直せませんでした。"
+- After "直す前に戻す", focus moves to the first item inside the same card, so one Esc returns to the card and does not leave the deck.
+- Without an API key, or when Claude fails, times out or the proposal does not look right, the card says "cannot read" as before and ends with one more sentence with a short reason, e.g. "自動で直すこともできませんでした（Claude の鍵がありません）。" (other reasons: "時間内に終わりませんでした", "確かな案がありませんでした", "Claude が案を作れませんでした"). The click card adds the same sentence to its "could not press" message.
 
 ## Cards for a page without a config file
 

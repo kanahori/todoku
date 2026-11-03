@@ -161,7 +161,7 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
   return { ok: true, written: accepted.length, problems };
 });
 
-// Claude を呼ぶ関数を作る。鍵が無ければ null（自動では直さず、「自動で直せませんでした。」と知らせる）。
+// Claude を呼ぶ関数を作る。鍵が無ければ null（自動では直さず、「自動で直すこともできませんでした（Claude の鍵がありません）。」と知らせる）。
 // schema（任意）は返す形（カードの束を作るときは GenerateSchema）。
 function makeCallModel(schema) {
   if (!hasApiKey()) return null;

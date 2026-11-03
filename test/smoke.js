@@ -332,8 +332,9 @@ async function autoRepairChecks() {
     reopened.remove(base.id, 'carousel');
     const undone = applyOverrides(base, reopened.load(base.id));
     const third = await runCardWithAutoRepair({ BrowserWindow, config: undone.config, cardId: 'carousel', callModel: null, store: reopened, options: { waitMs: 500 } });
-    check('自動で直す: 元に戻すと、設定ファイルのままの selector になり、読めない（鍵が無いので「自動で直せませんでした」の印）',
-      undone.config.cards[0].selector === '.hero .slide' && !third.ok && third.autoRepairFailed === true && third.where === 'cards[0].selector', third);
+    check('自動で直す: 元に戻すと、設定ファイルのままの selector になり、読めない（鍵が無いので「自動で直せなかった」の印と「Claude の鍵がありません」）',
+      undone.config.cards[0].selector === '.hero .slide' && !third.ok && third.autoRepairFailed === true && third.where === 'cards[0].selector'
+        && third.autoRepairReasonText === 'Claude の鍵がありません', third);
 
     // 確からしくない案（当たる数 0）は採らない。
     const weak = await runCardWithAutoRepair({
@@ -341,7 +342,8 @@ async function autoRepairChecks() {
       callModel: async () => ({ proposals: [{ where: 'cards[0].selector', selector: '.hero .no-such-item', reason: '試し' }] }),
     });
     check('自動で直す: 当たらない案は採らず、手元にも残さない',
-      !weak.ok && weak.autoRepairFailed === true && weak.autoRepairReason === 'not-confident' && reopened.load(base.id).length === 0, weak);
+      !weak.ok && weak.autoRepairFailed === true && weak.autoRepairReason === 'not-confident'
+        && weak.autoRepairReasonText === '確かな案がありませんでした' && reopened.load(base.id).length === 0, weak);
   } finally {
     fs.rmSync(userData, { recursive: true, force: true });
   }
@@ -500,9 +502,9 @@ async function rendererFocusChecks() {
         && maintTexts.some((t) => /^2026年11月3日 \d+時05分$/.test(t))
         && maintTexts.includes('「画面が変わった読む所」の直しを設定ファイルに書く（配る）') && maintTexts.includes('「画面が変わった読む所」を直す前に戻す'), maintTexts);
 
-    // 直す前に戻す（読む所のカードの中のボタン）。
+    // 直す前に戻す（読む所のカードの中のボタン）。支援者向けのカードから3枚上（直せない押す所・直せない読む所の上）。
     await key('Escape');
-    for (let k = 0; k < 2; k++) await key('ArrowUp');
+    for (let k = 0; k < 3; k++) await key('ArrowUp');
     await key('Enter');
     await wait(900);
     await key('End');
@@ -513,18 +515,70 @@ async function rendererFocusChecks() {
     const afterUndo = await focusState();
     const undoneLog = await js('window.fakeLog.undone()');
     const leftItems = await js("[...document.querySelectorAll('#deck > article.card')[4].querySelectorAll('[data-item]')].map((n) => n.textContent)");
-    check('「直す前に戻す」を押すと、戻すよう頼み、「…読む所を、直す前に戻しました。」と知らせ、ボタンが消えて焦点はカードに戻る',
+    const firstItemFocused = await js("(() => { const a = document.activeElement; const c = a.closest('article.card'); return Boolean(c) && c.querySelector('[data-item]') === a; })()");
+    check('「直す前に戻す」を押すと、戻すよう頼み、「…読む所を、直す前に戻しました。」と知らせ、ボタンが消えて焦点はカードの中の最初の項目に移る',
       undoButton.text === '直す前に戻す' && JSON.stringify(undoneLog) === JSON.stringify(['fake-app/fixed-read'])
         && undoSaid === '「画面が変わった読む所」の読む所を、直す前に戻しました。'
-        && !leftItems.includes('直す前に戻す') && afterUndo.connected && afterUndo.tag === 'ARTICLE', { undoButton, undoneLog, undoSaid, afterUndo, leftItems });
+        && !leftItems.includes('直す前に戻す') && afterUndo.connected && afterUndo.tag === 'P' && firstItemFocused
+        && afterUndo.text === '直した所の文' && afterUndo.heading === '画面が変わった読む所', { undoButton, undoneLog, undoSaid, afterUndo, leftItems, firstItemFocused });
+    // 戻した後に Esc を一度押すと、カードの上に戻るだけで、束からは出ない。
+    const deckBefore = await js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
+    await key('Escape');
+    const afterEsc = await focusState();
+    const deckAfter = await js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
+    check('戻した後に Esc を押すと、そのカードの上に戻り、束は変わらない',
+      afterEsc.tag === 'ARTICLE' && afterEsc.heading === '画面が変わった読む所' && JSON.stringify(deckBefore) === JSON.stringify(deckAfter), { afterEsc, deckBefore, deckAfter });
 
-    // 直せなかった読む所: 今の「読めません」の形に「自動で直せませんでした。」の一文が足される。
+    // 直せなかった読む所: 見つからない → 自動で直すこともできなかった（理由）、の順。
     await key('ArrowDown');
     await key('Enter');
     await wait(900);
     const unfixed = await focusState();
-    check('直せなかった読む所: 「読めません」の中に「自動で直せませんでした。」が足される',
-      unfixed.heading === '直せない読む所（読めません）' && unfixed.text === '画面が変わったため、読む所が見つかりませんでした。\n自動で直せませんでした。', unfixed);
+    check('直せなかった読む所: 「読めません」の中に、理由つきの「自動で直すこともできませんでした（…）。」が最後に来る',
+      unfixed.heading === '直せない読む所（読めません）'
+        && unfixed.text === '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。', unfixed);
+
+    // 直せなかった押す所: 押せなかった知らせに、理由つきの一文を足す。
+    await key('Escape');
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    await key('ArrowDown');
+    const pressButton = await focusState();
+    await js('document.activeElement.click()');
+    await wait(300);
+    const clickSaid = await js("document.getElementById('alert').textContent");
+    check('直せなかった押す所: 「押せませんでした。…。自動で直すこともできませんでした（Claude の鍵がありません）。」と知らせる',
+      pressButton.text === '「直せない押す所」を押す'
+        && clickSaid === '「直せない押す所」を押せませんでした。ページの中に当たる所がありません。自動で直すこともできませんでした（Claude の鍵がありません）。',
+      { pressButton, clickSaid });
+
+    // 支援者向けのカードの「直す前に戻す」: 焦点は支援者向けのカードの中の最初の項目（「いまはありません」）に移る。
+    // まず画面が変わった読む所をもう一度読んで、また自動で直させる（偽物は、直しが外れていればまた直す）。
+    await key('Escape');
+    await key('Home');
+    for (let k = 0; k < 4; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(900);
+    await key('Escape');
+    await key('End');
+    await key('Enter');
+    await wait(300);
+    const maintUndo = await js("[...document.activeElement.closest('article.card').querySelectorAll('button')].findIndex((b) => b.textContent === '「画面が変わった読む所」を直す前に戻す')");
+    await js(`document.activeElement.closest('article.card').querySelectorAll('button')[${maintUndo}].focus()`);
+    await js('document.activeElement.click()');
+    await wait(300);
+    const afterMaintUndo = await focusState();
+    const maintFirst = await js("(() => { const a = document.activeElement; const c = a.closest('article.card'); return Boolean(c) && c.querySelector('[data-item]') === a; })()");
+    const fixedCardItems = await js("[...document.querySelectorAll('#deck > article.card')[4].querySelectorAll('[data-item]')].map((n) => n.textContent)");
+    check('支援者向けのカードで直す前に戻すと、焦点はそのカードの中の最初の項目に移り、読む所のカードから戻すボタンが消える',
+      maintUndo >= 0 && afterMaintUndo.connected && maintFirst && afterMaintUndo.text === '自動で直した所は、いまはありません。'
+        && afterMaintUndo.heading === '自動で直した所（支援者向け）（0件）' && !fixedCardItems.includes('直す前に戻す'),
+      { maintUndo, afterMaintUndo, maintFirst, fixedCardItems });
+    await key('Escape');
+    const afterMaintEsc = await focusState();
+    check('支援者向けのカードで戻した後に Esc を押すと、そのカードの上に戻る（束からは出ない）',
+      afterMaintEsc.tag === 'ARTICLE' && afterMaintEsc.heading === '自動で直した所（支援者向け）（0件）', afterMaintEsc);
   } finally {
     win.destroy();
   }

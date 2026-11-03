@@ -54,10 +54,37 @@ test('押した結果のダウンロードは、保存したか（できなか�
 test('押すカードを自動で直したときは押し直さず、もう一度押すかを使う人に任せる知らせを出す', () => {
   assert.match(source, /画面が変わったので、押す所を直しました。もう一度押すときは、「\$\{card\.title\}」を押すボタンを押してください。/);
   assert.match(source, /画面が変わったので、押す所を直しています。少しお待ちください。/);
-  assert.match(source, /r\.autoRepairFailed \? '。自動で直せませんでした。' : ''/);
+  // 押せなかったときも、読めないときと同じ一文（理由つき）を足す。
+  assert.match(source, /r\.autoRepairFailed \? `。\$\{notFixedSentence\(r\)\}` : ''/);
+  assert.doesNotMatch(source, /自動で直せませんでした。/);
 });
 
-test('読めないときの文に、自動で直せなかったときだけ「自動で直せませんでした。」を足す', () => {
-  const body = source.slice(source.indexOf('function unreadableText('), source.indexOf('// ---- 押すカード'));
-  assert.match(body, /result\.autoRepairFailed \? '\\n自動で直せませんでした。' : ''/);
+// renderer.js の unreadableText と notFixedSentence を取り出して動かす（DOM を使わない関数だけ）。
+function loadTextFunctions() {
+  const start = source.indexOf('function unreadableText(');
+  const end = source.indexOf('// ---- 押すカード');
+  // eslint-disable-next-line no-new-func
+  return new Function(`${source.slice(start, end)}; return { unreadableText, notFixedSentence };`)();
+}
+
+test('読めないときの文: 見つからない → 0件のことも → 自動で直すこともできなかった（理由）、の順にする', () => {
+  const { unreadableText } = loadTextFunctions();
+  const failed = { ok: false, message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReasonText: 'Claude の鍵がありません' };
+  assert.equal(unreadableText({ action: 'list' }, failed),
+    '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。\n自動で直すこともできませんでした（Claude の鍵がありません）。');
+  assert.equal(unreadableText({ action: 'read' }, { ...failed, autoRepairReasonText: '時間内に終わりませんでした' }),
+    '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。');
+  // 理由の言い方が無ければ、括弧を付けない。
+  assert.equal(unreadableText({ action: 'read' }, { ...failed, autoRepairReasonText: '' }),
+    '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした。');
+  // 自動で直そうとしなかったときは、今までどおり。
+  assert.equal(unreadableText({ action: 'list' }, { ok: false, message: 'ページの中に当たる所がありません' }),
+    '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。');
+  assert.equal(unreadableText({ action: 'list', hasContainer: true }, failed),
+    '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした（Claude の鍵がありません）。');
+});
+
+test('「直す前に戻す」の後は、焦点をカードの中の最初の項目に置く（カードの上に戻さない）', () => {
+  const body = source.slice(source.indexOf('async function undoRepair('), source.indexOf('function pushDeck('));
+  assert.match(body, /refreshCard\(card, \{ focusFirst: true \}\)/);
 });

@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-  createOverrideStore, applyOverrides, isConfident, withTimeout, proposeAutoRepair, runCardWithAutoRepair,
+  createOverrideStore, applyOverrides, isConfident, withTimeout, proposeAutoRepair, runCardWithAutoRepair, autoRepairReasonText,
 } = require('../src/main/autofix');
 const { sourceOpenedMessage } = require('../src/main/messages');
 
@@ -224,11 +224,39 @@ test('カードを動かす: 鍵が無い・確からしくないときは、直
     const { BrowserWindow } = fakeBrowserWindow(pageWith({ try: { count: 0, hasText: false }, action: () => ({ found: false, reason: 'none' }) }));
     const noKey = await runCardWithAutoRepair({ BrowserWindow, config, cardId: 'news', store, callModel: null });
     assert.deepEqual([noKey.ok, noKey.autoRepairFailed, noKey.autoRepairReason, noKey.where], [false, true, 'no-key', 'cards[0].selector']);
+    assert.equal(noKey.autoRepairReasonText, 'Claude の鍵がありません');
     const weak = await runCardWithAutoRepair({
       BrowserWindow, config, cardId: 'news', store,
       callModel: async () => ({ proposals: [{ where: 'cards[0].selector', selector: '.nothing', reason: 'r' }] }),
     });
     assert.deepEqual([weak.ok, weak.autoRepairFailed, weak.autoRepairReason], [false, true, 'not-confident']);
+    assert.equal(weak.autoRepairReasonText, '確かな案がありませんでした');
+    assert.deepEqual(store.load(config.id), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('直せなかった理由の言い方: 鍵が無い・時間切れ・確かな案が無い・Claude が失敗した。知らない理由は添えない', () => {
+  assert.equal(autoRepairReasonText('no-key'), 'Claude の鍵がありません');
+  assert.equal(autoRepairReasonText('timeout'), '時間内に終わりませんでした');
+  for (const r of ['no-proposal', 'same-selector', 'not-confident', 'reread-failed']) assert.equal(autoRepairReasonText(r), '確かな案がありませんでした', r);
+  assert.equal(autoRepairReasonText('model-error'), 'Claude が案を作れませんでした');
+  assert.equal(autoRepairReasonText('text-in-structure'), 'ページの文字を除けなかったので、Claude に頼みませんでした');
+  assert.equal(autoRepairReasonText('error'), '直す途中で誤りが起きました');
+  assert.equal(autoRepairReasonText('toString'), '');
+  assert.equal(autoRepairReasonText(undefined), '');
+});
+
+test('カードを動かす: 時間切れ・Claude が失敗したときは、その理由の言い方を付ける', async () => {
+  const { store, dir } = tmpStore();
+  try {
+    const config = makeConfig([{ id: 'news', title: '新着', action: 'list', selector: '.news li' }]);
+    const { BrowserWindow } = fakeBrowserWindow(pageWith({ try: { count: 0, hasText: false }, action: () => ({ found: false, reason: 'none' }) }));
+    const late = await runCardWithAutoRepair({ BrowserWindow, config, cardId: 'news', store, timeoutMs: 30, callModel: () => new Promise(() => {}) });
+    assert.deepEqual([late.autoRepairFailed, late.autoRepairReason, late.autoRepairReasonText], [true, 'timeout', '時間内に終わりませんでした']);
+    const broken = await runCardWithAutoRepair({ BrowserWindow, config, cardId: 'news', store, callModel: async () => { throw new Error('通信の誤り'); } });
+    assert.deepEqual([broken.autoRepairFailed, broken.autoRepairReason, broken.autoRepairReasonText], [true, 'model-error', 'Claude が案を作れませんでした']);
     assert.deepEqual(store.load(config.id), []);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

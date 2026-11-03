@@ -163,10 +163,32 @@ async function proposeAutoRepair({ BrowserWindow, config, index, callModel, time
   };
 }
 
+// 自動で直せなかった理由（autoRepairReason）を、使う人に聞かせる短い言い方にする。知らない理由は空（理由を添えない）。
+const AUTO_REPAIR_REASON_TEXTS = {
+  'no-key': 'Claude の鍵がありません',
+  timeout: '時間内に終わりませんでした',
+  'no-proposal': '確かな案がありませんでした',
+  'same-selector': '確かな案がありませんでした',
+  'not-confident': '確かな案がありませんでした',
+  'reread-failed': '確かな案がありませんでした',
+  'model-error': 'Claude が案を作れませんでした',
+  'text-in-structure': 'ページの文字を除けなかったので、Claude に頼みませんでした',
+  error: '直す途中で誤りが起きました',
+};
+function autoRepairReasonText(reason) {
+  return Object.prototype.hasOwnProperty.call(AUTO_REPAIR_REASON_TEXTS, reason) ? AUTO_REPAIR_REASON_TEXTS[reason] : '';
+}
+
+// 自動で直せなかったときの印を、結果に付ける（理由の印と、理由の短い言い方）。
+function failed(first, reason) {
+  return { ...first, autoRepairFailed: true, autoRepairReason: reason, autoRepairReasonText: autoRepairReasonText(reason) };
+}
+
 // カードを一枚動かし、当たらなければその場で自動で直す。
 // 結果は runCard の結果に、次を足したもの:
 //   repaired: { cardId, before, after, reason, at, ... }  … 自動で直したとき（read・list は読み直した結果、click は押し直していない）
 //   autoRepairFailed: true                                 … 当たらず、自動で直せなかったとき（鍵が無いときも）
+//   autoRepairReason・autoRepairReasonText                 … 直せなかった理由の印と、使う人に聞かせる短い言い方
 //   config                                                 … 直したときの、直しを当てた後の設定ファイルの中身（主の処理が持ち直す）
 // callModel が null なら（鍵が無いとき）、Claude を呼ばずに autoRepairFailed を付けて返す。
 // onRepairing は、直し始めるときに一度呼ばれる（画面に「直しています」を知らせるため）。
@@ -175,7 +197,7 @@ async function runCardWithAutoRepair({ BrowserWindow, config, cardId, callModel,
   const index = config.cards.findIndex((c) => c.id === cardId);
   // 自動で直すのは「ページの中に当たる所がありません」のときだけ（ログイン・書き方の誤り・ページを開けないときは直さない）。
   if (first.ok || first.needLogin || index < 0 || first.where !== `cards[${index}].selector` || first.message !== 'ページの中に当たる所がありません') return first;
-  if (typeof callModel !== 'function') return { ...first, autoRepairFailed: true, autoRepairReason: 'no-key' };
+  if (typeof callModel !== 'function') return failed(first, 'no-key');
   if (onRepairing) onRepairing();
   let proposed;
   try {
@@ -183,7 +205,7 @@ async function runCardWithAutoRepair({ BrowserWindow, config, cardId, callModel,
   } catch (e) {
     proposed = { ok: false, reason: 'error', message: e.message };
   }
-  if (!proposed.ok) return { ...first, autoRepairFailed: true, autoRepairReason: proposed.reason };
+  if (!proposed.ok) return failed(first, proposed.reason);
   const repair = proposed.repair;
   const next = JSON.parse(JSON.stringify(config));
   next.cards[index].selector = repair.after;
@@ -195,7 +217,7 @@ async function runCardWithAutoRepair({ BrowserWindow, config, cardId, callModel,
   const again = await runCard(BrowserWindow, next, cardId, options);
   if (!again.ok) {
     // 試しでは当たったのに読めなかったときは、採らない（手元にも残さない）。
-    return { ...first, autoRepairFailed: true, autoRepairReason: 'reread-failed' };
+    return failed(first, 'reread-failed');
   }
   store.add(config.id, repair);
   return { ...again, repaired: repair, config: next };
@@ -210,4 +232,5 @@ module.exports = {
   withTimeout,
   proposeAutoRepair,
   runCardWithAutoRepair,
+  autoRepairReasonText,
 };

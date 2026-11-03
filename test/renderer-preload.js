@@ -23,6 +23,7 @@ const config = {
     { id: 'slow-read', title: '時間のかかる読む所', action: 'read', selector: '#c' },
     { id: 'fixed-read', title: '画面が変わった読む所', action: 'read', selector: '#d' },
     { id: 'unfixed-read', title: '直せない読む所', action: 'read', selector: '#e' },
+    { id: 'unfixed-click', title: '直せない押す所', action: 'click', selector: '#f' },
   ],
 };
 
@@ -43,24 +44,26 @@ const madeDeck = {
   ],
 };
 const repaired = { cardId: 'fixed-read', title: '画面が変わった読む所', action: 'read', before: '#d', after: '#d2', reason: 'id が変わったため。', at: '2026-11-03T04:05:00.000Z' };
-let fixedOnce = false;
+// 画面が変わった読む所の直しが、いま手元に効いているか（直す前に戻すと外れ、次に読むとまた直す）。
+let repairActive = false;
 
 const answers = {
   'fast-read': { delay: 20, result: { ok: true, action: 'read', text: 'すぐ返った一つ目\nすぐ返った二つ目' } },
   'fast-list': { delay: 20, result: { ok: true, action: 'list', items: ['一覧の一件目', '一覧の二件目'] } },
   'slow-read': { delay: 1200, result: { ok: true, action: 'read', text: '遅れて返った一つ目' } },
-  'unfixed-read': { delay: 20, result: { ok: false, where: 'cards[5].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true } },
+  'unfixed-read': { delay: 20, result: { ok: false, where: 'cards[4].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReason: 'timeout', autoRepairReasonText: '時間内に終わりませんでした' } },
+  'unfixed-click': { delay: 20, result: { ok: false, where: 'cards[5].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReason: 'no-key', autoRepairReasonText: 'Claude の鍵がありません' } },
 };
 
 contextBridge.exposeInMainWorld('cardsApi', {
   loadConfigs: async () => [{ file: 'fake-app.json', config, errors: [] }],
   runCard: (appId, cardId) => new Promise((resolve) => {
-    // 画面が変わった読む所: 一度目は自動で直して読んだ結果、二度目からはふつうに読んだ結果。
+    // 画面が変わった読む所: 直しが効いていなければ自動で直して読んだ結果、効いていればふつうに読んだ結果。
     if (cardId === 'fixed-read') {
-      const result = fixedOnce
+      const result = repairActive
         ? { ok: true, action: 'read', text: '直した所の文' }
         : { ok: true, action: 'read', text: '直した所の文', repaired };
-      fixedOnce = true;
+      repairActive = true;
       setTimeout(() => resolve(result), 20);
       return;
     }
@@ -77,9 +80,10 @@ contextBridge.exposeInMainWorld('cardsApi', {
   onRepairing: () => {},
   undoRepair: async (appId, cardId) => {
     undone.push(`${appId}/${cardId}`);
+    repairActive = false;
     return { ok: true, repair: repaired };
   },
-  listRepairs: async () => ({ ok: true, repairs: undone.length > 0 ? [] : [repaired] }),
+  listRepairs: async () => ({ ok: true, repairs: repairActive ? [repaired] : [] }),
   generateDeck: (url) => new Promise((resolve) => {
     generated.push(url);
     if (url.includes('fail')) {
