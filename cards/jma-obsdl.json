@@ -1,0 +1,89 @@
+{
+  "id": "jma-obsdl",
+  "name": "気象庁 過去の気象データ・ダウンロード",
+  "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/risk/obsdl/）を加工して作成",
+  "url": "https://www.data.jma.go.jp/risk/obsdl/",
+  "cards": [
+    {
+      "id": "station-button",
+      "title": "地点を選ぶ",
+      "action": "click",
+      "selector": "#mainButton #stationButton",
+      "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/risk/obsdl/）を加工して作成。地点を選ぶ欄を開きます。はじめから開いています"
+    },
+    {
+      "id": "pref-tokyo",
+      "title": "都府県の表で東京を選ぶ",
+      "action": "click",
+      "selector": "#prefectureTable #pr44",
+      "description": "東京都の地点の地図を出します"
+    },
+    {
+      "id": "station-tokyo",
+      "title": "地図で東京の地点を選ぶ",
+      "action": "click",
+      "selector": "#stationMap .station-marker > div[title^=\"地点名：東京\\a \"]",
+      "description": "東京都の地図の中の「東京」の地点を選びます。もう一度押すと、選ぶのをやめます"
+    },
+    {
+      "id": "element-button",
+      "title": "項目を選ぶ",
+      "action": "click",
+      "selector": "#mainButton #elementButton",
+      "description": "データの種類と項目を選ぶ欄を開きます"
+    },
+    {
+      "id": "daily",
+      "title": "データの種類を日別値にする",
+      "action": "click",
+      "selector": "#aggrgPeriod_1",
+      "description": "はじめから日別値になっています"
+    },
+    {
+      "id": "temperature",
+      "title": "気温を選ぶ",
+      "action": "click",
+      "selector": "input.elem[name=\"element\"][value=\"201\"]",
+      "description": "日別値のときは日平均気温を選びます。もう一度押すと、選ぶのをやめます"
+    },
+    {
+      "id": "period-button",
+      "title": "期間を選ぶ",
+      "action": "click",
+      "selector": "#mainButton #periodButton",
+      "description": "期間を選ぶ欄を開きます。はじめから、昨日までの1年間が選ばれています。年・月・日の欄は、このカードからは変えられません"
+    },
+    {
+      "id": "selected-station",
+      "title": "選んだ地点",
+      "action": "read",
+      "selector": "#selectedStationList"
+    },
+    {
+      "id": "selected-element",
+      "title": "選んだ項目",
+      "action": "read",
+      "selector": "#selectedElementList"
+    },
+    {
+      "id": "selected-period",
+      "title": "選んだ期間",
+      "action": "read",
+      "selector": "#selectedPeriod"
+    },
+    {
+      "id": "load-table",
+      "title": "データを表示",
+      "action": "click",
+      "selector": "#loadTable",
+      "description": "選んだデータの表を、ページに出します。表を出した後に別のカードを押すと、ページがはじめの画面に戻ります"
+    },
+    {
+      "id": "csv-download",
+      "title": "CSVダウンロード",
+      "action": "click",
+      "selector": "#csvdl",
+      "description": "選んだデータを、CSVのファイルで受け取ります"
+    }
+  ]
+}

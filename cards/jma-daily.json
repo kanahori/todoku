@@ -1,0 +1,68 @@
+{
+  "id": "jma-daily",
+  "name": "気象庁 過去の気象データ検索（東京の日ごとの値）",
+  "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/stats/etrn/index.php）を加工して作成",
+  "url": "https://www.data.jma.go.jp/stats/etrn/view/daily_s1.php?prec_no=44&block_no=47662&year=2026&month=11",
+  "cards": [
+    {
+      "id": "table-title",
+      "title": "表の地点と月",
+      "action": "read",
+      "selector": "h3:has(+ #tablefix1)",
+      "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/stats/etrn/index.php）を加工して作成。表の題を読みます"
+    },
+    {
+      "id": "latest-day",
+      "title": "値の入っている最後の日",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(1)",
+      "description": "表の中で、値の入っている最後の日です。今日の値は、ふつうは翌日に入ります"
+    },
+    {
+      "id": "latest-mean",
+      "title": "その日の平均気温（度）",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(7)"
+    },
+    {
+      "id": "latest-max",
+      "title": "その日の最高気温（度）",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(8)"
+    },
+    {
+      "id": "latest-min",
+      "title": "その日の最低気温（度）",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(9)"
+    },
+    {
+      "id": "latest-rain",
+      "title": "その日の降水量の合計（ミリ）",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(4)"
+    },
+    {
+      "id": "latest-weather-day",
+      "title": "その日の天気概況（昼）",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(20)",
+      "description": "6時から18時までの天気です"
+    },
+    {
+      "id": "latest-weather-night",
+      "title": "その日の天気概況（夜）",
+      "action": "read",
+      "selector": "#tablefix1 tr:has(> td:nth-child(7):not(:empty)):is(:last-child, :has(+ tr > td:nth-child(7):empty)) > td:nth-child(21)",
+      "description": "18時から翌日6時までの天気です"
+    },
+    {
+      "id": "month-mean",
+      "title": "この月の日ごとの平均気温（度）",
+      "action": "list",
+      "selector": "#tablefix1 tr > td:nth-child(7):not(:empty)",
+      "container": "#tablefix1",
+      "description": "1日から順に、値の入っている日の分だけ読みます。月の初めで値がまだ無いときは、0件と読みます"
+    }
+  ]
+}

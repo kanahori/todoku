@@ -1,0 +1,48 @@
+{
+  "id": "jma-forecast",
+  "name": "気象庁 天気予報（東京都）",
+  "description": "出典：気象庁ホームページ（https://www.jma.go.jp/bosai/forecast/）を加工して作成",
+  "url": "https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=130000",
+  "cards": [
+    {
+      "id": "issued",
+      "title": "予報の発表の日時",
+      "action": "read",
+      "selector": "#short-table-container .forecast-table .contents-header",
+      "description": "出典：気象庁ホームページ（https://www.jma.go.jp/bosai/forecast/）を加工して作成"
+    },
+    {
+      "id": "tokyo-weather",
+      "title": "東京地方の天気（今日・明日・明後日）",
+      "action": "list",
+      "selector": "#short-table-container .contents-wide-table-scroll .forecast-table tr:nth-child(4) > td.forecast-sentence",
+      "description": "今日・明日・明後日の順に読みます"
+    },
+    {
+      "id": "tokyo-max",
+      "title": "東京の日中の最高気温（度）",
+      "action": "list",
+      "selector": "#short-table-container .contents-wide-table-scroll .forecast-table tr:nth-child(11) > td.forecast-max-temp",
+      "description": "今日・明日の順に読みます"
+    },
+    {
+      "id": "tokyo-min",
+      "title": "東京の朝の最低気温（度）",
+      "action": "list",
+      "selector": "#short-table-container .contents-wide-table-scroll .forecast-table tr:nth-child(11) > td.forecast-min-temp",
+      "description": "今日・明日の順に読みます。今日の分は、朝を過ぎると横線になります"
+    },
+    {
+      "id": "overview",
+      "title": "天気概況",
+      "action": "read",
+      "selector": "#short-overview-container .forecast-sentence"
+    },
+    {
+      "id": "warning",
+      "title": "警報・注意報のまとめ",
+      "action": "read",
+      "selector": "#warning-comment-container .warning-summary-sentence"
+    }
+  ]
+}
