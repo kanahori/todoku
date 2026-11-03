@@ -142,6 +142,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## Future
 
 - A browser for people who use the web by voice: the goal is that any page can be reached, not only the sites someone has written a config file for. Making cards for a new page and repairing them on the spot are the first steps.
+- Sharing decks between users (not built yet). When someone opens a page that has no config file, Todoku would make the deck on the spot and upload its config to a server, so the next person who opens the same page gets cards right away. Only structural information would be uploaded: selectors, what each card does (read, list or click) and the order of the cards. Card titles are page text, so they would not be uploaded either; the receiving app would make the titles again on its own machine from the page's headings. The same rule would apply to every page, whether or not it needs a login. Shared configs would go through the same human check as today, where a supporter looks at a config before it is handed out.
 - Going back and forth through a conversation in a chat screen. We tried this only on a made-up chat screen (`test/fixtures/chat.html`). We have not used it on real chat services, because their terms of use restrict automated access to their screens, with no exception written for assistive tools.
 
 ## Third-party software
@@ -186,4 +187,4 @@ Claude がしていること（まとめ）
 - 動かし方・設定・使った部品・試しの数は、上の英語の節をご覧ください。
 - 同梱の例に、本物のつくば市公式ウェブサイト（https://www.city.tsukuba.lg.jp/ ）の設定ファイル（`cards/tsukuba-city.json`）があります。緊急情報・新着情報・お知らせ・今月のイベント情報（イベントカレンダーのページから）・大きな画像のお知らせとピックアップの全部（切り替えのために作られた写しは読みません）・くらしの情報（こんなときは）を読めます。サイト内の検索は、検索の欄が外の検索サービスの部品で、Todoku のカードはまだ文字を入れられないので、カードにしていません。はじめのカードで「出典：つくば市公式ウェブサイト。」と読み、公式サイトを開くボタン（`sourceUrl`）が付きます。アプリは市のページを自分の窓で開き、書いてあるとおりに読むだけで、ページを書き換えたり、フレームの中に入れたりはしません。`npm run real:tsukuba` で、本物のサイトで全部のカードと自動の直し（偽の Claude と、古い行を一つ含む写し `test/tsukuba-city-old-line-for-test.json` を使う）を確かめられます。サイトを3回読み込むので、手で一度ずつ動かしてください。
 - 練習のページ（みどり市・講座のページ・ことのはチャット）は作り物で、実在の自治体・サービス・人とは関係ありません。
-- これから（Future）: どんなページにも届く、音声で使う人のためのブラウザを目指しています。設定ファイルの無いページからカードを作ることと、その場で直すことは、その最初の一歩です。チャットの画面でやり取りを遡ったり追いかけたりする形は、作り物のチャットの画面でだけ試しました。本物のチャットのサービスには当てていません。各社の利用規約が、画面への自動の手段でのアクセスを制限しており、支援技術のための例外が書かれていないためです。
+- これから（Future）: どんなページにも届く、音声で使う人のためのブラウザを目指しています。設定ファイルの無いページからカードを作ることと、その場で直すことは、その最初の一歩です。束を利用者の間で分け合う形も考えています（まだ作っていません）。まだ設定ファイルの無いページに入ったら、その場でカードの束を作り、その設定をサーバに上げておきます。次にだれかが同じページに入ったときは、その設定を使ってすぐ読めるようにします。上げるのは、ページの構造の情報（selector・カードの役目（読む・一覧・押す）・並び）だけです。カードの題もページの文字なので上げず、受け取った側が自分の手元で、ページの見出しから付け直します。ログインの要るページかどうかで分けず、どのページも同じ決まりにします。配る前に支援者が確かめる今の流れに、そのままつなぎます。チャットの画面でやり取りを遡ったり追いかけたりする形は、作り物のチャットの画面でだけ試しました。本物のチャットのサービスには当てていません。各社の利用規約が、画面への自動の手段でのアクセスを制限しており、支援技術のための例外が書かれていないためです。
