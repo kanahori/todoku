@@ -193,6 +193,17 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
     ['市町村を選ぶ', 'サイト内を検索する', '施設を検索する']);
 });
 
+test('表示の切り替えの押すカードは、「表を替える（…）」か「表示を替える（…）」の題にする', () => {
+  const card = (selector) => ({ role: 'menu', action: 'click', selector, container: '', titleSelector: '' });
+  const probes = [
+    { count: 1, hasText: true, containerOk: false, title: '大雨・土砂災害・高潮', toggle: 'table' },
+    { count: 1, hasText: true, containerOk: false, title: '地図で見る', toggle: 'view' },
+    { count: 1, hasText: true, containerOk: false, title: '印刷する', toggle: '' },
+  ];
+  assert.deepEqual(pickCards([card('#a'), card('#b'), card('#c')], probes).map((c) => c.title),
+    ['表を替える（大雨・土砂災害・高潮）', '表示を替える（地図で見る）', '印刷する']);
+});
+
 test('題と束の名前: 長ければ語の切れ目で切り、「ページの題／サイトの名前」はページの題だけにする', () => {
   // 束の名前（40字まで）: サイトの名前を外す。
   assert.equal(deckName('路線バスのご案内／あおば町公式ウェブサイト', 'https://example.com/'), '路線バスのご案内');

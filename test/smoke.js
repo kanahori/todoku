@@ -545,17 +545,19 @@ async function generateChecks() {
       noTitle('button', 'click', '.tool'),
       noTitle('button', 'click', '.print'),
       noTitle('main', 'read', '.note'),
+      noTitle('menu', 'click', '.tabs button:nth-of-type(1)'),
     ]);
     const second = await runOnce([
       noTitle('main', 'read', '.note'),
+      noTitle('menu', 'click', '.tabs button:nth-of-type(1)'),
       noTitle('button', 'click', '.tool'),
       noTitle('button', 'click', '.print'),
     ]);
     const shape = (r) => (r.ok ? { name: r.config.name, cards: r.config.cards } : r);
-    check('カードを作る: Claude の案が違っても同じ束になり、本文の最初の表（発表状況・8行）と行の一番多い表（市町村ごと・12行）の二つを必ず作り、題の無いカード・見出しだけのカード・名前の無いボタンは作らない',
+    check('カードを作る: Claude の案が違っても同じ束になり、本文の最初の表（発表状況・8行）と行の一番多い表（市町村ごと・12行）の二つを必ず作り、題の無いカード・見出しだけのカード・名前の無いボタンは作らない。表を切り替えるタブは「表を替える（…）」の題にする',
       first.ok && second.ok && JSON.stringify(shape(first)) === JSON.stringify(shape(second))
         && first.config.name === 'あおば気象台｜警報・注意報（作り物）'
-        && JSON.stringify(first.config.cards.map((c) => c.title)) === JSON.stringify(['発表状況', 'あおば県の警報・注意報（発表状況）', '市町村ごとの詳しい状況', '印刷する']),
+        && JSON.stringify(first.config.cards.map((c) => c.title)) === JSON.stringify(['発表状況', 'あおば県の警報・注意報（発表状況）', '表を替える（大雨・土砂災害・高潮）', '市町村ごとの詳しい状況', '印刷する']),
       { first: shape(first), second: shape(second) });
     if (first.ok) {
       const table = await runCard(BrowserWindow, first.config, first.config.cards[0].id, { waitMs: 500 });

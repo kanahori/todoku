@@ -350,6 +350,25 @@ function pageInspect(tryOne, cards) {
     const headText = squeeze(heads.map((h) => h.innerText || h.textContent).join(''));
     return headText !== '' && all === headText;
   };
+  // 押す所が、表示の切り替え（タブ・aria-controls・aria-pressed・aria-selected・三つ以上並んだボタンの一つ）か。
+  // 切り替える先に表があれば 'table'、ほかは 'view'。切り替えでなければ ''。
+  const toggleKind = (el) => {
+    if (!el) return '';
+    const isButton = el.matches('button, [role="button"], [role="tab"]');
+    const isTab = el.getAttribute('role') === 'tab' || Boolean(el.closest('[role="tablist"]'));
+    const controls = clean(el.getAttribute('aria-controls'));
+    const state = el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected');
+    const group = isButton && el.parentElement
+      && [...el.parentElement.children].filter((x) => x.matches('button, [role="button"], [role="tab"]')).length >= 3;
+    if (!(isTab || controls || state || group)) return '';
+    const hasTable = (t) => Boolean(t && (t.matches('table') || t.querySelector('table')));
+    if (controls && controls.split(' ').some((id) => hasTable(document.getElementById(id)))) return 'table';
+    const box = el.closest('[role="tablist"]') || el.parentElement;
+    for (let n = box ? box.nextElementSibling : null, d = 0; n && d < 3; n = n.nextElementSibling, d++) {
+      if (hasTable(n)) return 'table';
+    }
+    return 'view';
+  };
   return cards.map((c) => {
     const probe = tryOne(c.selector);
     const containerOk = Boolean(c.container && one(c.container));
@@ -365,6 +384,7 @@ function pageInspect(tryOne, cards) {
       count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200), body: bodyOf(c), texts: shortTexts(region),
       alts: alts.map((t) => t.slice(0, 200)), toc: c.action !== 'click' && isToc(region), crumb: isCrumb(region),
       headingOnly: c.action === 'read' && headingOnly(one(c.selector)),
+      toggle: c.action === 'click' && probe.count === 1 ? toggleKind(one(c.selector)) : '',
       pos: region && order.has(region) ? order.get(region) : (one(c.selector) && order.get(one(c.selector))) || 0,
     };
   });
@@ -650,7 +670,9 @@ function pickCards(candidates, probes) {
       tocTaken = true;
       title = '目次を読む';
     }
-    if (c.action === 'click' && title) title = clickTitle(title);
+    // 表示の切り替えの押す所は、押すと何が起きるかを題にする（「大雨・土砂災害・高潮」→「表を替える（大雨・土砂災害・高潮）」）。
+    if (c.action === 'click' && title && probe.toggle) title = `${probe.toggle === 'table' ? '表を替える' : '表示を替える'}（${title}）`;
+    else if (c.action === 'click' && title) title = clickTitle(title);
     if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
     // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
     // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。

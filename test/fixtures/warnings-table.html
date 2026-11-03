@@ -28,7 +28,12 @@
     </table>
     <p class="note">発表状況は、作り物の値です。大雨や雷に気をつけて、川や海に近づかないでください。</p>
     <h2>市町村ごとの詳しい状況</h2>
-    <table class="towns">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" aria-controls="towns" aria-selected="true">大雨・土砂災害・高潮</button>
+      <button type="button" role="tab" aria-controls="towns" aria-selected="false">雷</button>
+      <button type="button" role="tab" aria-controls="towns" aria-selected="false">波浪</button>
+    </div>
+    <table class="towns" id="towns">
       <tr><th>市町村</th><th>大雨</th><th>雷</th></tr>
       <tr><th>あおば市</th><td>大雨注意報</td><td>雷注意報</td></tr>
       <tr><th>みどり市</th><td></td><td>雷注意報</td></tr>
