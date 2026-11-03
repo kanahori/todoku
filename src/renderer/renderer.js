@@ -175,7 +175,10 @@ async function activateCard(card, node) {
 // 描き直したカードの要素を返す（別の束へ移っていたら null）。
 // カードの要素（article）はそのまま残し、見出しの文字と中の項目だけを入れ替える。
 // 焦点のある要素を丸ごと作り直すと、NVDA がその要素を見失って黙ることがあった（2026-11-03 の確かめ）。
-function refreshCard(card) {
+// 焦点のある要素は、DOM から外す前に焦点を移す（外してから移すと、NVDA が見失って「Todoku ドキュメント」から読み直した。
+// 2026-11-03 の Windows の確かめで 11回中9回）。新しい項目を先に入れ、焦点を移してから、古い項目を外す。
+// focusResult のときは、新しい項目の結果の最初（無ければ最初の項目）へ焦点を移す。
+function refreshCard(card, { focusResult = false } = {}) {
   const deck = current();
   const index = deck.cards.indexOf(card);
   if (index < 0 || !card.node || !card.node.isConnected) return null;
@@ -183,24 +186,38 @@ function refreshCard(card) {
   node.querySelector('h2').textContent = card.heading;
   const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
   const focusWasInside = node.contains(document.activeElement) && document.activeElement !== node;
-  node.querySelector('.items').replaceWith(renderItems(items));
-  // 中の項目に焦点があったなら、カードへ戻しておく（消えた要素に焦点を残さない）。
-  if (focusWasInside) node.focus();
+  const oldBox = node.querySelector('.items');
+  const newBox = renderItems(items);
+  oldBox.after(newBox);
+  if (focusResult) {
+    const target = newBox.querySelector('[data-result]') || newBox.querySelector('[data-item]');
+    (target || node).focus();
+  } else if (focusWasInside) {
+    // 中の項目に焦点があったなら、カードへ戻しておく（消える要素に焦点を残さない）。
+    node.focus();
+  }
+  oldBox.remove();
   return node;
 }
 
 const PROGRESS_EVERY_MS = 5000; // 進み具合を知らせる間隔（5秒に一度）
+const LOADING_DELAY_MS = 500; // 読み込み中の項目を出すまで待つ時間（その前に結果が来たら出さない）
 
 async function readCard(card) {
   busy = true;
   const started = Date.now();
-  card.heading = `${card.title}（読んでいます）`;
-  card.items = [{ text: '読んでいます。\n終わると、ここに読んだ1件ずつが出ます。', result: true, loading: true }];
-  let node = refreshCard(card);
-  if (node) {
-    node.setAttribute('aria-busy', 'true');
-    enterCard(node, true);
-  }
+  // 「（読んでいます）」の見出しと「読んでいます。」の項目は、すぐには出さず、少し待ってから出して焦点を移す。
+  // 同じアプリの二枚目からはページを読み込み直さないので、結果がすぐ返る。そのとき読み込み中の項目に焦点を移すと、
+  // 直後にその項目が結果に替わり、NVDA が焦点を見失った（2026-11-03 の Windows の確かめ）。待つ間に結果が来たら、
+  // 読み込み中は出さずに結果へ焦点を移す。待つ間、焦点はカードの上のまま。
+  const showLoading = () => {
+    card.heading = `${card.title}（読んでいます）`;
+    card.items = [{ text: '読んでいます。\n終わると、ここに読んだ1件ずつが出ます。', result: true, loading: true }];
+    const shown = card.node && card.node.isConnected && card.node.contains(document.activeElement);
+    const n = refreshCard(card, { focusResult: shown });
+    if (n) n.setAttribute('aria-busy', 'true');
+  };
+  const loadingTimer = setTimeout(showLoading, LOADING_DELAY_MS);
   // 「〇〇を読んでいます。」の知らせは出さない。焦点が移る「読んでいます。…」の項目と、見出しの「（読んでいます）」・aria-busy で
   // 同じことを言っているため（2026-11-03 の NVDA の確かめで、3回続けて聞こえた）。5秒ごとの知らせと、終わりの知らせは残す。
   // 5秒に一度だけ、たった秒を知らせる。見える項目の文も書き換える。
@@ -216,6 +233,7 @@ async function readCard(card) {
   } catch (e) {
     result = { ok: false, message: e.message };
   } finally {
+    clearTimeout(loadingTimer);
     clearInterval(timer);
     busy = false;
   }
@@ -256,13 +274,13 @@ async function readCard(card) {
   // 読み込み中に Esc で別の所へ移っていたら、結果はカードに入れておくだけにする。
   const wasInside = card.node && card.node.isConnected && card.node.contains(document.activeElement);
   if (card.node) card.node.removeAttribute('aria-busy');
-  node = refreshCard(card);
+  // 焦点を移す先（結果の最初の項目）を先に作って焦点を移し、それから読み込み中の項目を外す（refreshCard の中）。
+  const node = refreshCard(card, { focusResult: wasInside });
   if (!node) return;
   if (result.ok && result.action === 'list') announce(count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`);
   else if (result.ok) announce(`「${card.title}」を読みました。`);
   else if (result.needLogin) announce(`「${card.title}」は、ログインが要ります。`);
   else announce(`「${card.title}」を読めませんでした。`);
-  if (wasInside) enterCard(node, true);
 }
 
 // 読めなかったときの文。理由ごとに分け、黙らない。

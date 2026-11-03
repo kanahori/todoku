@@ -194,6 +194,120 @@ async function main() {
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+
+  // 気象庁の「選んだ地点」のカード: 地点の名前だけを1件ずつ読み、観測している項目の画像の説明（気温・降水量…）は読まない。
+  // 本物の気象庁ではなく、同じ作りの作り物のページ（test/fixtures/selected-stations.html）に当てる。
+  {
+    const obsdl = loadConfigFile(path.join(__dirname, '..', 'cards', 'jma-obsdl.json')).config;
+    const onFixture = { ...obsdl, id: 'jma-obsdl-fixture', url: 'fixture:selected-stations.html' };
+    const stations = await runCard(BrowserWindow, onFixture, 'selected-station');
+    check('「選んだ地点」は地点の名前だけを1件ずつ読む（みどり・あおばの2件。気温などの分類の名前は入らない）',
+      stations.ok && stations.action === 'list' && JSON.stringify(stations.items) === JSON.stringify(['みどり', 'あおば']), stations);
+    const card = obsdl.cards.find((c) => c.id === 'selected-station');
+    const emptyConfig = { ...onFixture, cards: [{ ...card, selector: '#emptyStationList .selectedStText', container: '#emptyStationList' }] };
+    const none = await runCard(BrowserWindow, emptyConfig, 'selected-station', { waitMs: 3000 });
+    check('地点を一つも選んでいないとき（入れ物だけある）は、0件として読める',
+      none.ok && Array.isArray(none.items) && none.items.length === 0, none);
+  }
+
+  await rendererFocusChecks();
+}
+
+// カードの画面（src/renderer）の焦点の試し。cardsApi は偽物（test/renderer-preload.js）。
+// 2026-11-03 の Windows の確かめで、すぐ結果が返るカードでは「読んでいます。」の項目に焦点を移した直後にその項目が消え、
+// NVDA が焦点を見失った。すぐ返るときは読み込み中の項目を出さずに結果の最初へ、時間がかかるときは読み込み中の項目から結果の最初へ、
+// 焦点のある要素を DOM から外さずに移ることを確かめる。
+async function rendererFocusChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 4; k++) await wait(50);
+    // 見張り: 読み込み中の項目が DOM に入った回数と、焦点のある要素（か、それを含む要素）を DOM から外した回数を数える。
+    await js(`(() => {
+      const t = { loadingAdded: 0, removedWithFocus: 0 };
+      window.__watch = t;
+      new MutationObserver((ms) => {
+        for (const m of ms) for (const n of m.addedNodes) {
+          if (n.nodeType === 1 && (n.matches('[data-loading]') || n.querySelector('[data-loading]'))) t.loadingAdded++;
+        }
+      }).observe(document.getElementById('deck'), { subtree: true, childList: true });
+      const holdsFocus = (node) => node !== document.body && node.contains(document.activeElement);
+      for (const name of ['remove', 'replaceWith']) {
+        const orig = Element.prototype[name];
+        Element.prototype[name] = function (...a) { if (holdsFocus(this)) t.removedWithFocus++; return orig.apply(this, a); };
+      }
+      const origReplaceChildren = Element.prototype.replaceChildren;
+      Element.prototype.replaceChildren = function (...a) {
+        if ([...this.children].some(holdsFocus)) t.removedWithFocus++;
+        return origReplaceChildren.apply(this, a);
+      };
+      const origRemoveChild = Node.prototype.removeChild;
+      Node.prototype.removeChild = function (c) { if (c.nodeType === 1 && holdsFocus(c)) t.removedWithFocus++; return origRemoveChild.call(this, c); };
+      return true;
+    })()`);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    const focusState = () => js(`(() => {
+      const a = document.activeElement;
+      const card = a && a.closest ? a.closest('article.card') : null;
+      return {
+        tag: a ? a.tagName : null,
+        text: a ? a.textContent : null,
+        connected: a ? a.isConnected : false,
+        isResult: Boolean(a && a.hasAttribute && a.hasAttribute('data-result')),
+        isLoading: Boolean(a && a.hasAttribute && a.hasAttribute('data-loading')),
+        firstResult: Boolean(card && card.querySelector('[data-result]') === a),
+        heading: card ? card.querySelector('h2').textContent : null,
+        busy: card ? card.getAttribute('aria-busy') : null,
+        loadingInDoc: document.querySelectorAll('[data-loading]').length,
+        watch: window.__watch,
+      };
+    })()`);
+
+    // 1. すぐ返る読む所（はじめのカードの次）。
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(900); // 読み込み中を出すまでの 0.5秒を越えて待つ
+    const fast = await focusState();
+    check('すぐ返る読む所: 焦点が結果の最初の項目にある',
+      fast.connected && fast.isResult && fast.firstResult && fast.text === 'すぐ返った一つ目' && fast.heading === 'すぐ返る読む所', fast);
+    check('すぐ返る読む所: 読み込み中の項目を出さず、焦点も残っていない', fast.watch.loadingAdded === 0 && !fast.isLoading && fast.loadingInDoc === 0, fast);
+
+    // 2. すぐ返る一覧（二枚目。もう一度 Enter で読み直す場合も）。
+    await key('Escape');
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(900);
+    const list = await focusState();
+    check('すぐ返る一覧: 焦点が一覧の最初の項目（li）にある',
+      list.connected && list.tag === 'LI' && list.firstResult && list.text === '一覧の一件目' && list.heading === 'すぐ返る一覧（2件）', list);
+    await key('Escape');
+    await key('Enter');
+    await wait(900);
+    const again = await focusState();
+    check('読み直しでも、焦点が一覧の最初の項目にあり、読み込み中の項目は出ない',
+      again.connected && again.tag === 'LI' && again.firstResult && again.watch.loadingAdded === 0 && again.loadingInDoc === 0, again);
+
+    // 3. 時間のかかる読む所: 0.5秒後に読み込み中の項目へ焦点が移り、結果が来たら結果の最初へ移る。
+    await key('Escape');
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(800);
+    const loading = await focusState();
+    check('時間のかかる読む所: 0.5秒後は「読んでいます。」の項目に焦点があり、見出しに（読んでいます）・aria-busy が付く',
+      loading.isLoading && loading.heading === '時間のかかる読む所（読んでいます）' && loading.busy === 'true', loading);
+    await wait(1000);
+    const slow = await focusState();
+    check('時間のかかる読む所: 結果が来たら、焦点が結果の最初の項目に移り、読み込み中の項目は残っていない',
+      slow.connected && slow.firstResult && slow.text === '遅れて返った一つ目' && !slow.isLoading && slow.loadingInDoc === 0 && slow.busy === null, slow);
+    check('焦点のある要素を、一度も DOM から外していない', slow.watch.removedWithFocus === 0, slow.watch);
+  } finally {
+    win.destroy();
+  }
 }
 
 app.whenReady()

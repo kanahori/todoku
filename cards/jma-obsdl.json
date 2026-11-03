@@ -56,8 +56,10 @@
     {
       "id": "selected-station",
       "title": "選んだ地点",
-      "action": "read",
-      "selector": "#selectedStationList"
+      "action": "list",
+      "selector": "#selectedStationList .selectedStText",
+      "container": "#selectedStationList",
+      "description": "選んだ地点の名前を、1件ずつ読みます"
     },
     {
       "id": "selected-element",

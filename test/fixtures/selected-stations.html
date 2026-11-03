@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ。地点の名前は全部作り物。本物のサイトの文字やコードは入れない。 -->
+<!-- 対比の最小: 文字 21:1（既定の #000000 と #ffffff）。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'">
+  <title>選んだ地点の欄（試しのための作り物）</title>
+</head>
+<body>
+  <!-- 試しのための作り物。地点を選ぶページの「選んだ地点」の欄と同じ作り（地点ごとに、名前・観測している項目の画像・削除のボタン）だけを似せた。
+       地点の名前は作り物。画像の説明（alt）に項目の分類の名前を入れ、名前だけを読む selector がそれを拾わないことを確かめる。 -->
+  <div id="selectedStationArea">
+    <div id="selectedStationList" class="list-selected">
+      <div title="みどり" class="clearfix">
+        <div class="selectedStText">みどり</div>
+        <div class="selectedStObs"><img alt="気温" title="気温"><img alt="降水量" title="降水量"><img alt="風" title="風"></div>
+        <div class="selectedStButton" id="s1"><input type="submit" class="delSt" value="削除"></div>
+      </div>
+      <div title="あおば" class="clearfix">
+        <div class="selectedStText">あおば</div>
+        <div class="selectedStObs"><img alt="気温" title="気温"><img alt="日照時間" title="日照時間"><img alt=""></div>
+        <div class="selectedStButton" id="s2"><input type="submit" class="delSt" value="削除"></div>
+      </div>
+    </div>
+  </div>
+  <div id="emptyArea">
+    <div id="emptyStationList" class="list-selected empty"><img alt="">地点を選択してください</div>
+  </div>
+</body>
+</html>
