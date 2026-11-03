@@ -1,6 +1,7 @@
 'use strict';
 // Electron の主の処理: 窓を作り、設定ファイルを読んで画面に渡す。
 
+const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
@@ -12,7 +13,7 @@ const { sourceOpenedMessage } = require('./messages');
 const {
   GenerateSchema, generateDeck, createGeneratedStore, failureMessage, doneMessage, exportDeck, exportedMessage,
 } = require('./generate');
-const { proxySwitches } = require('./proxy');
+const { proxySwitches, chooseSystemProxy } = require('./proxy');
 const { createSettingsStore, registerSettingsHandlers, attachZoomKeys } = require('./settings');
 
 // 環境変数にプロキシがあれば、Electron に渡す（学内のネットワークで、外のページに届くように）。窓を作る前に渡す。
@@ -317,7 +318,26 @@ ipcMain.handle('target:show', (_event, appId) => {
   return showTarget(appId) ? { ok: true } : { ok: false, message: 'ウェブアプリの窓が、まだ開いていません。カードを Enterキーで読んでください。' };
 });
 
-app.whenReady().then(() => {
+// 一行の記録を、標準の出力と userData の log.txt に残す（Windows の包みでは標準の出力が見えないため）。
+function logLine(text) {
+  const line = `${new Date().toISOString()} ${text}`;
+  console.log(line);
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'log.txt'), `${line}\n`);
+  } catch (e) {
+    // 記録できなくても、アプリは続ける。
+  }
+}
+
+app.whenReady().then(async () => {
+  // 環境変数でプロキシを渡していないときは、システムのプロキシの入口に届くかを試し、届かなければ直に繋ぐ（学外のため）。
+  if (proxySwitches().length === 0) {
+    await chooseSystemProxy({
+      resolveProxy: (u) => session.defaultSession.resolveProxy(u),
+      setDirect: () => session.defaultSession.setProxy({ mode: 'direct' }),
+      log: logLine,
+    });
+  }
   registerSettingsHandlers(ipcMain, settingsStore());
   // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
   // 押すカードの結果にならなかったもの（押してから遅れて始まったもの）は、終わったときに画面に知らせる。
