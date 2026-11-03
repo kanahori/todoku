@@ -440,7 +440,7 @@ function pageInspect(tryOne, cards) {
 // 行の一番多い表だけでは、気象庁の警報のページで市町村別の表（49行）が選ばれ、一番大事な発表状況の表（8行）が作られなかった
 // （2026-11-04 の Windows の確かめ）。発表状況の表は、本文の最初の表だった。
 // Claude の案に無くても必ず一枚作るため（気象庁の警報のページで、一番大事な発表状況の表が、作るたびに入ったり入らなかったりした）。
-function pageSections(taken, maxSections, minChars, maxMust) {
+function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
   const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
   const textOf = (el) => clean(el.innerText || el.textContent);
   const hidden = (el) => Boolean(el.closest('[aria-hidden="true"], [hidden]')) || getComputedStyle(el).display === 'none';
@@ -571,10 +571,11 @@ function pageSections(taken, maxSections, minChars, maxMust) {
       if (clean(t.textContent) !== clean(u.textContent)) pairOf.set(t, u);
     }
   }
+  // 表の一つずつ（組は一つにまとめる）。読む表: ふつうはこの表。描かれていなくて、同じ中身の写しの片方が描かれていれば、そちらを読む。
+  // 中身の違う組（名前と値）は、隠れた方も含めてつないで読む（隠れた文字も読める）。どちらも描かれていなければ選ばない。
+  const tableUnits = [];
   for (const t of tables) {
     if (paired.has(t)) continue;
-    // 読む表: ふつうはこの表。描かれていなくて、同じ中身の写しの片方が描かれていれば、そちらを読む。
-    // 中身の違う組（名前と値）は、隠れた方も含めてつないで読む（隠れた文字も読める）。どちらも描かれていなければ選ばない。
     let el = t;
     if (!rendered(t)) {
       const u = partnerOf.get(t);
@@ -585,8 +586,14 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     if (hidden(el)) continue;
     const rowEls = [...el.querySelectorAll('tr')].filter((r) => r.querySelector('td'));
     const rows = pairOf.has(t) ? dataRows(t) : rowEls.length;
-    if (rows >= 3 && !linkOnly(rowEls)) lists.push({ el, rows, table: true, join: el === t ? pairOf.get(t) || null : null });
+    if (rows === 0) continue;
+    // 分けて描いた表の頭（td の行が一つまでで、すぐ後ろに表が続くもの）は、表の一つに数えない（題の手がかりにだけ使う）。
+    // 気象庁の早期注意情報で、頭の表と本体の表が同じ題の二枚になった（本物の Claude の案を本物のページに当てて確かめた）。
+    const nextEl = t.nextElementSibling;
+    if (rowEls.length <= 1 && !pairOf.has(t) && nextEl && (nextEl.matches('table') || nextEl.querySelector('table'))) continue;
+    tableUnits.push({ el, t, rows, rowEls, table: true, join: el === t ? pairOf.get(t) || null : null });
   }
+  for (const x of tableUnits) if (x.rows >= 3 && !linkOnly(x.rowEls)) lists.push(x);
   // role の付いた表（role=table・grid）。行は role=row で、升目のある行。
   for (const t of main.querySelectorAll('[role="table"], [role="grid"]')) {
     if (t.matches('table') || outside(t) || t.parentElement.closest('[role="table"], [role="grid"], table')) continue;
@@ -598,13 +605,92 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     const rows = items.length;
     if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol') && !tocLike(l) && !linkOnly(items)) lists.push({ el: l, rows, table: false });
   }
+  // 表・一覧の題の手がかり。
+  // 表の頭の、升目が一つだけの見出しの行（th）を題にする。表そのものの一行目か、分けて描いた表の頭（見出しの行だけの表）の一行目。
+  // 気象庁の警報の表は、題（「〇〇の警報・注意報（市町村別）」）が表の頭の見出しの行にあった。
+  // headOnly は、分けて描いた表の頭（升目の td の行が一つまで）。そのときは一行目が升目一つの th なら題にする。
+  // 表そのもののときは、名前の列だけの表（どの行も升目が一つ）の一行目と見分けるため、横に広がる升目か、次の行の升目が二つ以上のときだけ。
+  const titleRow = (tb, headOnly = false) => {
+    const r = tb && tb.rows ? tb.rows[0] : null;
+    if (!r || r.cells.length !== 1 || r.cells[0].tagName !== 'TH') return '';
+    const next = tb.rows[1];
+    return headOnly || r.cells[0].colSpan > 1 || (next && next.cells.length > 1) ? textOf(r.cells[0]) : '';
+  };
+  const headTable = (p) => p.matches('table') && [...p.rows].filter((r) => r.querySelector('td')).length <= 1;
+  const titlesOf = (el, isTable) => {
+    const cap = isTable && el.caption ? textOf(el.caption) : '';
+    const label = clean(el.getAttribute('aria-label'));
+    let heading = '';
+    for (let n = el, d = 0; n && n !== main && !heading && d < 3; n = n.parentElement, d++) {
+      for (let p = n.previousElementSibling; p && !heading; p = p.previousElementSibling) {
+        const h = p.matches('h1, h2, h3, h4, h5, h6') ? p : null;
+        if (h) heading = textOf(h);
+        else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
+      }
+    }
+    let rowTitle = el.matches('table') ? titleRow(el) : '';
+    for (let n = el, d = 0; n && n !== main && !rowTitle && d < 6; n = n.parentElement, d++) {
+      for (let p = n.previousElementSibling; p && !rowTitle; p = p.previousElementSibling) {
+        if (headTable(p)) rowTitle = titleRow(p, true);
+        else if (p.matches('table') || p.querySelector('table')) break;
+      }
+    }
+    // 見出しの無いページでは、表の前（6段上まで）にある短い文（40字まで）を題にする。見出しの行だけの表（分けて描いた表の頭）は飛ばす。
+    let near = '';
+    for (let n = el, d = 0; n && n !== main && !near && d < 6; n = n.parentElement, d++) {
+      for (let p = n.previousElementSibling; p && !near; p = p.previousElementSibling) {
+        if (p.matches('script, style')) continue;
+        if (headTable(p)) continue;
+        if (p.querySelector('table') || p.matches('table')) break;
+        const t = textOf(p);
+        if (t && t.length <= 40) near = t;
+        else if (t) break;
+      }
+    }
+    return { cap, label, heading, rowTitle, near };
+  };
+  const rowsSelector = (x) => (x.role ? `${selectorOf(x.el)} [role="row"]:has([role="cell"], [role="gridcell"])`
+    : x.join ? `${selectorOf(x.el)} tr:has(td, th):not(thead tr)` : `${selectorOf(x.el)} tr:has(td)`);
+  // Claude の読むカードが、表を読むためのもの（中の文字の6割以上が表）なら、表ごとの一覧のカードにする（splits）。
+  // 表が二つ以上なら、表ごとに分ける。読むカードのままだと表をまるごと読み、二つの表が一枚の題にまとまった
+  // （気象庁の警報のページで、「〇〇の警報・注意報（発表状況）」のカードが無くなった。本物の Claude の案を本物のページに当てて確かめた）。
+  const splits = {};
+  const claimed = new Set();
+  for (const t of taken) {
+    if (!Array.isArray(t) || t[1] !== 'read') continue;
+    let e = null;
+    try {
+      e = document.querySelector(t[0]);
+    } catch (err) {
+      e = null;
+    }
+    if (!e) continue;
+    // 組の表は、読むカードがどちらか片方を含めば、その組を読むとみる（隠れた固定の列の表だけを指すカードもある）。
+    const partner = (x) => partnerOf.get(x.t) || null;
+    const inside = tableUnits.filter((x) => [x.el, x.t, partner(x)].some((m) => m && (e === m || e.contains(m))));
+    if (inside.length === 0) continue;
+    // 表の文字は、組の両方（同じ中身の写しも）を数える（区画の文字には、写しも入っているため）。
+    const tableText = inside.reduce((n, x) => n + textOf(x.t).length + (partner(x) ? textOf(partner(x)).length : 0), 0);
+    const all = textOf(e).length;
+    if (all === 0 || tableText / all < 0.6) continue;
+    splits[t[0]] = inside.map((x) => {
+      const tt = titlesOf(x.el, true);
+      claimed.add(x.el);
+      claimed.add(x.t);
+      if (partnerOf.has(x.t)) claimed.add(partnerOf.get(x.t));
+      return {
+        selector: rowsSelector(x), container: selectorOf(x.el), ...(x.join ? { joinWith: `${selectorOf(x.join)} tr:has(td, th):not(thead tr)` } : {}),
+        title: tt.cap || tt.label || tt.rowTitle || '', near: tt.heading || tt.near || '', pos: order.get(x.el),
+      };
+    }).filter((u) => u.container);
+  }
   // 表を先にする: 本文の最初の表と、行の一番多い表。表が一つも無いときだけ、行の一番多い一覧。
   const byOrder = (a, b) => order.get(a.el) - order.get(b.el);
   const bySize = (a, b) => b.rows - a.rows || byOrder(a, b);
   // Claude のカードがもう読んでいる表（組の片方を読んでいるものも）は除いてから、本文の最初の表と行の一番多い表を選ぶ。
   // 気象庁の警報のページで、Claude のカードが発表状況と時系列の表を読んでいたので、必ず作る二つの枠が両方そこに当たって外れ、
   // 三つ目の大きな表（市町村別・45行）が作られなかった（本物の Claude の案を本物のページに当てて確かめた）。
-  const free = (x) => !overlapsTaken(x.el) && !(partnerOf.has(x.el) && overlapsTaken(partnerOf.get(x.el)));
+  const free = (x) => !claimed.has(x.el) && !overlapsTaken(x.el) && !(partnerOf.has(x.el) && overlapsTaken(partnerOf.get(x.el)));
   const tableItems = lists.filter((x) => x.table && free(x));
   const firstTable = tableItems.slice().sort(byOrder)[0];
   const largest = tableItems.length > 0 ? tableItems.slice().sort(bySize)[0] : lists.filter(free).sort(bySize)[0];
@@ -617,52 +703,10 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     if (overlapsTaken(top.el)) continue;
     const sel = selectorOf(top.el);
     if (!sel) continue;
-    const cap = top.table && top.el.caption ? textOf(top.el.caption) : '';
-    const label = clean(top.el.getAttribute('aria-label'));
-    let heading = '';
-    for (let n = top.el, d = 0; n && n !== main && !heading && d < 3; n = n.parentElement, d++) {
-      for (let p = n.previousElementSibling; p && !heading; p = p.previousElementSibling) {
-        const h = p.matches('h1, h2, h3, h4, h5, h6') ? p : null;
-        if (h) heading = textOf(h);
-        else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
-      }
-    }
-    // 表の頭の、升目が一つだけの見出しの行（th）を題にする。表そのものの一行目か、分けて描いた表の頭（見出しの行だけの表）の一行目。
-    // 気象庁の警報の表は、題（「〇〇の警報・注意報（市町村別）」）が表の頭の見出しの行にあった。
-    // headOnly は、分けて描いた表の頭（升目の td の行が一つまで）。そのときは一行目が升目一つの th なら題にする。
-    // 表そのもののときは、名前の列だけの表（どの行も升目が一つ）の一行目と見分けるため、横に広がる升目か、次の行の升目が二つ以上のときだけ。
-    const titleRow = (tb, headOnly = false) => {
-      const r = tb && tb.rows ? tb.rows[0] : null;
-      if (!r || r.cells.length !== 1 || r.cells[0].tagName !== 'TH') return '';
-      const next = tb.rows[1];
-      return headOnly || r.cells[0].colSpan > 1 || (next && next.cells.length > 1) ? textOf(r.cells[0]) : '';
-    };
-    const headTable = (p) => p.matches('table') && [...p.rows].filter((r) => r.querySelector('td')).length <= 1;
-    let rowTitle = top.el.matches('table') ? titleRow(top.el) : '';
-    for (let n = top.el, d = 0; n && n !== main && !rowTitle && d < 6; n = n.parentElement, d++) {
-      for (let p = n.previousElementSibling; p && !rowTitle; p = p.previousElementSibling) {
-        if (headTable(p)) rowTitle = titleRow(p, true);
-        else if (p.matches('table') || p.querySelector('table')) break;
-      }
-    }
-    // 見出しの無いページでは、表の前（6段上まで）にある短い文（40字まで）を題にする。見出しの行だけの表（分けて描いた表の頭）は飛ばす。
-    let near = '';
-    for (let n = top.el, d = 0; n && n !== main && !near && d < 6; n = n.parentElement, d++) {
-      for (let p = n.previousElementSibling; p && !near; p = p.previousElementSibling) {
-        if (p.matches('script, style')) continue;
-        if (headTable(p)) continue;
-        if (p.querySelector('table') || p.matches('table')) break;
-        const t = textOf(p);
-        if (t && t.length <= 40) near = t;
-        else if (t) break;
-      }
-    }
-    const rowsOf = (t) => (top.role ? `${selectorOf(t)} [role="row"]:has([role="cell"], [role="gridcell"])`
-      : top.join ? `${selectorOf(t)} tr:has(td, th):not(thead tr)` : `${selectorOf(t)} tr:has(td)`);
-    const joinSel = top.join ? selectorOf(top.join) : null;
+    const { cap, label, heading, rowTitle, near } = titlesOf(top.el, top.table);
     mainLists.push({
-      el: top.el, selector: top.table ? rowsOf(top.el) : `${sel} > li`, container: sel, table: top.table,
-      ...(joinSel ? { joinWith: `${joinSel} tr:has(td, th):not(thead tr)` } : {}),
+      el: top.el, selector: top.table ? rowsSelector(top) : `${sel} > li`, container: sel, table: top.table,
+      ...(top.join ? { joinWith: `${selectorOf(top.join)} tr:has(td, th):not(thead tr)` } : {}),
       title: cap || label || heading || rowTitle || near, alts: [cap, label, rowTitle, heading, near].filter(Boolean),
       text: textOf(top.el).slice(0, 400), pos: order.get(top.el),
     });
@@ -694,7 +738,52 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     }
   }
   const plain = () => mainLists.filter((m) => !dropMust.has(m)).map(({ el, ...rest }) => rest);
-  if (!level) return { sections: [], mainLists: plain(), whole: [] };
+  // 表を切り替える部品の並び（タブ・ラジオボタンのような、同じ名前の部品が三つ以上並ぶもの）で、すぐ後ろの区画に表があるもの。
+  // Claude の案に無くても、並びごとに一枚「表を替える」のカードを作る（Claude の案の回によって、あったりなかったりした。頼み18 の確かめ）。
+  // 押すのは、いま選ばれていない最初の部品。Claude の押すカードがその並びの中の部品を押すなら作らない。二つの並びまで。
+  const toggles = [];
+  {
+    const clickEls = [];
+    for (const c of clicks) {
+      try {
+        const e = document.querySelector(c);
+        if (e) clickEls.push(e);
+      } catch (err) {
+        // 書き方の誤りのある selector は、もう落としてある
+      }
+    }
+    const firstClass = (x) => (typeof x.className === 'string' ? x.className.trim().split(/\s+/)[0] : '');
+    const seen = new Set();
+    const cands = [...main.querySelectorAll('[role="tab"], [class*="radio" i], [class*="tab" i], [class*="toggle" i], [class*="switch" i]')];
+    for (const el of cands) {
+      if (toggles.length >= 2) break;
+      if (el.matches('a, input, table, tr, td, th, tbody') || nav(el) || !rendered(el)) continue;
+      const parent = el.parentElement;
+      if (!parent || seen.has(parent)) continue;
+      const kind = el.getAttribute('role') === 'tab' ? 'tab' : firstClass(el);
+      if (!kind) continue;
+      const group = [...parent.children].filter((x) => x.tagName === el.tagName && (kind === 'tab' ? x.getAttribute('role') === 'tab' : firstClass(x) === kind));
+      if (group.length < 3) continue;
+      seen.add(parent);
+      if (group.some((g) => clickEls.some((c) => c === g || g.contains(c) || c.contains(g)))) continue;
+      let hasTable = false;
+      for (let box = parent, up = 0; box && box !== document.body && up < 4 && !hasTable; up++, box = box.parentElement) {
+        for (let n = box.nextElementSibling, d = 0; n && d < 3; n = n.nextElementSibling, d++) {
+          if (n.matches('table') || n.querySelector('table')) {
+            hasTable = true;
+            break;
+          }
+        }
+      }
+      if (!hasTable) continue;
+      const on = (g) => g.getAttribute('aria-selected') === 'true' || g.getAttribute('aria-pressed') === 'true' || /(^|[-_\s])(on|active|selected|current)($|[-_\s])/i.test(g.className || '');
+      const pick = group.find((g) => !on(g) && textOf(g)) || group.find((g) => textOf(g));
+      const sel = pick ? selectorOf(pick) : null;
+      const name = pick ? textOf(pick) : '';
+      if (sel && name && name.length <= 30) toggles.push({ selector: sel, name, pos: order.get(pick) });
+    }
+  }
+  if (!level) return { sections: [], mainLists: plain(), whole: [], splits, toggles };
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
   const out = [];
@@ -741,11 +830,11 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     }
   }
   // 節のカードができたときだけ、丸ごとのカードを外す（節ができなければ、丸ごとのカードを残す）。
-  return { sections: out, mainLists: plain(), whole: out.length > 0 ? whole : [] };
+  return { sections: out, mainLists: plain(), whole: out.length > 0 ? whole : [], splits, toggles };
 }
 
-function buildSectionsScript(taken) {
-  return `(${pageSections.toString()})(${JSON.stringify(taken)}, ${MAX_SECTIONS}, ${SECTION_MIN_CHARS}, ${MAX_MUST_LISTS})`;
+function buildSectionsScript(taken, clicks = []) {
+  return `(${pageSections.toString()})(${JSON.stringify(taken)}, ${MAX_SECTIONS}, ${SECTION_MIN_CHARS}, ${MAX_MUST_LISTS}, ${JSON.stringify(clicks)})`;
 }
 
 // 節を読むカードを足す。題は見出しの文字（重なれば番号）。束は全部で MAX_CARDS + MAX_SECTIONS 枚まで。
@@ -773,6 +862,57 @@ function addSectionCards(cards, sections) {
 function addMainListCards(cards, mainLists) {
   let out = cards;
   for (const m of Array.isArray(mainLists) ? mainLists : []) out = addMainListCard(out, m);
+  return out;
+}
+
+// 表を切り替える部品の並びの「表を替える（部品の名前）」のカード（pageSections の toggles）。
+function addToggleCards(cards, toggles) {
+  let out = cards;
+  for (const t of Array.isArray(toggles) ? toggles : []) {
+    const titles = new Set(out.map((c) => c.title));
+    let title = `表を替える（${cleanTitle(t.name)}）`;
+    for (let n = 2; titles.has(title); n++) title = `表を替える（${cleanTitle(t.name)}） ${n}`;
+    const card = { id: `button-${out.length + 1}`, title, action: 'click', selector: t.selector };
+    Object.defineProperty(card, 'pos', { value: Number(t.pos) || 0, enumerable: false });
+    out = [...out, card];
+  }
+  return out;
+}
+
+// 表を読むための Claude の読むカードを、表ごとの一覧のカードにする（pageSections の splits）。
+// 表が一つなら、Claude のカードの題のまま一覧のカードにする（行ごとに読み、二つに分けて描いた表の写しを二度読まない）。
+// 表が二つ以上なら表ごとに分け、題は表の題（表の頭の見出しの行など）。題の無い表は、一つ目だけ Claude のカードの題を使い、ほかは作らない。
+function applySplits(cards, splits) {
+  if (!splits) return cards;
+  const out = [];
+  const titles = new Set(cards.filter((c) => !(c.action === 'read' && splits[c.selector])).map((c) => c.title));
+  for (const c of cards) {
+    const units = c.action === 'read' ? splits[c.selector] : null;
+    if (!Array.isArray(units) || units.length === 0) {
+      out.push(c);
+      continue;
+    }
+    units.forEach((u, i) => {
+      // 表の題（表の題・aria-label・表の頭の行）があれば、それを使う。無ければ Claude のカードの題。
+      // Claude のカードの題が地名から作った仮の題（「〇〇の情報」）か、ほかのカードと重なるときは、表の前の見出しか短い文を使う。
+      // 気象庁の警報のページで、表そのものを読む二枚の題が「〇〇の情報」「〇〇の情報 2」になり、発表状況の表が束に無かった（試しの作り物のページで再現）。
+      const near = cleanTitle(u.near);
+      const own = c.weak || titles.has(c.title) ? near : '';
+      let title = cleanTitle(u.title) || (units.length === 1 || i === 0 ? own || c.title : near);
+      if (!title) return;
+      if (titles.has(title) && near && !titles.has(near)) title = near;
+      // 二つ目からの表で題が重なるものは作らない（番号付きの重なりにしない）。
+      if (i > 0 && titles.has(title)) return;
+      for (let n = 2; titles.has(title); n++) title = `${cleanTitle(u.title) || c.title} ${n}`;
+      titles.add(title);
+      const card = { id: c.id, title, action: 'list', selector: u.selector, container: u.container };
+      if (u.joinWith) card.joinWith = u.joinWith;
+      Object.defineProperty(card, 'pos', { value: Number(u.pos) || c.pos || 0, enumerable: false });
+      Object.defineProperty(card, 'back', { value: Boolean(c.back), enumerable: false });
+      Object.defineProperty(card, 'body', { value: c.body, enumerable: false });
+      out.push(card);
+    });
+  }
   return out;
 }
 
@@ -898,7 +1038,8 @@ function pickCards(candidates, probes, rejects = null) {
     // 表示の切り替えの押す所は、押すと何が起きるかを題にする（「大雨・土砂災害・高潮」→「表を替える（大雨・土砂災害・高潮）」）。
     if (c.action === 'click' && title && probe.toggle) title = `${probe.toggle === 'table' ? '表を替える' : '表示を替える'}（${title}）`;
     else if (c.action === 'click' && title) title = clickTitle(title);
-    if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
+    const weak = (c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search');
+    if (weak) title = betterTitle(c, title, probe);
     // リンクやボタンだけが5件以上並ぶ一覧（メニュー）は、本文と紛らわしい題にせず「〇〇のメニュー」にして、束の後ろへ回す。
     // 気象庁の警報のページで、防災情報のメニュー（リンク43件）が「警報・注意報」の題で来た（頼み18 の確かめ）。
     if (probe.menu && title !== '目次を読む') title = /メニュー$/.test(title) ? title : `${title || ''}のメニュー`.replace(/^の/, '');
@@ -921,6 +1062,7 @@ function pickCards(candidates, probes, rejects = null) {
     Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
     Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome) || Boolean(probe.menu), enumerable: false });
     Object.defineProperty(card, 'body', { value: body, enumerable: false });
+    Object.defineProperty(card, 'weak', { value: weak, enumerable: false });
     cards.push(card);
   });
   return cards;
@@ -1025,10 +1167,11 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const picked = pickCards(candidates, probes, rejects);
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
   const taken = picked.filter((c) => c.action !== 'click').map((c) => [c.selector, c.action]);
-  const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
+  const clickSelectors = picked.filter((c) => c.action === 'click').map((c) => c.selector);
+  const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken, clickSelectors));
   const whole = new Set(extras && Array.isArray(extras.whole) ? extras.whole : []);
-  const kept = picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector)));
-  const withMain = addMainListCards(kept, extras && extras.mainLists);
+  const kept = applySplits(picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector))), extras && extras.splits);
+  const withMain = addToggleCards(addMainListCards(kept, extras && extras.mainLists), extras && extras.toggles);
   const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
   dumpFile(id, 'c-deck.json', {
     url,
@@ -1064,7 +1207,8 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
     tried: candidates.length,
     dropped: candidates.length - picked.length,
     sections: cards.filter((c) => c.id.startsWith('section-')).length,
-    split: picked.length - kept.length,
+    split: picked.filter((c) => c.action !== 'click' && whole.has(c.selector)).length,
+    tableSplits: picked.filter((c) => c.action === 'read' && extras && extras.splits && extras.splits[c.selector]).length,
     mainLists: withMain.length - picked.length,
     structure: { nodes, chars: limited.text.length, cut: truncated || limited.cut },
     at: now().toISOString(),

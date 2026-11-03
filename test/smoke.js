@@ -704,6 +704,36 @@ async function generateChecks() {
     check('カードを作る: リンクだけの一覧（メニュー）の Claude のカードは、題を「〇〇のメニュー」にして束の後ろに置く',
       menuDeck.ok && menuDeck.config.cards[menuDeck.config.cards.length - 1].title === '警報・注意報のメニュー', menuDeck.ok ? menuDeck.config.cards.map((c) => c.title) : menuDeck);
     if (menuDeck.ok) store.remove(menuDeck.config.id);
+    // Claude の読むカードが、題の行のある表が二つある区画を丸ごと指す回: 表ごとの一覧のカードに分け、題は表の題の行から取る。
+    const splitDeck = await generateDeck({
+      BrowserWindow, url: 'fixture:warnings-split.html', store, allowFixtures: true, callModel: async () => ({ cards: [noTitle('table', 'read', '#sum')] }),
+    });
+    check('カードを作る: 表を読むための Claude の読むカードは、表ごとの一覧のカードに分け、題は表の題の行から取る（同じ題に番号を付けない）',
+      splitDeck.ok && JSON.stringify(splitDeck.config.cards.map((c) => [c.title, c.action])) === JSON.stringify([
+        ['あおば県の警戒レベル相当情報（発表状況）', 'list'], ['あおば県の警報・注意報（発表状況）', 'list']]),
+      splitDeck.ok ? splitDeck.config.cards : splitDeck);
+    if (splitDeck.ok) {
+      const warnRows = await runCard(BrowserWindow, splitDeck.config, splitDeck.config.cards[1].id, { waitMs: 500 });
+      check('カードを作る: 分けた表のカードで、その表の行だけを読む', warnRows.ok && JSON.stringify(warnRows.items) === JSON.stringify(['北部 大雨注意報', '南部 雷注意報']), warnRows.items);
+      store.remove(splitDeck.config.id);
+    }
+    // 芯が同じになること: 本物の Claude の二つの回の案の形（一回目: 表そのものを読むカード・表を替えるカード / 二回目: 区画を丸ごと読むカード・
+    // 表を替えるカード無し・メニュー）のどちらでも、発表状況・市町村ごと・市町村別の表と「表を替える」が一枚ずつあり、番号付きの重なりが無く、
+    // メニューは「〇〇のメニュー」で後ろ。
+    const coreOf = (deck) => ['あおば県の警報・注意報（発表状況）', '市町村ごとの状況', '市町村別の警報・注意報', '表を替える（大雨・土砂災害・高潮）']
+      .map((t) => deck.config.cards.filter((c) => c.title === t).length);
+    for (const [label, cardsOf] of [
+      ['一回目の形', [noTitle('table', 'read', '#summary .wide-fix table'), noTitle('table', 'read', '#timeline .wide-fix table'),
+        noTitle('button', 'click', '#tool .radio-button:nth-of-type(1)'), noTitle('menu', 'list', '.bosai-menu li')]],
+      ['二回目の形', [noTitle('table', 'read', '#summary'), noTitle('table', 'read', '#timeline'), noTitle('menu', 'list', '.bosai-menu li')]],
+    ]) {
+      const d = await generateDeck({ BrowserWindow, url: 'fixture:warnings-wide.html', store, allowFixtures: true, callModel: async () => ({ cards: cardsOf }) });
+      check(`カードを作る（芯が同じ・${label}）: 発表状況・市町村ごと・市町村別の表と「表を替える」が一枚ずつ、番号付きの重なりが無く、メニューは後ろ`,
+        d.ok && JSON.stringify(coreOf(d)) === JSON.stringify([1, 1, 1, 1]) && !d.config.cards.some((c) => / \d+$/.test(c.title))
+          && d.config.cards[d.config.cards.length - 1].title === '警報・注意報のメニュー',
+        d.ok ? d.config.cards.map((c) => c.title) : d);
+      if (d.ok) store.remove(d.config.id);
+    }
     const wrapped = await generateDeck({ BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.container')] }), store, allowFixtures: true });
     check('カードを作る（後戻りの組み合わせ）: ページ全体を包む読むカードがあっても、必ず作る二つの表を作る',
       wrapped.ok && wrapped.config.cards.filter((c) => c.joinWith).length === 2, wrapped.ok ? wrapped.config.cards.map((c) => c.title) : wrapped);
