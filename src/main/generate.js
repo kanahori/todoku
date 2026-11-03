@@ -486,6 +486,18 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     const links = [...l.querySelectorAll('a[href]')];
     return links.length >= 2 && links.filter((a) => /^#./.test(a.getAttribute('href'))).length / links.length >= 0.8;
   };
+  // リンクやボタンだけが並ぶ一覧（選ぶための一覧・メニュー）か。項目の8割以上で、項目の文字が全部リンクかボタンの文字のとき。
+  // 気象庁の警報のページで、ページの上の「市町村選択」（リンクの一覧 53行）が必ず作る枠を取り、発表状況の表も市町村別の表も
+  // 作られなかった（2026-11-04 の Windows の確かめ）。
+  const linkOnly = (items) => {
+    if (items.length === 0) return false;
+    const n = items.filter((it) => {
+      const all = clean(it.textContent).replace(/\s/g, '');
+      const linked = [...it.querySelectorAll('a, button, [role="button"], [role="link"], [role="option"]')].map((a) => clean(a.textContent)).join('').replace(/\s/g, '');
+      return all !== '' && linked === all;
+    }).length;
+    return n / items.length >= 0.8;
+  };
   const lists = [];
   const dataRows = (t) => [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td, th') && (r.querySelector('td') || r.parentElement.tagName !== 'THEAD')).length;
   const tables = [...main.querySelectorAll('table')].filter((t) => !outside(t) && !t.parentElement.closest('table'));
@@ -506,15 +518,27 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   }
   for (const t of tables) {
     if (paired.has(t)) continue;
-    const rows = pairOf.has(t) ? dataRows(t) : [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td')).length;
-    if (rows >= 3) lists.push({ el: t, rows, table: true, join: pairOf.get(t) || null });
+    const rowEls = [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td'));
+    const rows = pairOf.has(t) ? dataRows(t) : rowEls.length;
+    if (rows >= 3 && !linkOnly(rowEls)) lists.push({ el: t, rows, table: true, join: pairOf.get(t) || null });
+  }
+  // role の付いた表（role=table・grid）。行は role=row で、升目のある行。
+  for (const t of main.querySelectorAll('[role="table"], [role="grid"]')) {
+    if (t.matches('table') || outside(t) || t.parentElement.closest('[role="table"], [role="grid"], table')) continue;
+    const rowEls = [...t.querySelectorAll('[role="row"]')].filter((r) => r.querySelector('[role="cell"], [role="gridcell"]'));
+    if (rowEls.length >= 3 && !linkOnly(rowEls)) lists.push({ el: t, rows: rowEls.length, table: true, role: true, join: null });
   }
   for (const l of main.querySelectorAll('ul, ol')) {
-    const rows = [...l.children].filter((c) => c.tagName === 'LI').length;
-    if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol') && !tocLike(l)) lists.push({ el: l, rows, table: false });
+    const items = [...l.children].filter((c) => c.tagName === 'LI');
+    const rows = items.length;
+    if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol') && !tocLike(l) && !linkOnly(items)) lists.push({ el: l, rows, table: false });
   }
-  const firstTable = lists.filter((x) => x.table).sort((a, b) => order.get(a.el) - order.get(b.el))[0];
-  const largest = lists.slice().sort((a, b) => b.rows - a.rows || order.get(a.el) - order.get(b.el))[0];
+  // 表を先にする: 本文の最初の表と、行の一番多い表。表が一つも無いときだけ、行の一番多い一覧。
+  const byOrder = (a, b) => order.get(a.el) - order.get(b.el);
+  const bySize = (a, b) => b.rows - a.rows || byOrder(a, b);
+  const tableItems = lists.filter((x) => x.table);
+  const firstTable = tableItems.slice().sort(byOrder)[0];
+  const largest = tableItems.length > 0 ? tableItems.slice().sort(bySize)[0] : lists.slice().sort(bySize)[0];
   const must = [];
   for (const x of [firstTable, largest]) {
     if (x && !must.includes(x) && must.length < maxMust) must.push(x);
@@ -546,7 +570,8 @@ function pageSections(taken, maxSections, minChars, maxMust) {
         else if (t) break;
       }
     }
-    const rowsOf = (t) => (top.join ? `${selectorOf(t)} tr:has(td, th):not(thead tr)` : `${selectorOf(t)} tr:has(td)`);
+    const rowsOf = (t) => (top.role ? `${selectorOf(t)} [role="row"]:has([role="cell"], [role="gridcell"])`
+      : top.join ? `${selectorOf(t)} tr:has(td, th):not(thead tr)` : `${selectorOf(t)} tr:has(td)`);
     const joinSel = top.join ? selectorOf(top.join) : null;
     mainLists.push({
       el: top.el, selector: top.table ? rowsOf(top.el) : `${sel} > li`, container: sel, table: top.table,

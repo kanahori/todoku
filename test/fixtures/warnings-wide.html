@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <!-- 作り物の練習のページ（架空の「あおば気象台」の警報）。気象台の警報のページで見た作りをまねる: main も見出し（h1〜h6）も無く、 -->
 <!-- 横に長い表を、名前の列の表（左に固定）と値の列の表（右に流れる）の二つに分けて描き、表を切り替える所は role の無い div が並ぶ。 -->
+<!-- ページの上に、表より行の多い、市町村を選ぶリンクの一覧がある。 -->
 <!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
 <html lang="ja">
 <head>
@@ -11,6 +12,8 @@
 </head>
 <body>
   <div class="container">
+    <!-- 市町村を選ぶリンクの一覧（表より行が多い）。選ぶための一覧なので、必ず作る一覧にしない。 -->
+    <div class="area-select"><div class="title">市町村選択</div><ul class="towns-select"><li><a href="?town=0">あおば市</a></li><li><a href="?town=1">みどり市</a></li><li><a href="?town=2">さくら町</a></li><li><a href="?town=3">やまなみ町</a></li><li><a href="?town=4">かわべ村</a></li><li><a href="?town=5">うみべ町</a></li><li><a href="?town=6">おかの市</a></li><li><a href="?town=7">もりの村</a></li><li><a href="?town=8">はやし町</a></li><li><a href="?town=9">いずみ市</a></li><li><a href="?town=10">ひがし村</a></li><li><a href="?town=11">にし町</a></li><li><a href="?town=12">きた町</a></li><li><a href="?town=13">みなみ村</a></li><li><a href="?town=14">なか市</a></li></ul></div>
     <div id="summary">
       <div class="title">あおば県の警報・注意報（発表状況）</div>
       <div class="block">

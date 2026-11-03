@@ -651,7 +651,7 @@ async function generateChecks() {
     const wide = await generateDeck({
       BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('menu', 'click', '#tool .radio-button:nth-of-type(1)')] }), store, allowFixtures: true,
     });
-    check('カードを作る: 見出しの無いページでも、分けて描いた二つの表を一つの表のカードにし（題は表の前の短い文）、div の並びを「表を替える（…）」にする',
+    check('カードを作る: 見出しの無いページでも、分けて描いた二つの表を一つの表のカードにし（題は表の前の短い文）、div の並びを「表を替える（…）」にする。表より行の多いリンクだけの一覧（市町村選択）は必ず作る一覧にしない',
       wide.ok && JSON.stringify(wide.config.cards.map((c) => c.title)) === JSON.stringify(['あおば県の警報・注意報（発表状況）', '表を替える（大雨・土砂災害・高潮）', '市町村ごとの状況'])
         && wide.config.cards[0].joinWith && wide.config.cards[2].joinWith,
       wide.ok ? wide.config.cards : wide);
