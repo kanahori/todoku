@@ -13,7 +13,7 @@
   },
   "build": {
     "appId": "jp.example.hackathon2026.cards",
-    "productName": "hackathon2026",
+    "productName": "Todoku",
     "directories": {
       "output": "dist"
     },

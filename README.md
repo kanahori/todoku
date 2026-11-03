@@ -1,6 +1,6 @@
-# hackathon2026 (working title)
+# Todoku
 
-A desktop app for Windows and macOS that lets blind and low-vision people use web apps through a simple screen of cards.
+Todoku ("it reaches" in Japanese) is a desktop app for Windows and macOS that lets blind and low-vision people use web apps through a simple screen of cards.
 
 Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: "Things that should reach everyone". Work in progress.
 
@@ -26,7 +26,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
   - `npm run smoke` runs the end-to-end checks inside Electron against the bundled practice pages in `test/fixtures/` (no network access).
   - `npm run ui:repair` opens the card screen with a fake repair model, so you can try the "accept / reject" form without an API key. Set `UI_REPAIR_AUTO=1` to run it unattended.
 - Build Windows installers: `npm run dist:win`
-  - Produces an installer (`dist/hackathon2026 Setup 1.0.0.exe`) and a portable build (`dist/hackathon2026 1.0.0.exe`), each containing both x64 and Arm64.
+  - Produces an installer (`dist/Todoku Setup 1.0.0.exe`) and a portable build (`dist/Todoku 1.0.0.exe`), each containing both x64 and Arm64.
   - The builds are not code-signed, so Windows SmartScreen may show an "unknown publisher" warning.
   - Config files inside the packaged app are read-only. To let the app write repaired selectors, keep your config files in the local folder (`CARDS_LOCAL_DIR`) or run from a working copy with `npm start`.
 
@@ -35,7 +35,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - Requirements: macOS on Apple silicon, Node.js 22.12 or later (tested with Node 22.19).
 - `npm ci`, then `npm start`. `npm test` and `npm run smoke` work the same way as on Windows.
 - If the Electron binary download fails behind a proxy, download `electron-v<version>-darwin-arm64.zip` and `SHASUMS256.txt` from the Electron releases page, check the SHA-256, extract the zip into `node_modules/electron/dist`, and write `Electron.app/Contents/MacOS/Electron` into `node_modules/electron/path.txt`.
-- Build a macOS disk image: `npm run dist:mac` produces `dist/hackathon2026-1.0.0-arm64.dmg` (Apple silicon). It is not signed or notarized, so macOS warns that the developer cannot be verified; open it from the context menu (Open) the first time.
+- Build a macOS disk image: `npm run dist:mac` produces `dist/Todoku-1.0.0-arm64.dmg` (Apple silicon). It is not signed or notarized, so macOS warns that the developer cannot be verified; open it from the context menu (Open) the first time.
   - Behind a proxy, point `ELECTRON_CACHE` to a folder that already holds the Electron zip and `SHASUMS256.txt`.
 
 ## Configuration (environment variables)
@@ -86,7 +86,7 @@ Licenses were read from each package's `package.json` in `node_modules`.
 
 ## 日本語
 
-視覚に障害のある方が、カードの簡単な画面からウェブアプリを使えるようにする、Windows と macOS のアプリです。Built with Claude: Japan 2026（2026年11月2日〜8日）の期間中に作りました。テーマ2「本来、誰にでも届くべきもの」に当たります。開発中です。
+Todoku（とどく）は、視覚に障害のある方が、カードの簡単な画面からウェブアプリを使えるようにする、Windows と macOS のアプリです。Built with Claude: Japan 2026（2026年11月2日〜8日）の期間中に作りました。テーマ2「本来、誰にでも届くべきもの」に当たります。開発中です。
 
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをふつうのボタンのカードの画面にします。画面読み上げソフトの利用者は、Tab で移り、Enter か Space で押すと、結果が読み上げられます。
 - `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。
