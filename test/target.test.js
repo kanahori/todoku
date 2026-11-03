@@ -82,3 +82,68 @@ test('# から後だけが違うときは、同じページとして読み込み
   assert.equal(isSamePage('https://example.com/forecast/#area=kanagawa', forecast), false);
   assert.equal(isSamePage('https://example.com/forecast/', forecast), false);
 });
+
+// 偽の窓（openTarget が使う所だけ）。z の順を order に、上が後ろになるように控える。
+function fakeWindows() {
+  const order = [];
+  const raise = (w) => { const k = order.indexOf(w); if (k >= 0) order.splice(k, 1); order.push(w); };
+  class FakeWindow {
+    constructor(options = {}) {
+      this.title = options.title || '';
+      this.url = '';
+      this.visible = options.show !== false;
+      this.focusable = options.focusable !== false;
+      this.focused = false;
+      this.webContents = { setWindowOpenHandler() {}, getURL: () => this.url, loadURL: async (u) => { this.url = u; } };
+      if (this.visible) raise(this);
+    }
+    async loadURL(u) { return this.webContents.loadURL(u); }
+    isDestroyed() { return false; }
+    isVisible() { return this.visible; }
+    showInactive() { this.visible = true; raise(this); }
+    show() { this.visible = true; raise(this); }
+    focus() { this.focused = true; }
+    hide() { this.visible = false; }
+    isFocused() { return this.focused; }
+    isFocusable() { return this.focusable; }
+    setFocusable(v) { this.focusable = v; }
+    setSkipTaskbar() {}
+    moveTop() { raise(this); }
+    destroy() {}
+    on() {}
+  }
+  return { FakeWindow, order };
+}
+
+test('ウェブアプリの窓は、前に出さずに見せ、Todoku の窓が前にあるときは Todoku の窓の後ろに置く（別のページを読み込むカードでも）', async () => {
+  const { openTarget, setHomeWindow, showTarget, closeTarget } = require('../src/main/target');
+  const { FakeWindow, order } = fakeWindows();
+  const home = new FakeWindow({ title: 'Todoku' });
+  home.focused = true;
+  setHomeWindow(home);
+  const config = { id: 'behind-test', name: '作り物の市', url: 'https://example.com/', cards: [] };
+  try {
+    const win = await openTarget(FakeWindow, config, 'https://example.com/');
+    assert.equal(win.isVisible(), true);
+    assert.equal(order[order.length - 1], home, 'トップのページ: Todoku の窓が一番上');
+    // 別のページ（path のあるカード）を読み込む。
+    await openTarget(FakeWindow, config, 'https://example.com/event/');
+    assert.equal(win.url, 'https://example.com/event/');
+    assert.equal(order[order.length - 1], home, '別のページ: Todoku の窓が一番上のまま');
+    assert.equal(home.focused, true);
+
+    // 使う人が別のアプリにいるとき（Todoku の窓が前にないとき）は、Todoku の窓を上へ動かさない。
+    home.focused = false;
+    win.moveTop();
+    await openTarget(FakeWindow, config, 'https://example.com/');
+    assert.equal(order[order.length - 1], win);
+
+    // ログインのために前に出した窓は、後ろへ回さない。
+    home.focused = true;
+    showTarget('behind-test');
+    assert.equal(order[order.length - 1], win);
+  } finally {
+    closeTarget('behind-test');
+    setHomeWindow(null);
+  }
+});

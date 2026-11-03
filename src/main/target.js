@@ -210,10 +210,27 @@ function testHeadless() {
   return process.env.TODOKU_TEST_HEADLESS === '1';
 }
 
-// 前に出さずに見せる（試しのときは見せない）。
+// ウェブアプリの窓を、Todoku の窓の後ろに置く。焦点は動かさない（moveTop は焦点を移さずに z の順だけを変える）。
+// 2026-11-03 の Windows の確かめで、別のページを読み込むカード（つくば市のイベント情報）を読んだ後、
+// 前の窓は Todoku のままなのに、ウェブアプリの窓が Todoku の窓の上に重なって出て、NVDA が結果を読まず、矢印と Esc にも黙った。
+// Todoku の窓が前にあるとき（使う人がカードの画面にいるとき）だけ、Todoku の窓を z の順の一番上へ戻す。
+// 使う人が別のアプリにいるときは何もしない（そのアプリの窓の上に Todoku を出さないため）。
+function keepBehindHome(win) {
+  if (testHeadless() || !win || win.isDestroyed() || !win.isVisible() || loginFocus.has(idOf(win))) return;
+  if (!homeWindow || homeWindow.isDestroyed() || homeWindow === win || !homeWindow.isVisible() || !homeWindow.isFocused()) return;
+  homeWindow.moveTop();
+}
+
+function idOf(win) {
+  for (const [id, w] of windows) if (w === win) return id;
+  return null;
+}
+
+// 前に出さずに見せ、Todoku の窓の後ろに置く（試しのときは見せない）。
 function showQuietly(win) {
-  if (testHeadless() || win.isVisible()) return;
-  win.showInactive();
+  if (testHeadless()) return;
+  if (!win.isVisible()) win.showInactive();
+  keepBehindHome(win);
 }
 
 function keepUnfocusable(id, win) {
@@ -287,6 +304,8 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     if (watch) watch.cancel();
     throw e;
   }
+  // 読んでいる間にページが自分で動いても（押したカードで別のページへ移ったときなど）、Todoku の窓を上に保つ。
+  keepBehindHome(win);
   if (watch && !result.found) watch.cancel();
   if (result.reason === 'login') {
     // ログインは人が手で行う。ログインの画面を開いておく。
