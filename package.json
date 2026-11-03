@@ -8,6 +8,7 @@
     "test": "node --test",
     "smoke": "electron test/smoke.js",
     "ui:repair": "electron test/ui-repair.js",
+    "real:tsukuba": "electron test/real-tsukuba.js",
     "dist:win": "electron-builder --win --arm64 --x64",
     "dist:mac": "electron-builder --mac dmg --arm64"
   },

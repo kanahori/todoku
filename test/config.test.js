@@ -54,9 +54,11 @@ test('公開する cards/ には、手元だけで使う相手の語が入って
   // 大学の業務システムと大学の Moodle の設定ファイルは、手元の置き場（CARDS_LOCAL_DIR）にだけ置く。
   const fs = require('node:fs');
   const dir = path.join(__dirname, '..', 'cards');
+  // つくば市の公式サイト（公開のページ）の設定ファイルは、その名前と URL だけを除いて見る（大学の語は、いままでどおり止める）。
   const banned = [/aims/i, /tsukuba-tech/i, /tsukuba/i, /portal\.k\./i];
+  const publicCity = /www\.city\.tsukuba\.lg\.jp|tsukuba-city/g;
   for (const name of fs.readdirSync(dir)) {
-    const text = name + '\n' + fs.readFileSync(path.join(dir, name), 'utf8');
+    const text = (name + '\n' + fs.readFileSync(path.join(dir, name), 'utf8')).replace(publicCity, '');
     for (const re of banned) assert.ok(!re.test(text), `cards/${name} に ${re} が入っています`);
   }
 });
@@ -144,4 +146,28 @@ test('気象庁のダウンロードは、表の後に「メニューへ戻る�
   assert.equal(back.selector, '#loadTop');
   assert.ok(ids.indexOf('menu-top') > ids.indexOf('load-table'));
   assert.equal(config.cards.find((c) => c.id === 'csv-download').saveAs, '気象庁_過去の気象データ_{date}.csv');
+});
+
+test('つくば市の設定ファイルは、頭の description に出典の文を持ち、URL は sourceUrl にだけ置く', () => {
+  const { loadConfigFile } = require('../src/main/config');
+  const r = loadConfigFile(path.join(__dirname, '..', 'cards', 'tsukuba-city.json'));
+  assert.ok(r.config, JSON.stringify(r.errors));
+  assert.match(r.config.description, /^出典：つくば市公式ウェブサイト。/);
+  assert.match(r.config.cards[0].description, /^出典：つくば市公式ウェブサイト。/);
+  assert.equal(r.config.sourceUrl, 'https://www.city.tsukuba.lg.jp/');
+  for (const c of r.config.cards) assert.doesNotMatch(c.description || '', /https?:/, c.id);
+});
+
+test('試しのための古い行の写しは、つくば市の設定ファイルと新着情報のカードの行だけが違う', () => {
+  const { loadConfigFile } = require('../src/main/config');
+  const city = loadConfigFile(path.join(__dirname, '..', 'cards', 'tsukuba-city.json')).config;
+  const old = loadConfigFile(path.join(__dirname, 'tsukuba-city-old-line-for-test.json')).config;
+  assert.ok(old);
+  assert.notEqual(old.id, city.id);
+  assert.equal(old.cards.length, city.cards.length);
+  const differ = city.cards.filter((c, i) => JSON.stringify(c) !== JSON.stringify(old.cards[i])).map((c) => c.id);
+  assert.deepEqual(differ, ['news']);
+  const news = old.cards.find((c) => c.id === 'news');
+  assert.notEqual(news.selector, city.cards.find((c) => c.id === 'news').selector);
+  assert.equal(news.container, undefined);
 });
