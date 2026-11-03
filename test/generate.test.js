@@ -48,8 +48,9 @@ const SKELETON = 'body\n  header.top\n    nav.menu\n      a (文字あり)\n  ma
 const SETTLE = { stepMs: 1, minMs: 0, stableMs: 0, maxMs: 30 };
 
 // ページで動かす文の種類ごとに答える。inspect は案の数だけの probe を返す。
-function pageOf({ skeleton = SKELETON, probes }) {
+function pageOf({ skeleton = SKELETON, probes, sections = [] }) {
   return (script) => {
+    if (script.includes('pageSections')) return sections;
     if (script.includes('pageSettleProbe')) return { nodes: 40, chars: 100, resources: 3, waiting: false };
     if (script.includes('pageSkeleton')) return { skeleton, nodes: 8, truncated: false };
     if (script.includes('pageInspect')) return probes;
@@ -219,6 +220,33 @@ test('作った束: パンくずと「現在のページ」は作らず、目次
     p({ title: '利用方法', alts: ['利用方法'] }),
   ];
   assert.deepEqual(pickCards(candidates, probes).map((c) => c.title), ['目次を読む', '利用方法', '乗り方', '利用方法 2']);
+});
+
+test('本文の節を読むカード: Claude のカードの後に、見出しの文字を題にした読むカードを足す（節の終わりがあれば until に）', async () => {
+  const { BrowserWindow } = fakeBrowserWindow(
+    pageOf({
+      probes: [{ count: 3, hasText: true, containerOk: true, title: '新着', body: '一件目の文。 二件目の文。', texts: [], alts: [] }],
+      sections: [
+        { selector: 'main > h2:nth-of-type(1)', until: 'h1, h2, :has(h1, h2)', title: '貸し自転車とは', chars: 120 },
+        { selector: '#fee', until: null, title: '料金', chars: 60 },
+      ],
+    }),
+  );
+  const { store, dir } = tmpStore();
+  try {
+    const r = await generateDeck({
+      BrowserWindow, url: 'https://example.com/', store, settle: SETTLE,
+      callModel: async () => ({ cards: [{ role: 'list', action: 'list', selector: 'ul.news li', container: 'ul.news', titleSelector: '', reason: '一覧。' }] }),
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(r.config.cards.map((c) => [c.title, c.action, c.until || null]), [
+      ['新着', 'list', null], ['貸し自転車とは', 'read', 'h1, h2, :has(h1, h2)'], ['料金', 'read', null],
+    ]);
+    assert.equal(r.dropped, 0);
+    assert.equal(r.sections, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('束の名前はページの title（長ければ切る）。無ければホスト名、それも無ければ「新しいページ」', () => {

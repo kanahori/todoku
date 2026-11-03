@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」の貸し自転車の案内）。本文に見出しごとの節がある案内のページ。 -->
+<!-- 設定ファイルの無いページから作った束で、見出しごとの節を読むカードを足すかの試し（見出しの後に段落が続く節・section で包んだ節・見出しを div で包んだ節・文字の少ない節）。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>貸し自転車のご案内／あおば町（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <header>
+    <nav><h2>メニュー</h2><ul class="menu"><li><a href="#kurashi">くらし</a></li><li><a href="#kosodate">子育て</a></li></ul></nav>
+  </header>
+  <main>
+    <h1>貸し自転車のご案内（作り物）</h1>
+    <p>あおば町では、駅の前と役場の前で自転車を貸しています。</p>
+    <h2>貸し自転車とは</h2>
+    <p>貸し自転車は、町の中を自転車で回りたい方のための仕組みです。一日に何度でも、空いている自転車を借りられます。</p>
+    <p>返すときは、どの貸し場所に返しても構いません。</p>
+    <h2>料金</h2>
+    <table class="fee"><tr><th>一回</th><td>百円</td></tr><tr><th>一日</th><td>五百円</td></tr></table>
+    <p>料金は、借りるときに交通系のカードで払います。現金は使えません。</p>
+    <section class="places">
+      <h2>借りられる場所</h2>
+      <ul><li>駅の前の貸し場所</li><li>役場の前の貸し場所</li></ul>
+      <p>どちらも、朝7時から夜9時まで借りられます。</p>
+    </section>
+    <div class="h2wrap"><h2>乗り方</h2></div>
+    <p>貸し場所の機械にカードをかざすと、鍵が外れます。返すときは、自転車を台に戻して鍵をかけてください。</p>
+    <h2>お問い合わせ</h2>
+    <p>役場の窓口へ。</p>
+  </main>
+</body>
+</html>

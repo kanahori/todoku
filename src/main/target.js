@@ -32,7 +32,9 @@ function resolveUrl(url, cardPath) {
 // その要素を「11月6日」と読む。つくば市のイベントカレンダーの一覧は、日の欄が「6」だけで、月がどこにも読めなかった
 // （「6 金曜」と読んだ。2026-11-04 の Windows の確かめ）。月は日の欄の id（calendar_list_2026_11_6）にだけ書いてある。
 // 入れ物に当たって項目が 0件なら「0件」（found: true・items: []）、入れ物にも当たらなければ「当たらない」と返す。
-async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector) {
+// until（read のカードだけ・任意）は、節の終わりの selector。当たった要素から、後に続く兄弟の要素を、until に当たる要素の手前まで読む
+// （見出しから次の同じ段の見出しの手前までの節。作った束の、本文の節を読むカード）。
+async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until) {
   // 読む文を、行の並びとして取り出す。画面読み上げが読む文に近づける。
   // - 中の文字に加えて、画像の説明（alt）と aria-label も読む。aria-hidden="true" の中と script・style は読まない。
   //   当たった要素そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
@@ -243,15 +245,28 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     return { found: true };
   }
   // ふだんは見えている文を、行ごとに読む（画面の項目は行ごとに一つ）。見えている文が無いときは、隠れている所も読む。
-  let lines = textLines(el, true);
-  if (lines.length === 0) lines = textLines(el);
+  const parts = [el];
+  if (until) {
+    for (let n = el.nextElementSibling; n; n = n.nextElementSibling) {
+      let stop;
+      try {
+        stop = n.matches(until);
+      } catch (e) {
+        return { found: false, reason: 'invalid', field: 'until' };
+      }
+      if (stop) break;
+      if (getComputedStyle(n).display !== 'none') parts.push(n);
+    }
+  }
+  let lines = parts.flatMap((p) => textLines(p, true));
+  if (lines.length === 0) lines = parts.flatMap((p) => textLines(p));
   const text = lines.join('\n');
   return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
 }
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
-function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null) {
-  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector].map((v) => JSON.stringify(v)).join(', ');
+function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null, until = null) {
+  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until].map((v) => JSON.stringify(v)).join(', ');
   return `(${pageAction.toString()})(${args})`;
 }
 
@@ -372,12 +387,13 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const loginSelector = config.login ? config.login.selector : null;
   const container = card.action === 'list' && card.container ? card.container : null;
   const dateSelector = card.action === 'list' && card.dateSelector ? card.dateSelector : null;
+  const until = card.action === 'read' && card.until ? card.until : null;
   // 押すカードは、押す前からダウンロードを待ち受ける。
   // 保存の名前の型（saveAs）があれば、始まったダウンロードをその名前で保存する。
   const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
-    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector));
+    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until));
   } catch (e) {
     if (watch) watch.cancel();
     throw e;
@@ -402,6 +418,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   }
   if (!result.found) {
     if (result.field === 'container') return { ok: false, where: `cards[${index}].container`, message: 'container の書き方が正しくありません' };
+    if (result.field === 'until') return { ok: false, where: `cards[${index}].until`, message: 'until の書き方が正しくありません' };
     const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に当たる所がありません';
     return { ok: false, where, message };
   }

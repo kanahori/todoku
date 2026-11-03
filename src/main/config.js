@@ -24,6 +24,8 @@
 //                                        // 無いカードは、項目が無ければ「読めません」（0件と画面の変わりを分けられない）
 //       "dateSelector": "td.date",       // 任意・list のカードだけ。項目の中の日付の要素。その要素の datetime か id に
 //                                        // 書かれた年・月・日（2026-11-06・2026_11_6 の形）から「11月6日」と読む（日だけの表のため）
+//       "until": "h1, h2",               // 任意・read のカードだけ。当たった要素から、後に続く兄弟の要素を、until に当たる要素の
+//                                        // 手前まで読む（見出しから次の見出しの手前までの節）
 //       "saveAs": "作り物_{date}.csv",    // 任意・click のカードだけ。押してダウンロードが始まったら、この名前で保存する。
 //                                        // {date} は保存した日（yyyy-mm-dd）、{n} は使われていない番号（1 から）。
 //                                        // 拡張子が無ければ、元の名前の拡張子を足す。同じ名前があり {n} が無ければ「名前 (1)」にする
@@ -126,6 +128,13 @@ function validateConfig(config) {
         add(`${at}.dateSelector`, '空でない文字列が要ります');
       } else if (card.action !== 'list') {
         add(`${at}.dateSelector`, 'action が "list" のカードにだけ使えます');
+      }
+    }
+    if (card.until !== undefined) {
+      if (typeof card.until !== 'string' || card.until.trim() === '') {
+        add(`${at}.until`, '空でない文字列が要ります');
+      } else if (card.action !== 'read') {
+        add(`${at}.until`, 'action が "read" のカードにだけ使えます');
       }
     }
     if (card.saveAs !== undefined) {

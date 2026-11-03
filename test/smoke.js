@@ -469,6 +469,29 @@ async function generateChecks() {
       guide.ok ? { name: guide.config.name, dropped: guide.dropped, titles: guide.config.cards.map((c) => c.title) } : guide);
     if (guide.ok) store.remove(guide.config.id);
 
+    // 本文の節: 見出しごとの節を読むカードを足す（Claude の選んだカードの中にある節と、文字の少ない節は作らない）。
+    const cycle = await generateDeck({
+      BrowserWindow,
+      url: 'fixture:cycle-guide.html',
+      callModel: async () => ({ cards: [noTitle('menu', 'list', '.menu li'), noTitle('main', 'read', 'section.places')] }),
+      store,
+      allowFixtures: true,
+    });
+    check('カードを作る: 本文の見出しごとの節を読むカードを足す（見出しの後に続く節・見出しを包んだ節。Claude のカードの中の節と、文字の少ない節は作らない）',
+      cycle.ok && cycle.sections === 3
+        && JSON.stringify(cycle.config.cards.map((c) => c.title)) === JSON.stringify(['メニュー', '借りられる場所', '貸し自転車とは', '料金', '乗り方']),
+      cycle.ok ? { sections: cycle.sections, cards: cycle.config.cards } : cycle);
+    if (cycle.ok) {
+      const about = await runCard(BrowserWindow, cycle.config, cycle.config.cards[2].id, { waitMs: 500 });
+      check('カードを作る: 節のカードは、見出しから次の見出しの手前までを読む',
+        about.ok && about.text === '貸し自転車とは\n貸し自転車は、町の中を自転車で回りたい方のための仕組みです。一日に何度でも、空いている自転車を借りられます。\n返すときは、どの貸し場所に返しても構いません。',
+        about.text);
+      const ride = await runCard(BrowserWindow, cycle.config, cycle.config.cards[4].id, { waitMs: 500 });
+      check('カードを作る: 見出しを包んだ節も、次の見出しの手前までを読む',
+        ride.ok && ride.text === '乗り方\n貸し場所の機械にカードをかざすと、鍵が外れます。返すときは、自転車を台に戻して鍵をかけてください。', ride.text);
+      store.remove(cycle.config.id);
+    }
+
     // 待ち方: 主な区画（main）が空のうちと、ページが変わり続けているうちは、構造を集めない（表を後から描くページ）。
     let lateStructure = '';
     const started = Date.now();

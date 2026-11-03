@@ -106,6 +106,16 @@ test('dateSelector は list のカードにだけ、空でない文字列で書�
   assert.match(errors[0].message, /list/);
 });
 
+test('until は read のカードにだけ、空でない文字列で書ける', () => {
+  const c = good();
+  c.cards = [
+    { id: 'a', title: 'A', action: 'read', selector: 'main > h2', until: 'h1, h2' },
+    { id: 'b', title: 'B', action: 'list', selector: 'li', until: 'h2' },
+    { id: 'c', title: 'C', action: 'read', selector: 'h2', until: '' },
+  ];
+  assert.deepEqual(validateConfig(c).map((e) => e.where), ['cards[1].until', 'cards[2].until']);
+});
+
 test('頭の description は、あれば文字列であること', () => {
   assert.deepEqual(validateConfig({ ...good(), description: '出典：作り物のサイト（https://example.com/）を加工して作成' }), []);
   assert.deepEqual(validateConfig({ ...good(), description: 3 }).map((e) => e.where), ['description']);

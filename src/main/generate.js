@@ -25,6 +25,9 @@ const GENERATE_TIMEOUT_MS = 90000;
 const MAX_STRUCTURE_CHARS = 120 * 1000;
 // 作るカードの数の上限と、Claude の案を試す数の上限。
 const MAX_CARDS = 8;
+// 本文の節を読むカードの数の上限と、節にする文字の数の下限。
+const MAX_SECTIONS = 6;
+const SECTION_MIN_CHARS = 40;
 const MAX_CANDIDATES = 16;
 // 題と束の名前の長さの上限（文字数）。
 const TITLE_MAX = 30;
@@ -349,6 +352,120 @@ function pageInspect(tryOne, cards) {
   });
 }
 
+// ページの中で動く関数。本文の区画の、見出しごとの節を探す（題はアプリの手元で使うだけで、外へは送らない）。
+// 本文の区画は main か role="main"、無ければ文字の一番多い区画。見出しは h2（無ければ h3・h4）。
+// 節は、見出しを含む区画（その見出しだけを含む section など）か、見出しから次の同じ段か上の段の見出しの手前まで。
+// 文字が少ない節（minChars 字より少ない）と、Claude が選んだカード（taken の selector）の中にある節は作らない。
+// 自転車のページの「〇〇とは」の長い段落など、本文の節を読むカードが無かった（2026-11-04 の Windows の確かめ）。
+function pageSections(taken, maxSections, minChars) {
+  const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const textOf = (el) => clean(el.innerText || el.textContent);
+  const hidden = (el) => Boolean(el.closest('[aria-hidden="true"], [hidden]')) || getComputedStyle(el).display === 'none';
+  let main = document.querySelector('main, [role="main"]');
+  if (!main) {
+    let best = null;
+    let most = 0;
+    for (const el of document.querySelectorAll('article, section, div')) {
+      if (el.closest('nav, header, footer, aside')) continue;
+      const n = textOf(el).length;
+      if (n > most && el.querySelector('h2, h3, h4')) {
+        best = el;
+        most = n;
+      }
+    }
+    main = best;
+  }
+  if (!main) return [];
+  const selectorOf = (el) => {
+    if (el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
+    const parts = [];
+    for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+      if (n !== el && n.id && document.querySelectorAll(`#${CSS.escape(n.id)}`).length === 1) {
+        parts.unshift(`#${CSS.escape(n.id)}`);
+        break;
+      }
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'body') {
+        parts.unshift('body');
+        break;
+      }
+      const same = [...n.parentElement.children].filter((c) => c.tagName === n.tagName);
+      parts.unshift(same.length > 1 ? `${tag}:nth-of-type(${same.indexOf(n) + 1})` : tag);
+    }
+    const sel = parts.join(' > ');
+    return document.querySelector(sel) === el ? sel : null;
+  };
+  const takenEls = [];
+  for (const s of taken) {
+    try {
+      takenEls.push(...document.querySelectorAll(s));
+    } catch (e) {
+      // 書き方の誤りのある selector は、もう落としてある
+    }
+  }
+  let level = 0;
+  for (const l of [2, 3, 4]) {
+    if ([...main.querySelectorAll(`h${l}`)].some((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h))) {
+      level = l;
+      break;
+    }
+  }
+  if (!level) return [];
+  const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
+  const until = `${stops}, :has(${stops})`;
+  const out = [];
+  for (const h of main.querySelectorAll(`h${level}`)) {
+    if (out.length >= maxSections) break;
+    if (hidden(h) || h.closest('nav, aside')) continue;
+    const title = textOf(h);
+    if (!title || takenEls.some((t) => t.contains(h))) continue;
+    // 節の中に、Claude が選んだカードの場所があれば作らない（同じ所を二度読むカードになるため）。
+    const overlaps = (nodes) => nodes.some((n) => takenEls.some((t) => n === t || n.contains(t) || t.contains(n)));
+    // 見出しを頭に持ち、ほかの中身もある区画（その見出しだけを含む section など）なら、その区画を読む。
+    const box = h.parentElement;
+    if (box && box !== main && main.contains(box) && box.children.length > 1 && box.querySelectorAll(stops).length === 1 && box.firstElementChild === h) {
+      const sel = selectorOf(box);
+      const chars = textOf(box).length - title.length;
+      if (sel && chars >= minChars && !overlaps([box])) out.push({ selector: sel, until: null, title, chars });
+      continue;
+    }
+    // 見出しから、次の同じ段か上の段の見出しの手前まで。見出しが包みの中にあるときは、包みから数える。
+    let anchor = h;
+    while (!anchor.nextElementSibling && anchor.parentElement && anchor.parentElement !== main) anchor = anchor.parentElement;
+    let chars = 0;
+    const range = [anchor];
+    for (let n = anchor.nextElementSibling; n && !n.matches(until); n = n.nextElementSibling) {
+      chars += textOf(n).length;
+      range.push(n);
+    }
+    const sel = selectorOf(anchor);
+    if (sel && chars >= minChars && !overlaps(range)) out.push({ selector: sel, until, title, chars });
+  }
+  return out;
+}
+
+function buildSectionsScript(taken) {
+  return `(${pageSections.toString()})(${JSON.stringify(taken)}, ${MAX_SECTIONS}, ${SECTION_MIN_CHARS})`;
+}
+
+// 節を読むカードを足す。題は見出しの文字（重なれば番号）。束は全部で MAX_CARDS + MAX_SECTIONS 枚まで。
+function addSectionCards(cards, sections) {
+  const out = [...cards];
+  const titles = new Set(out.map((c) => c.title));
+  for (const s of sections) {
+    if (out.length >= MAX_CARDS + MAX_SECTIONS) break;
+    const title = cleanTitle(s.title);
+    if (!title) continue;
+    let unique = title;
+    for (let n = 2; titles.has(unique); n++) unique = `${title} ${n}`;
+    titles.add(unique);
+    const card = { id: `section-${out.length + 1}`, title: unique, action: 'read', selector: s.selector };
+    if (s.until) card.until = s.until;
+    out.push(card);
+  }
+  return out;
+}
+
 function buildInspectScript(candidates) {
   return `(${pageInspect.toString()})(${pageTry.toString()}, ${JSON.stringify(candidates)})`;
 }
@@ -505,7 +622,11 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const candidates = normalizeCandidates(answer);
   if (candidates.length === 0) return fail('no-cards');
   const probes = await win.webContents.executeJavaScript(buildInspectScript(candidates));
-  const cards = pickCards(candidates, probes);
+  const picked = pickCards(candidates, probes);
+  // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
+  const taken = picked.filter((c) => c.action !== 'click').map((c) => c.selector);
+  const sections = await win.webContents.executeJavaScript(buildSectionsScript(taken));
+  const cards = addSectionCards(picked, Array.isArray(sections) ? sections : []);
   if (cards.length === 0) return fail('no-cards');
   // 行き先が変わった（転送された）ときは、行き着いたページの URL を残す（http:// と https:// のときだけ）。
   const landed = externalUrl(win.webContents.getURL());
@@ -529,7 +650,8 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
     config,
     file,
     tried: candidates.length,
-    dropped: candidates.length - cards.length,
+    dropped: candidates.length - picked.length,
+    sections: cards.length - picked.length,
     structure: { nodes, chars: limited.text.length, cut: truncated || limited.cut },
     at: now().toISOString(),
   };
