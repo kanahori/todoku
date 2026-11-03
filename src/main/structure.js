@@ -8,7 +8,10 @@ function pageSkeleton(maxNodes, maxDepth) {
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'PATH', 'IFRAME', 'LINK', 'META']);
   // 値が文字（人が読む中身）になる属性は、あるかどうかだけを残す。
   const TEXT_ATTRS = new Set(['aria-label', 'aria-description', 'aria-valuetext', 'aria-placeholder', 'aria-roledescription']);
-  const safeToken = (v) => /^[A-Za-z0-9_:\-]{1,40}$/.test(v);
+  // 英数字の名前でも、人や物を指す値になりうるもの（5桁以上の数字を含む・GUID の形・数字を含む12字以上の英数字）は入れない
+  // （学籍番号の形・ログイン名・発行された番号など。見直しの8。smoke で、これらと role の値の文が構造に入ることを確かめた）。
+  const personal = (v) => /\d{5,}/.test(v) || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v) || (v.length >= 12 && /\d/.test(v) && /[A-Za-z]/.test(v));
+  const safeToken = (v) => /^[A-Za-z0-9_:\-]{1,40}$/.test(v) && !personal(v);
   const lines = [];
   let count = 0;
   let truncated = false;
@@ -20,7 +23,7 @@ function pageSkeleton(maxNodes, maxDepth) {
     const attrs = [];
     for (const a of el.attributes) {
       const n = a.name;
-      if (n === 'role') attrs.push(`role=${a.value}`);
+      if (n === 'role') attrs.push(safeToken(a.value) ? `role=${a.value}` : 'role');
       else if (TEXT_ATTRS.has(n)) attrs.push(n);
       else if (n.startsWith('aria-')) attrs.push(safeToken(a.value) ? `${n}=${a.value}` : n);
       else if (n.startsWith('data-')) attrs.push(safeToken(a.value) ? `${n}=${a.value}` : n);

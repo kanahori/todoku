@@ -324,6 +324,23 @@ async function main() {
       none.ok && Array.isArray(none.items) && none.items.length === 0, none);
   }
 
+  // 構造の守り（見直しの8）: role の値の文と、学籍番号の形・長い英数字・GUID の値は、構造に入れない（名前だけ残す）。
+  {
+    const { buildSkeletonScript } = require('../src/main/structure');
+    const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+    try {
+      const html = '<!doctype html><body><div role="Dialog for user alice" id="u2412345" class="box s2412345 3f2b1c9e-1a2b-4c3d-8e9f-001122334455"'
+        + ' data-user="s2412345" data-token="abc123def456ghi789" data-kind="list" aria-describedby="x1"><p>t</p></div></body>';
+      await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+      const { skeleton } = await w.webContents.executeJavaScript(buildSkeletonScript());
+      check('構造の守り: role の文・学籍番号の形・長い英数字・GUID の値を入れず（属性の名前だけ）、ふつうの名前（box・data-kind=list）は残す',
+        !/alice|Dialog|2412345|abc123|3f2b1c9e/.test(skeleton) && skeleton.includes('div.box') && skeleton.includes('[role]') && skeleton.includes('[data-user]')
+          && skeleton.includes('[data-kind=list]'), skeleton);
+    } finally {
+      w.destroy();
+    }
+  }
+
   // 時間の上限（見直しの3）: 応えない口のページは、時間切れで読み込みを止め、「ページを開けませんでした」と返す（手元の作り物の http の口・外へは出ない）。
   {
     const http = require('node:http');
