@@ -47,7 +47,36 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     'FIGURE', 'FIGCAPTION', 'FORM', 'FIELDSET', 'LEGEND', 'HR', 'DETAILS', 'SUMMARY', 'BODY']);
   const BLOCK_DISPLAY = /^(block|flex|grid|list-item|table|table-row|table-caption|flow-root)$/;
   const PRE_SPACE = /^(pre|pre-wrap|pre-line|break-spaces)/;
-  const textLines = (root, visibleOnly = false) => {
+  // 画像の説明（alt）と文字の重なり。項目（一覧の1件・読むカードの1行）の中で、画像の説明と文字が同じか、
+  // 片方が他方を含むときは、一度だけ読む（長い方を残す）。「〇〇ロゴ」「〇〇のロゴ」は、ロゴの語を外して比べる。
+  // 「〇〇の写真」「〇〇の画像」は外さない（写真があることも中身なので、「役場の写真」と「あおば町役場」は両方読む）。
+  // 1字だけ違う同じ長さの文（8字以上）も同じとみる（ページの書き損じで二度読まれた）。違う中身は両方残す。
+  // つくば市のトップで「つくミルロゴ、つくば市地図データサイト「つくミル」」と重ねて読んだ（2026-11-04 の Windows の確かめ）。
+  const ALT_OPEN = '\u0001';
+  const ALT_CLOSE = '\u0002';
+  const settleAlts = (s) => {
+    if (!s.includes(ALT_OPEN)) return s;
+    const pieces = s.split(/(\u0001[^\u0002]*\u0002)/).map((t) => (t.startsWith(ALT_OPEN) ? { alt: true, t: t.slice(1, -1) } : { alt: false, t }));
+    const core = (t) => t.replace(/\s+/g, '').replace(/(の)?(ロゴマーク|ロゴ)$/, '');
+    const near = (a, b) => a.length >= 8 && a.length === b.length && [...a].filter((ch, i) => ch !== b[i]).length <= 1;
+    const texts = pieces.filter((p) => !p.alt).map((p) => core(p.t));
+    const textAll = texts.join('');
+    const kept = [];
+    for (const p of pieces) {
+      if (!p.alt) continue;
+      const a = core(p.t);
+      if (!a || textAll.includes(a) || texts.some((t) => near(t, a)) || kept.some((k) => k.includes(a) || near(k, a))) p.drop = true;
+      else kept.push(a);
+    }
+    for (const p of pieces) {
+      if (p.alt) continue;
+      const c = core(p.t);
+      if (c.length >= 2 && kept.some((k) => k.includes(c) || near(k, c))) p.drop = true;
+    }
+    return pieces.map((p) => (p.drop ? p.t.replace(/[^\n]+/g, ' ') : p.alt ? ` ${p.t} ` : p.t)).join('');
+  };
+  // scope が 'item' なら当たった要素の全体で、'line'（ふだん）なら行ごとに、画像の説明の重なりを外す。
+  const textLines = (root, visibleOnly = false, scope = 'line') => {
     let out = '';
     const walk = (node, isRoot, keepNewlines, shown) => {
       if (node.nodeType === 3) {
@@ -69,7 +98,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       const label = (node.getAttribute('aria-label') || '').trim();
       if (tag === 'IMG' || node.getAttribute('role') === 'img') {
         const alt = (node.getAttribute('alt') || label).trim();
-        if (alt && visible) out += ' ' + alt + ' ';
+        if (alt && visible) out += ` ${ALT_OPEN}${alt}${ALT_CLOSE} `;
         out += sep;
         return;
       }
@@ -79,9 +108,10 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       out += sep;
     };
     walk(root, true, false, true);
+    if (scope === 'item') out = settleAlts(out);
     const lines = [];
     for (const raw of out.split('\n')) {
-      const line = raw
+      const line = settleAlts(raw)
         .replace(/[^\S\n]+/g, ' ')
         .trim()
         // 区切りに入れた空白が、句読点と括弧の内側に来たら外す。
@@ -117,7 +147,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         return { found: false, reason: 'invalid' };
       }
       if (items.length > 0) {
-        const texts = items.map((it) => oneLine(textLines(it)));
+        const texts = items.map((it) => oneLine(textLines(it, false, 'item')));
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
         // 画面で1件ずつのカードにするため、1件ずつの文も返す（全体の上限は text と同じ）。

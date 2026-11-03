@@ -157,6 +157,16 @@ async function main() {
     carousel.ok && carousel.text.includes('2件目: マイナンバーカードの休日窓口'), carousel);
   check('aria-hidden の付いた見えないスライドも読める',
     carousel.ok && carousel.text.includes('3件目: 冬の道路の通行止め'), carousel);
+  // 画像の説明（alt）と文字の重なり: 同じか、片方が他方を含むときは一度だけ読む。違う中身は両方読む。
+  const altConfig = { id: 'alt-text', name: 'あおば町のリンク集（作り物）', url: 'fixture:alt-text.html',
+    cards: [{ id: 'links', title: 'リンク集', action: 'list', selector: '#links li' }, { id: 'all', title: 'リンク集', action: 'read', selector: '#links' }] };
+  const altExpected = ['あおば町の地図のサイト「あおばマップ」', 'こども学習を支援サイト「まなび」', '図書館の開館日', 'あおば町の路線バスの時刻表', '町民プール 夏の行事'];
+  const altList = await runCard(BrowserWindow, altConfig, 'links');
+  check('画像の説明: 一覧の項目の中で、画像の説明と文字が同じか片方が他方を含むときは一度だけ読み、違う中身は両方読む',
+    altList.ok && JSON.stringify(altList.items) === JSON.stringify(altExpected), altList.items);
+  const altRead = await runCard(BrowserWindow, altConfig, 'all');
+  check('画像の説明: 読むカードでも、行の中の重なりを一度だけ読む', altRead.ok && altRead.text === altExpected.join('\n'), altRead.text);
+  closeTarget('alt-text');
   const garbage = await runCard(BrowserWindow, city, 'garbage');
   check('ごみの日の表を 3行読める', garbage.ok && garbage.text.startsWith('3件あります。'), garbage);
 
