@@ -51,9 +51,16 @@ function parseProxyList(text) {
 }
 
 // host:port に、時間内に繋がるか。
+// 範囲外の port などで net.connect が同期で投げたときも、届かない入口として false を返す（投げると起動が止まり、窓が出なかった。見直しの9）。
 function canConnect(host, port, timeoutMs = CONNECT_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    const socket = net.connect({ host, port });
+    let socket;
+    try {
+      socket = net.connect({ host, port });
+    } catch (e) {
+      resolve(false);
+      return;
+    }
     const done = (ok) => {
       socket.destroy();
       resolve(ok);
@@ -64,7 +71,8 @@ function canConnect(host, port, timeoutMs = CONNECT_TIMEOUT_MS) {
   });
 }
 
-// 結果は 'none'（もともと直）・'proxy'（入口に届いた）・'direct'（届かないので直にした）・'unknown'（尋ねられなかった）。
+// 結果は 'none'（もともと直）・'proxy'（入口に届いた）・'direct'（届かないので直にした）・'direct-failed'（直に繋ぐ設定が失敗した）・
+// 'unknown'（尋ねられなかった）。どの場合も例外を投げない（起動の途中で投げると、窓が一つも出なかった）。
 async function chooseSystemProxy({ resolveProxy, setDirect, connect = canConnect, log = () => {}, probeUrl = PROBE_URL, timeoutMs = CONNECT_TIMEOUT_MS }) {
   let answer;
   try {
@@ -77,8 +85,14 @@ async function chooseSystemProxy({ resolveProxy, setDirect, connect = canConnect
   // 入口が幾つあっても同時に試し、起動を止めるのは時間切れの一回分（2秒）までにする。
   const reached = await Promise.all(proxies.map((p) => connect(p.host, p.port, timeoutMs)));
   if (reached.some(Boolean)) return 'proxy';
-  await setDirect();
-  log(`システムのプロキシの入口（${proxies.map((p) => `${p.host}:${p.port}`).join('、')}）に届かないので、直に繋ぎます。`);
+  const where = proxies.map((p) => `${p.host}:${p.port}`).join('、');
+  try {
+    await setDirect();
+  } catch (e) {
+    log(`システムのプロキシの入口（${where}）に届きませんでしたが、直に繋げませんでした: ${e.message}`);
+    return 'direct-failed';
+  }
+  log(`システムのプロキシの入口（${where}）に届かないので、直に繋ぎます。`);
   return 'direct';
 }
 

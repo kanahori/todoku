@@ -76,3 +76,19 @@ test('繋がるかの試し: 開いている口には繋がり、閉じた口と
   }
   assert.equal(await canConnect('127.0.0.1', port, 1000), false);
 });
+
+test('起動のプロキシの確かめは、失敗しても例外を投げない（範囲外の port・直に繋ぐ設定の失敗）。投げると窓が出なかった（見直しの9）', async () => {
+  // 範囲外の port は、net.connect が同期で投げる。届かない入口として扱う。
+  assert.equal(await canConnect('127.0.0.1', 99999, 500), false);
+  // 直に繋ぐ設定（session.setProxy）が失敗しても、記録に一行残して 'direct-failed' を返す。
+  const logs = [];
+  const r = await chooseSystemProxy({
+    resolveProxy: async () => 'PROXY proxy.example.jp:8080',
+    setDirect: async () => { throw new Error('設定できません'); },
+    connect: async () => false,
+    log: (l) => logs.push(l),
+  });
+  assert.equal(r, 'direct-failed');
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /直に繋げませんでした/);
+});
