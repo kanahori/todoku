@@ -17,7 +17,13 @@
       "action": "list",
       "selector": ".log > li.user .body",
       "container": ".log",
-      "description": "自分が送った質問を、古い順に、番号を付けて全部読みます。無いときは、0件と読みます"
+      "itemTarget": {
+        "label": "返事",
+        "closest": "li.turn",
+        "next": "li.ai",
+        "find": ".body"
+      },
+      "description": "自分が送った質問を、古い順に、番号を付けて全部読みます。一件を選んで Enter キーを押すと、その質問への返事を読みます。無いときは、0件と読みます"
     },
     {
       "id": "all-turns",

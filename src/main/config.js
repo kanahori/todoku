@@ -25,6 +25,12 @@
 //       "dateSelector": "td.date",       // 任意・list のカードだけ。項目の中の日付の要素。その要素の datetime か id に
 //                                        // 書かれた年・月・日（2026-11-06・2026_11_6 の形）から「11月6日」と読む（日だけの表のため）
 //       "tagSelector": ".tag",           // 任意・list のカードだけ。項目の中の分類の言葉の要素。題の後ろに括弧で読む
+//       "itemTarget": {                  // 任意・list のカードだけ。一覧の一件を選んで Enter を押すと読む、その項目に結び付いた所。
+//         "label": "返事",               //   読む所の呼び名（「3件目の返事」と言う）。要る
+//         "closest": "li.turn",          //   任意。項目から上へたどる要素。無ければ項目そのもの
+//         "next": "li.ai",               //   任意。そこから後ろの兄弟のうち、最初に当たる要素
+//         "find": ".body"                //   任意。その中で読む所。closest・next・find のどれか一つは要る
+//       },
 //       "until": "h1, h2",               // 任意・read のカードだけ。当たった要素から、後に続く兄弟の要素を、until に当たる要素の
 //                                        // 手前まで読む（見出しから次の見出しの手前までの節）
 //       "saveAs": "作り物_{date}.csv",    // 任意・click のカードだけ。押してダウンロードが始まったら、この名前で保存する。
@@ -129,6 +135,21 @@ function validateConfig(config) {
         add(`${at}.dateSelector`, '空でない文字列が要ります');
       } else if (card.action !== 'list') {
         add(`${at}.dateSelector`, 'action が "list" のカードにだけ使えます');
+      }
+    }
+    if (card.itemTarget !== undefined) {
+      const t = card.itemTarget;
+      const str = (v) => typeof v === 'string' && v.trim() !== '';
+      if (card.action !== 'list') {
+        add(`${at}.itemTarget`, 'action が "list" のカードにだけ使えます');
+      } else if (!t || typeof t !== 'object' || Array.isArray(t)) {
+        add(`${at}.itemTarget`, 'label と、closest・next・find のどれかを持つものが要ります');
+      } else {
+        if (!str(t.label)) add(`${at}.itemTarget.label`, '空でない文字列が要ります');
+        for (const key of ['closest', 'next', 'find']) {
+          if (t[key] !== undefined && !str(t[key])) add(`${at}.itemTarget.${key}`, '空でない文字列が要ります');
+        }
+        if (![t.closest, t.next, t.find].some(str)) add(`${at}.itemTarget`, 'closest・next・find のどれか一つが要ります');
       }
     }
     if (card.tagSelector !== undefined) {

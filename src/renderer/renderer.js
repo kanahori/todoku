@@ -91,7 +91,15 @@ function popDeck() {
     return;
   }
   stack.pop();
-  renderDeck();
+  // 一覧の一件から先へ進んでいたときは、戻った先で、その一件に焦点を戻す（openItemTarget）。
+  const back = current().returnItem;
+  delete current().returnItem;
+  renderDeck({ announcePosition: back === undefined });
+  if (back !== undefined) {
+    const node = cardNodes()[current().index];
+    const lis = node ? [...node.querySelectorAll('li[data-item]')] : [];
+    if (lis[back]) lis[back].focus();
+  }
 }
 
 function renderDeck({ announcePosition = true } = {}) {
@@ -240,6 +248,34 @@ function enterCard(cardNode, toResult = false) {
 }
 
 // カードの上の Enter・スペース・クリック。
+// 一覧の i 件目（0 から）に結び付いた所を読み、一枚のカードの束にして開く。Esc で一覧のその一件に戻る。
+async function openItemTarget(card, i) {
+  if (busy || i < 0) return;
+  busy = true;
+  let r;
+  try {
+    r = await window.cardsApi.readItemTarget(card.appId, card.cardId, i);
+  } catch (e) {
+    r = { ok: false, message: 'うまく動きませんでした。' };
+  } finally {
+    busy = false;
+  }
+  const name = `${i + 1}件目の${card.itemTarget.label}`;
+  if (!r.ok) {
+    announce(r.notFound ? `「${card.title}」の${name}が見つかりませんでした。` : `「${card.title}」の${name}を読めませんでした。${r.message}`, true);
+    return;
+  }
+  const texts = String(r.text || '').split('\n').filter((t) => t.trim() !== '');
+  const items = texts.length > 0 ? texts.map((t) => ({ text: t, result: true })) : [{ text: 'このカードの中には、読む項目がありません。', result: true }];
+  if (r.truncated) items.push({ text: '長いので、ここまでで切りました。' });
+  if (r.partial) items.push({ text: 'まだ書いている途中でした。ここまでを読みました。もう一度読むと、続きが読めます。' });
+  current().returnItem = i;
+  pushDeck({ name: `${card.title}（${name}）`, appId: card.appId, cards: [{ kind: 'info', heading: name, items }] }, { announcePosition: false });
+  const first = itemNodes(cardNodes()[0])[0];
+  if (first) first.focus();
+  announce(`「${card.title}」の${name}を読みました。${r.partial ? 'まだ書いている途中です。' : ''}`);
+}
+
 async function activateCard(card, node) {
   if (card.kind === 'goto') {
     card.open();
@@ -360,6 +396,8 @@ async function readCard(card) {
       // 読んだ1件ずつを ul の li にする（NVDA が「2の4」と位置を読む）。
       card.items = texts.map((t) => ({ listItem: t }));
       card.heading = `${card.title}（${count}件）`;
+      // 一件に結び付いた所（itemTarget）のあるカードは、一覧の後に、Enter で何が起きるかの一文を置く。
+      if (card.itemTarget) card.items.push({ text: `一件を選んで Enter キーを押すと、その${card.itemTarget.label}を読みます。` });
     } else {
       card.items = texts.map((t) => ({ text: t, result: true }));
       card.heading = card.title;
@@ -1032,6 +1070,7 @@ function appDeck(config, hasParent = true) {
       title: c.title,
       heading: c.title,
       hasContainer: Boolean(c.container),
+      itemTarget: c.action === 'list' && c.itemTarget && c.itemTarget.label ? { label: String(c.itemTarget.label) } : null,
       note: c.description ? endSentence(c.description) : undefined,
       items: [],
     });
@@ -1119,6 +1158,15 @@ document.addEventListener('keydown', (e) => {
   const k = items.indexOf(active);
   if (k < 0) return;
   if ((key === 'Enter' || key === ' ') && active.tagName === 'BUTTON') return;
+  // 一件に結び付いた所のある一覧では、一件の上の Enter とスペースで、その所を読む。
+  if ((key === 'Enter' || key === ' ') && active.tagName === 'LI') {
+    const card = current().cards[current().index];
+    if (card && card.itemTarget) {
+      e.preventDefault();
+      openItemTarget(card, [...cardNode.querySelectorAll('li[data-item]')].indexOf(active));
+      return;
+    }
+  }
   if (key === 'ArrowDown') items[Math.min(items.length - 1, k + 1)].focus();
   else if (key === 'ArrowUp') items[Math.max(0, k - 1)].focus();
   else if (key === 'Home') items[0].focus();

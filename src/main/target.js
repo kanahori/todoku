@@ -513,6 +513,62 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   };
 }
 
+// ページの中で動く関数。一覧の index 件目（0 から）の項目から、itemTarget の closest・next・find の順にたどり、着いた要素に印を付ける。
+// 印の付いた要素は、ふだんの読むカードと同じ読み方（pageAction）で読む（書いている途中なら待つ、など）。
+function pageMarkItemTarget(selector, target, index, attr, token) {
+  for (const old of document.querySelectorAll(`[${attr}]`)) old.removeAttribute(attr);
+  try {
+    const items = document.querySelectorAll(selector);
+    let el = items[index] || null;
+    if (!el) return { found: false, reason: 'no-item', count: items.length };
+    if (target.closest) el = el.closest(target.closest);
+    if (el && target.next) {
+      let n = el.nextElementSibling;
+      while (n && !n.matches(target.next)) n = n.nextElementSibling;
+      el = n;
+    }
+    if (el && target.find) el = el.querySelector(target.find);
+    if (!el) return { found: false, reason: 'none' };
+    el.setAttribute(attr, token);
+    return { found: true };
+  } catch (e) {
+    return { found: false, reason: 'invalid' };
+  }
+}
+
+const ITEM_TARGET_ATTR = 'data-todoku-item-target';
+
+// 一覧のカードの index 件目（0 から）に結び付いた所（itemTarget）を読む。結果は runCard の読むカードと同じ形。
+// チャットの「自分の質問を全部読む」で一つ選ぶと、その返事を読む、のような使い方。
+async function readItemTarget(BrowserWindow, config, cardId, index, options = {}) {
+  const k = config.cards.findIndex((c) => c.id === cardId);
+  if (k < 0) return { ok: false, where: '(なし)', message: `カード「${cardId}」が設定ファイルにありません` };
+  const card = config.cards[k];
+  if (card.action !== 'list' || !card.itemTarget) return { ok: false, where: `cards[${k}].itemTarget`, message: 'このカードには、項目を選んで読む所がありません' };
+  let win;
+  try {
+    win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path));
+  } catch (e) {
+    return { ok: false, where: card.path ? `cards[${k}].path` : 'url', message: `ページを開けませんでした: ${e.message}` };
+  }
+  const token = `t${Date.now().toString(36)}`;
+  const args = [card.selector, card.itemTarget, Number(index), ITEM_TARGET_ATTR, token].map((v) => JSON.stringify(v)).join(', ');
+  const mark = await win.webContents.executeJavaScript(`(${pageMarkItemTarget.toString()})(${args})`);
+  if (!mark.found) {
+    const message = mark.reason === 'invalid' ? 'itemTarget の書き方が正しくありません' : '選んだ項目に結び付いた所がありません';
+    return { ok: false, where: `cards[${k}].itemTarget`, message, notFound: mark.reason !== 'invalid' };
+  }
+  let result;
+  try {
+    result = await win.webContents.executeJavaScript(buildScript(`[${ITEM_TARGET_ATTR}="${token}"]`, 'read', null, options.waitMs));
+  } finally {
+    await win.webContents.executeJavaScript(`document.querySelectorAll('[${ITEM_TARGET_ATTR}]').forEach((e) => e.removeAttribute('${ITEM_TARGET_ATTR}'))`);
+  }
+  keepBehindHome(win);
+  if (!result.found) return { ok: false, where: `cards[${k}].itemTarget`, message: '選んだ項目に結び付いた所がありません', notFound: true };
+  return { ok: true, action: 'read', text: result.text, truncated: result.truncated, ...(result.partial ? { partial: true } : {}) };
+}
+
 // ページの中で動く関数（点検用）。selector が当たるかだけを返し、中身は読まない。
 // 入れ物（container）のあるカードは、項目が 0件でも入れ物に当たれば 'ok'（0件は画面の変わりではない）。
 function pageProbe(selectors, containers = []) {
@@ -589,4 +645,5 @@ function closeTarget(appId) {
 
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
+  readItemTarget,
 };

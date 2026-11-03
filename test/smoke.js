@@ -17,7 +17,7 @@ const { dialog: errorDialog } = require('electron');
 errorDialog.showErrorBox = (title, content) => { console.log(`エラー: ${title} ${content}`); app.exit(3); };
 process.on('uncaughtException', (e) => { console.log(`エラー: ${e.stack}`); app.exit(3); });
 const { loadConfigFile } = require('../src/main/config');
-const { runCard, checkCards, setHomeWindow, showTarget, closeTarget } = require('../src/main/target');
+const { runCard, checkCards, setHomeWindow, showTarget, closeTarget, readItemTarget } = require('../src/main/target');
 
 const checks = [];
 function check(name, ok, detail) {
@@ -187,6 +187,15 @@ async function main() {
     const turns = await runCard(BrowserWindow, chat, 'all-turns');
     check('チャット: やり取りを24件、質問と返事を交互に読む（一件ずつ移れる）',
       turns.ok && turns.items.length === 24 && turns.items[0].startsWith('あなた') && turns.items[1].startsWith('ことのは'), turns.items.slice(0, 2));
+    // 一覧の一件に結び付いた所（itemTarget）: 質問の一件を選ぶと、その質問への返事を読む。
+    const reply1 = await readItemTarget(BrowserWindow, chat, 'questions', 0);
+    check('チャット: 自分の質問の1件目を選ぶと、その返事（見出し・箇条書き・段落）を読む',
+      reply1.ok && reply1.action === 'read' && reply1.text.startsWith('持ち物の案\n雨具（山は天気が変わりやすいため）') && !reply1.text.includes('あなた'), reply1);
+    const reply12 = await readItemTarget(BrowserWindow, chat, 'questions', 11);
+    check('チャット: 12件目（最後の質問）を選ぶと、少しずつ描かれた最後の返事を読む',
+      reply12.ok && reply12.text.startsWith('持ち物を確かめる手順') && reply12.text.endsWith('楽しい旅になりますように。'), reply12);
+    const none = await readItemTarget(BrowserWindow, chat, 'questions', 99);
+    check('チャット: 無い一件を選んだときは、見つからない（notFound）と返す', !none.ok && none.notFound === true && none.where === 'cards[1].itemTarget', none);
     const history = await runCard(BrowserWindow, chat, 'history');
     check('チャット: 過去のチャットの一覧を5件読む', history.ok && history.items.length === 5 && history.items[0] === '旅の持ち物の相談', history.items);
     // 読み込み直して、書き終わる前に待つ長さが切れたとき。
@@ -297,6 +306,7 @@ async function main() {
   const settingsStore = createSettingsStore(settingsFile);
   registerSettingsHandlers(require('electron').ipcMain, settingsStore);
   try {
+    await rendererItemTargetChecks(settingsStore);
     await rendererFocusChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
@@ -653,6 +663,61 @@ async function autoRepairChecks() {
 // 知らせがまだ入っておらず、書き出し・消す・探す欄の知らせの試しが落ちた。窓の中の時計で待てば、先に置かれた知らせのタイマーが必ず先に動く。
 function pageWait(win) {
   return (ms) => win.webContents.executeJavaScript(`new Promise((r) => setTimeout(r, ${Number(ms)}))`);
+}
+
+// 一覧の一件を選んで、その一件に結び付いた所を読む（itemTarget）を、読み上げの操作（キー）だけで使う試し。
+// 偽の cardsApi（test/renderer-preload.js）を ?fake=chat で、作り物のチャットのアプリだけにして開く。
+async function rendererItemTargetChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), { query: { fake: 'chat' } });
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = pageWait(win);
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    const active = () => js(`(() => { const a = document.activeElement; const c = a.closest ? a.closest('article.card') : null;
+      return { tag: a.tagName, text: a.textContent, heading: c ? c.querySelector('h2').textContent : null }; })()`);
+    const status = () => js("document.getElementById('status').textContent");
+    // はじめの束の四枚目（作り物のチャット）へ進み、三枚目（はじめのカード・最後の返事の次）の「自分の質問を全部読む」を読む。
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    await key('ArrowDown');
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(300);
+    const first = await active();
+    const hint = await js("[...document.activeElement.closest('article.card').querySelectorAll('p[data-item]')].map((n) => n.textContent)");
+    check('一件を選んで読む: 一覧を読むと、焦点は1件目にあり、一覧の後に「一件を選んで Enter キーを押すと、その返事を読みます。」がある',
+      first.tag === 'LI' && first.text === '一つ目の質問' && first.heading === '自分の質問を全部読む（3件）' && hint.includes('一件を選んで Enter キーを押すと、その返事を読みます。'), { first, hint });
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(300);
+    const opened = await active();
+    const said = await status();
+    const asked = await js('window.fakeLog.itemTargets()');
+    check('一件を選んで読む: 2件目の上で Enter を押すと、その返事のカード「2件目の返事」が開き、焦点は返事の最初の項目にあり、「「自分の質問を全部読む」の2件目の返事を読みました。」と知らせる',
+      opened.tag === 'P' && opened.text === '二つ目の返事の一行目' && opened.heading === '2件目の返事'
+        && said === '「自分の質問を全部読む」の2件目の返事を読みました。' && JSON.stringify(asked) === JSON.stringify(['fake-chat/questions/1']),
+      { opened, said, asked });
+    await key('Escape');
+    await key('Escape');
+    await wait(100);
+    const back = await active();
+    check('一件を選んで読む: Esc を二度押すと、一覧のさっきの一件（2件目）に戻る', back.tag === 'LI' && back.text === '二つ目の質問' && back.heading === '自分の質問を全部読む（3件）', back);
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(300);
+    const missing = await js("document.getElementById('alert').textContent");
+    const stay = await active();
+    check('一件を選んで読む: 返事の無い一件では「「自分の質問を全部読む」の3件目の返事が見つかりませんでした。」と知らせ、その一件に留まる',
+      missing === '「自分の質問を全部読む」の3件目の返事が見つかりませんでした。' && stay.tag === 'LI' && stay.text === '三つ目の質問（返事はまだ）', { missing, stay });
+  } finally {
+    win.destroy();
+  }
 }
 
 // カードの画面（src/renderer）の焦点の試し。cardsApi は偽物（test/renderer-preload.js）。

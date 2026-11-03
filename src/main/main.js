@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless } = require('./target');
+const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
@@ -309,6 +309,17 @@ ipcMain.handle('source:open', async (_event, appId) => {
     return { ok: true, message: sourceOpenedMessage() };
   } catch (e) {
     return { ok: false, message: '出典のページを開けませんでした。' };
+  }
+});
+
+// 一覧のカードの一件に結び付いた所を読む（itemTarget）。
+ipcMain.handle('card:item-target', async (_event, appId, cardId, index) => {
+  const config = configs.get(appId);
+  if (!config) return { ok: false, where: '(なし)', message: `アプリ「${appId}」の設定ファイルがありません` };
+  try {
+    return await readItemTarget(BrowserWindow, config, String(cardId), Number(index));
+  } catch (e) {
+    return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
   }
 });
 

@@ -106,6 +106,21 @@ test('dateSelector は list のカードにだけ、空でない文字列で書�
   assert.match(errors[0].message, /list/);
 });
 
+test('itemTarget は list のカードにだけ、label と closest・next・find のどれかを持つ形で書ける', () => {
+  const c = good();
+  c.cards = [
+    { id: 'a', title: 'A', action: 'list', selector: 'li.user', itemTarget: { label: '返事', closest: 'li', next: 'li.ai', find: '.body' } },
+    { id: 'b', title: 'B', action: 'read', selector: 'main', itemTarget: { label: '返事', next: 'li' } },
+    { id: 'c', title: 'C', action: 'list', selector: 'li', itemTarget: { label: '' , find: '.x' } },
+    { id: 'd', title: 'D', action: 'list', selector: 'li', itemTarget: { label: '返事' } },
+    { id: 'e', title: 'E', action: 'list', selector: 'li', itemTarget: { label: '返事', next: '' } },
+    { id: 'f', title: 'F', action: 'list', selector: 'li', itemTarget: '返事' },
+  ];
+  assert.deepEqual(validateConfig(c).map((e) => e.where), [
+    'cards[1].itemTarget', 'cards[2].itemTarget.label', 'cards[3].itemTarget', 'cards[4].itemTarget.next', 'cards[4].itemTarget', 'cards[5].itemTarget',
+  ]);
+});
+
 test('tagSelector は list のカードにだけ、空でない文字列で書ける', () => {
   const c = good();
   c.cards = [

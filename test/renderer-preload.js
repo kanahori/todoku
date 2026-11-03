@@ -27,6 +27,19 @@ const config = {
   ],
 };
 
+// ?fake=chat で開いたときは、作り物のチャットのアプリだけにする（一覧の一件から結び付いた所を読む試し）。
+const chatMode = typeof location !== 'undefined' && /(^|[?&])fake=chat(&|$)/.test(location.search);
+const chatConfig = {
+  id: 'fake-chat',
+  name: '作り物のチャット',
+  url: 'fixture:chat.html',
+  cards: [
+    { id: 'last', title: '最後の返事を読む', action: 'read', selector: '#last' },
+    { id: 'questions', title: '自分の質問を全部読む', action: 'list', selector: '#q', itemTarget: { label: '返事', next: '.ai' } },
+  ],
+};
+const itemTargets = [];
+
 const opened = [];
 const undone = [];
 const generated = [];
@@ -56,8 +69,20 @@ const answers = {
 };
 
 contextBridge.exposeInMainWorld('cardsApi', {
-  loadConfigs: async () => [{ file: 'fake-app.json', config, errors: [] }],
+  loadConfigs: async () => (chatMode ? [{ file: 'fake-chat.json', config: chatConfig, errors: [] }] : [{ file: 'fake-app.json', config, errors: [] }]),
+  // 一件に結び付いた所: 1件目と2件目は返事があり、3件目はまだ無い。
+  readItemTarget: async (appId, cardId, index) => {
+    itemTargets.push(`${appId}/${cardId}/${index}`);
+    const replies = ['一つ目の返事の一行目\n一つ目の返事の二行目', '二つ目の返事の一行目\n二つ目の返事の二行目'];
+    return index < replies.length
+      ? { ok: true, action: 'read', text: replies[index] }
+      : { ok: false, where: 'cards[1].itemTarget', message: '選んだ項目に結び付いた所がありません', notFound: true };
+  },
   runCard: (appId, cardId) => new Promise((resolve) => {
+    if (chatMode && cardId === 'questions') {
+      setTimeout(() => resolve({ ok: true, action: 'list', items: ['一つ目の質問', '二つ目の質問', '三つ目の質問（返事はまだ）'] }), 20);
+      return;
+    }
     // 画面が変わった読む所: 直しが効いていなければ自動で直して読んだ結果、効いていればふつうに読んだ結果。
     if (cardId === 'fixed-read') {
       const result = repairActive
@@ -116,4 +141,5 @@ contextBridge.exposeInMainWorld('fakeLog', {
   generated: () => generated.slice(),
   exported: () => exported.slice(),
   deleted: () => deleted.slice(),
+  itemTargets: () => itemTargets.slice(),
 });
