@@ -6,7 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('cardsApi', {
   loadConfigs: () => ipcRenderer.invoke('configs:load'),
   runCard: (appId, cardId) => ipcRenderer.invoke('card:run', String(appId), String(cardId)),
-  readItemTarget: (appId, cardId, index) => ipcRenderer.invoke('card:item-target', String(appId), String(cardId), Number(index)),
+  readItemTarget: (appId, cardId, index, key) => ipcRenderer.invoke('card:item-target', String(appId), String(cardId), Number(index), key ? String(key) : ''),
   showTarget: (appId) => ipcRenderer.invoke('target:show', String(appId)),
   // 出典のページを既定のブラウザで開く（URL は主の処理が設定ファイルから取る）。
   openSource: (appId) => ipcRenderer.invoke('source:open', String(appId)),

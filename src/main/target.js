@@ -206,6 +206,19 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       return { invalid: true };
     }
   };
+  // 一覧の一件ごとの手がかり（文字そのものではなく、短いハッシュ）。itemKeysOf と同じ作り方（ページの中の関数なので二か所に書く）。
+  const itemKeys = (els) => {
+    const seen = new Map();
+    return els.map((e) => {
+      const t = (e.textContent || '').replace(/\s+/g, ' ').trim();
+      let h = 0x811c9dc5;
+      for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
+      const base = h.toString(16).padStart(8, '0');
+      const n = (seen.get(base) || 0) + 1;
+      seen.set(base, n);
+      return `${base}-${n}`;
+    });
+  };
   const deadline = Date.now() + waitMs;
   const busyAt = (el) => Boolean(el && (el.closest('[aria-busy="true"]') || el.querySelector('[aria-busy="true"]')));
   if (action === 'list') {
@@ -274,7 +287,10 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           parts.push(t.slice(0, left));
           left -= t.length;
         }
-        return { found: true, text: text.slice(0, limit), truncated: text.length > limit, items: parts, ...(busy ? { partial: true } : {}) };
+        return {
+          found: true, text: text.slice(0, limit), truncated: text.length > limit, items: parts, keys: itemKeys(items).slice(0, parts.length),
+          ...(busy ? { partial: true } : {}),
+        };
       }
       if (loginSelector && query(loginSelector).el) return { found: false, reason: 'login' };
       if (container) {
@@ -509,17 +525,36 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   }
   return {
     ok: true, action: card.action, text: result.text, truncated: result.truncated,
-    ...(result.items ? { items: result.items } : {}), ...(result.partial ? { partial: true } : {}),
+    ...(result.items ? { items: result.items } : {}), ...(result.keys ? { keys: result.keys } : {}), ...(result.partial ? { partial: true } : {}),
   };
 }
 
 // ページの中で動く関数。一覧の index 件目（0 から）の項目から、itemTarget の closest・next・find の順にたどり、着いた要素に印を付ける。
 // 印の付いた要素は、ふだんの読むカードと同じ読み方（pageAction）で読む（書いている途中なら待つ、など）。
-function pageMarkItemTarget(selector, target, index, attr, token) {
+// key（一覧を読んだときの、その一件の手がかり）があれば、番号でなく、今のページで同じ手がかりの項目を探す。
+// 一覧を読んだ後にページで発言が増えて、番号がずれても、選んだ一件を読むため。見つからなければ reason: 'changed'。
+function pageMarkItemTarget(selector, target, index, attr, token, key) {
   for (const old of document.querySelectorAll(`[${attr}]`)) old.removeAttribute(attr);
+  const itemKeys = (els) => {
+    const seen = new Map();
+    return els.map((e) => {
+      const t = (e.textContent || '').replace(/\s+/g, ' ').trim();
+      let h = 0x811c9dc5;
+      for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
+      const base = h.toString(16).padStart(8, '0');
+      const n = (seen.get(base) || 0) + 1;
+      seen.set(base, n);
+      return `${base}-${n}`;
+    });
+  };
   try {
-    const items = document.querySelectorAll(selector);
-    let el = items[index] || null;
+    const items = [...document.querySelectorAll(selector)];
+    let at = index;
+    if (key) {
+      at = itemKeys(items).indexOf(key);
+      if (at < 0) return { found: false, reason: 'changed' };
+    }
+    let el = items[at] || null;
     if (!el) return { found: false, reason: 'no-item', count: items.length };
     if (target.closest) el = el.closest(target.closest);
     if (el && target.next) {
@@ -540,7 +575,7 @@ const ITEM_TARGET_ATTR = 'data-todoku-item-target';
 
 // 一覧のカードの index 件目（0 から）に結び付いた所（itemTarget）を読む。結果は runCard の読むカードと同じ形。
 // チャットの「自分の質問を全部読む」で一つ選ぶと、その返事を読む、のような使い方。
-async function readItemTarget(BrowserWindow, config, cardId, index, options = {}) {
+async function readItemTarget(BrowserWindow, config, cardId, index, options = {}, key = null) {
   const k = config.cards.findIndex((c) => c.id === cardId);
   if (k < 0) return { ok: false, where: '(なし)', message: `カード「${cardId}」が設定ファイルにありません` };
   const card = config.cards[k];
@@ -552,9 +587,10 @@ async function readItemTarget(BrowserWindow, config, cardId, index, options = {}
     return { ok: false, where: card.path ? `cards[${k}].path` : 'url', message: `ページを開けませんでした: ${e.message}` };
   }
   const token = `t${Date.now().toString(36)}`;
-  const args = [card.selector, card.itemTarget, Number(index), ITEM_TARGET_ATTR, token].map((v) => JSON.stringify(v)).join(', ');
+  const args = [card.selector, card.itemTarget, Number(index), ITEM_TARGET_ATTR, token, key || null].map((v) => JSON.stringify(v)).join(', ');
   const mark = await win.webContents.executeJavaScript(`(${pageMarkItemTarget.toString()})(${args})`);
   if (!mark.found) {
+    if (mark.reason === 'changed') return { ok: false, where: `cards[${k}].selector`, message: '一覧を読んだ後に画面が変わりました', changed: true };
     const message = mark.reason === 'invalid' ? 'itemTarget の書き方が正しくありません' : '選んだ項目に結び付いた所がありません';
     return { ok: false, where: `cards[${k}].itemTarget`, message, notFound: mark.reason !== 'invalid' };
   }

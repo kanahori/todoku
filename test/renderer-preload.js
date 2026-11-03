@@ -70,17 +70,19 @@ const answers = {
 
 contextBridge.exposeInMainWorld('cardsApi', {
   loadConfigs: async () => (chatMode ? [{ file: 'fake-chat.json', config: chatConfig, errors: [] }] : [{ file: 'fake-app.json', config, errors: [] }]),
-  // 一件に結び付いた所: 1件目と2件目は返事があり、3件目はまだ無い。
-  readItemTarget: async (appId, cardId, index) => {
-    itemTargets.push(`${appId}/${cardId}/${index}`);
+  // 一件に結び付いた所: 1件目と2件目は返事があり、3件目は一覧を読んだ後に画面が変わっていて、4件目は返事がまだ無い。
+  readItemTarget: async (appId, cardId, index, key) => {
+    itemTargets.push(`${appId}/${cardId}/${index}/${key}`);
     const replies = ['一つ目の返事の一行目\n一つ目の返事の二行目', '二つ目の返事の一行目\n二つ目の返事の二行目'];
-    return index < replies.length
-      ? { ok: true, action: 'read', text: replies[index] }
-      : { ok: false, where: 'cards[1].itemTarget', message: '選んだ項目に結び付いた所がありません', notFound: true };
+    if (index < replies.length) return { ok: true, action: 'read', text: replies[index] };
+    if (key === 'k3') return { ok: false, where: 'cards[1].selector', message: '一覧を読んだ後に画面が変わりました', changed: true };
+    return { ok: false, where: 'cards[1].itemTarget', message: '選んだ項目に結び付いた所がありません', notFound: true };
   },
   runCard: (appId, cardId) => new Promise((resolve) => {
     if (chatMode && cardId === 'questions') {
-      setTimeout(() => resolve({ ok: true, action: 'list', items: ['一つ目の質問', '二つ目の質問', '三つ目の質問（返事はまだ）'] }), 20);
+      setTimeout(() => resolve({
+        ok: true, action: 'list', items: ['一つ目の質問', '二つ目の質問', '三つ目の質問（画面が変わった後）', '四つ目の質問（返事はまだ）'], keys: ['k1', 'k2', 'k3', 'k4'],
+      }), 20);
       return;
     }
     // 画面が変わった読む所: 直しが効いていなければ自動で直して読んだ結果、効いていればふつうに読んだ結果。

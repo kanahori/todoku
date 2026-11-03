@@ -313,11 +313,11 @@ ipcMain.handle('source:open', async (_event, appId) => {
 });
 
 // 一覧のカードの一件に結び付いた所を読む（itemTarget）。
-ipcMain.handle('card:item-target', async (_event, appId, cardId, index) => {
+ipcMain.handle('card:item-target', async (_event, appId, cardId, index, key) => {
   const config = configs.get(appId);
   if (!config) return { ok: false, where: '(なし)', message: `アプリ「${appId}」の設定ファイルがありません` };
   try {
-    return await readItemTarget(BrowserWindow, config, String(cardId), Number(index));
+    return await readItemTarget(BrowserWindow, config, String(cardId), Number(index), {}, typeof key === 'string' && key !== '' ? key : null);
   } catch (e) {
     return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
   }

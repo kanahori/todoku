@@ -254,7 +254,7 @@ async function openItemTarget(card, i) {
   busy = true;
   let r;
   try {
-    r = await window.cardsApi.readItemTarget(card.appId, card.cardId, i);
+    r = await window.cardsApi.readItemTarget(card.appId, card.cardId, i, card.itemKeys ? card.itemKeys[i] : null);
   } catch (e) {
     r = { ok: false, message: 'うまく動きませんでした。' };
   } finally {
@@ -262,7 +262,8 @@ async function openItemTarget(card, i) {
   }
   const name = `${i + 1}件目の${card.itemTarget.label}`;
   if (!r.ok) {
-    announce(r.notFound ? `「${card.title}」の${name}が見つかりませんでした。` : `「${card.title}」の${name}を読めませんでした。${r.message}`, true);
+    if (r.changed) announce(`「${card.title}」を読んだ後に画面が変わりました。もう一度「${card.title}」を読んでください。`, true);
+    else announce(r.notFound ? `「${card.title}」の${name}が見つかりませんでした。` : `「${card.title}」の${name}を読めませんでした。${r.message}`, true);
     return;
   }
   const texts = String(r.text || '').split('\n').filter((t) => t.trim() !== '');
@@ -395,6 +396,8 @@ async function readCard(card) {
     } else if (result.action === 'list') {
       // 読んだ1件ずつを ul の li にする（NVDA が「2の4」と位置を読む）。
       card.items = texts.map((t) => ({ listItem: t }));
+      // 一件ごとの手がかり（文字ではなく短いハッシュ）。一件を選んだとき、ページの今の同じ項目を探すのに使う。
+      card.itemKeys = Array.isArray(result.keys) ? result.keys.slice() : null;
       card.heading = `${card.title}（${count}件）`;
       // 一件に結び付いた所（itemTarget）のあるカードは、一覧の後に、Enter で何が起きるかの一文を置く。
       if (card.itemTarget) card.items.push({ text: `一件を選んで Enter キーを押すと、その${card.itemTarget.label}を読みます。` });

@@ -196,6 +196,30 @@ async function main() {
       reply12.ok && reply12.text.startsWith('持ち物を確かめる手順') && reply12.text.endsWith('楽しい旅になりますように。'), reply12);
     const none = await readItemTarget(BrowserWindow, chat, 'questions', 99);
     check('チャット: 無い一件を選んだときは、見つからない（notFound）と返す', !none.ok && none.notFound === true && none.where === 'cards[1].itemTarget', none);
+
+    // 一覧を読んだ後にページで発言が増えても、選んだ一件の手がかり（短いハッシュ）で、今のページの同じ項目を探して読む。
+    check('チャット: 一覧を読むと、一件ごとの手がかりが12件返り、文字そのものは入っていない',
+      Array.isArray(questions.keys) && questions.keys.length === 12 && questions.keys.every((k) => /^[0-9a-f]{8}-\d+$/.test(k)), questions.keys);
+    const chatWin = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/chat.html'));
+    // 前の発言が上に読み込まれた形（一往復を先頭に足す）。番号は一つずつ後ろへずれる。
+    await chatWin.webContents.executeJavaScript(`(() => {
+      const log = document.querySelector('.log');
+      log.insertAdjacentHTML('afterbegin', '<li class="turn user"><p class="who">あなた</p><div class="body"><p>前に聞いた質問です。</p></div></li>'
+        + '<li class="turn ai"><p class="who">ことのは</p><div class="body"><p>前の返事です。</p></div></li>');
+      return true;
+    })()`);
+    const byKey = await readItemTarget(BrowserWindow, chat, 'questions', 1, {}, questions.keys[1]);
+    const byIndex = await readItemTarget(BrowserWindow, chat, 'questions', 1);
+    check('チャット: 一覧を読んだ後に発言が先頭に増えても、手がかりで選ぶと、選んだ2件目の質問への返事（雨合羽の返事）を読む（番号だけだとずれる）',
+      byKey.ok && byKey.text.startsWith('山道を歩くなら') && byIndex.ok && byIndex.text.startsWith('持ち物の案'), { byKey, byIndex });
+    // 選んだ一件そのものが書き換わったときは、画面が変わったと返す。
+    await chatWin.webContents.executeJavaScript(`(() => {
+      document.querySelectorAll('.log > li.user .body')[3].textContent = '書き換えた質問です。';
+      return true;
+    })()`);
+    const changed = await readItemTarget(BrowserWindow, chat, 'questions', 2, {}, questions.keys[2]);
+    check('チャット: 選んだ一件がページに無くなっていたら、一覧を読んだ後に画面が変わった（changed）と返す',
+      !changed.ok && changed.changed === true && changed.message === '一覧を読んだ後に画面が変わりました', changed);
     const history = await runCard(BrowserWindow, chat, 'history');
     check('チャット: 過去のチャットの一覧を5件読む', history.ok && history.items.length === 5 && history.items[0] === '旅の持ち物の相談', history.items);
     // 読み込み直して、書き終わる前に待つ長さが切れたとき。
@@ -692,29 +716,38 @@ async function rendererItemTargetChecks() {
     const first = await active();
     const hint = await js("[...document.activeElement.closest('article.card').querySelectorAll('p[data-item]')].map((n) => n.textContent)");
     check('一件を選んで読む: 一覧を読むと、焦点は1件目にあり、一覧の後に「一件を選んで Enter キーを押すと、その返事を読みます。」がある',
-      first.tag === 'LI' && first.text === '一つ目の質問' && first.heading === '自分の質問を全部読む（3件）' && hint.includes('一件を選んで Enter キーを押すと、その返事を読みます。'), { first, hint });
+      first.tag === 'LI' && first.text === '一つ目の質問' && first.heading === '自分の質問を全部読む（4件）' && hint.includes('一件を選んで Enter キーを押すと、その返事を読みます。'), { first, hint });
     await key('ArrowDown');
     await key('Enter');
     await wait(300);
     const opened = await active();
     const said = await status();
     const asked = await js('window.fakeLog.itemTargets()');
+    // 偽の一覧は、一件ごとの手がかり k1・k2・k3 を返す。選んだ一件の手がかりを渡すか。
     check('一件を選んで読む: 2件目の上で Enter を押すと、その返事のカード「2件目の返事」が開き、焦点は返事の最初の項目にあり、「「自分の質問を全部読む」の2件目の返事を読みました。」と知らせる',
       opened.tag === 'P' && opened.text === '二つ目の返事の一行目' && opened.heading === '2件目の返事'
-        && said === '「自分の質問を全部読む」の2件目の返事を読みました。' && JSON.stringify(asked) === JSON.stringify(['fake-chat/questions/1']),
+        && said === '「自分の質問を全部読む」の2件目の返事を読みました。' && JSON.stringify(asked) === JSON.stringify(['fake-chat/questions/1/k2']),
       { opened, said, asked });
     await key('Escape');
     await key('Escape');
     await wait(100);
     const back = await active();
-    check('一件を選んで読む: Esc を二度押すと、一覧のさっきの一件（2件目）に戻る', back.tag === 'LI' && back.text === '二つ目の質問' && back.heading === '自分の質問を全部読む（3件）', back);
+    check('一件を選んで読む: Esc を二度押すと、一覧のさっきの一件（2件目）に戻る', back.tag === 'LI' && back.text === '二つ目の質問' && back.heading === '自分の質問を全部読む（4件）', back);
     await key('ArrowDown');
     await key('Enter');
     await wait(300);
     const missing = await js("document.getElementById('alert').textContent");
     const stay = await active();
-    check('一件を選んで読む: 返事の無い一件では「「自分の質問を全部読む」の3件目の返事が見つかりませんでした。」と知らせ、その一件に留まる',
-      missing === '「自分の質問を全部読む」の3件目の返事が見つかりませんでした。' && stay.tag === 'LI' && stay.text === '三つ目の質問（返事はまだ）', { missing, stay });
+    check('一件を選んで読む: 一覧を読んだ後に画面が変わっていたら「「自分の質問を全部読む」を読んだ後に画面が変わりました。もう一度「自分の質問を全部読む」を読んでください。」と知らせ、その一件に留まる',
+      missing === '「自分の質問を全部読む」を読んだ後に画面が変わりました。もう一度「自分の質問を全部読む」を読んでください。'
+        && stay.tag === 'LI' && stay.text === '三つ目の質問（画面が変わった後）', { missing, stay });
+    // 返事の無い一件（手がかりは合うが、結び付いた所が無い）。偽の一覧の4件目。
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(300);
+    const noReply = await js("document.getElementById('alert').textContent");
+    check('一件を選んで読む: 返事の無い一件では「「自分の質問を全部読む」の4件目の返事が見つかりませんでした。」と知らせる',
+      noReply === '「自分の質問を全部読む」の4件目の返事が見つかりませんでした。', noReply);
   } finally {
     win.destroy();
   }
