@@ -79,6 +79,11 @@ contextBridge.exposeInMainWorld('cardsApi', {
     return { ok: false, where: 'cards[1].itemTarget', message: '選んだ項目に結び付いた所がありません', notFound: true };
   },
   runCard: (appId, cardId) => new Promise((resolve) => {
+    // 主の処理で例外が起きたときの答え（main.js の card:run の catch と同じ形）。
+    if (chatMode && cardId === 'last') {
+      setTimeout(() => resolve({ ok: false, where: '(なし)', message: '動かせませんでした: 窓が閉じられていました' }), 20);
+      return;
+    }
     if (chatMode && cardId === 'questions') {
       setTimeout(() => resolve({
         ok: true, action: 'list', items: ['一つ目の質問', '二つ目の質問', '三つ目の質問（画面が変わった後）', '四つ目の質問（返事はまだ）'], keys: ['k1', 'k2', 'k3', 'k4'],

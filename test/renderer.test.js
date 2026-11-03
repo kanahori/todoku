@@ -27,6 +27,12 @@ test('書いている途中までを読んだとき（partial）は、カード�
   assert.match(readCardBody, /result\.partial \? 'まだ書いている途中です。' : ''/);
 });
 
+test('読めなかった理由: ログインの画面を開けなかったときと、主の処理の誤り（where が「(なし)」・「動かせませんでした」）を、画面が変わったときと分ける', () => {
+  const body = source.slice(source.indexOf('function unreadableText('), source.indexOf('function unreadableText(') + 2000);
+  assert.match(body, /startsWith\('ログインの画面を開けませんでした'\)\) return 'ログインの画面を開けませんでした。/);
+  assert.match(body, /result\.where === '\(なし\)' \|\| message\.startsWith\('動かせませんでした'\)\) return 'うまく動きませんでした。\\nもう一度押してください。'/);
+});
+
 test('0件のときは、見出し「〇〇（0件）」と中の一文を出す', () => {
   assert.match(readCardBody, /\(count === 0\)/);
   assert.match(readCardBody, /（0件）/);

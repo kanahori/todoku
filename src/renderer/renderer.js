@@ -459,6 +459,9 @@ function unreadableText(card, result) {
   const message = String(result.message || '');
   if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。\nネットワークの場所が変わったときは、Todoku を起こし直してください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
+  if (message.startsWith('ログインの画面を開けませんでした')) return 'ログインの画面を開けませんでした。\nネットワークを確かめてから、もう一度押してください。';
+  // 主の処理で例外が起きたとき（窓が閉じられていた・ページの中の処理が落ちた など）。画面が変わったのではないので、そう言わない（見直しの6）。
+  if (result.where === '(なし)' || message.startsWith('動かせませんでした')) return 'うまく動きませんでした。\nもう一度押してください。';
   // 自動で直そうとして直せなかったときは、最後に理由つきの一文を足す（見つからない → 0件のことも → 直すこともできなかった、の順）。
   const notFixed = result.autoRepairFailed ? `\n${notFixedSentence(result)}` : '';
   // 入れ物（container）のあるカードは、0件なら「（0件）」と出るので、ここに来るのは本当に見つからないときだけ。

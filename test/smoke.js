@@ -336,6 +336,7 @@ async function main() {
   try {
     await rendererItemTargetChecks(settingsStore);
     await rendererBusyChecks();
+    await rendererErrorTextChecks();
     await rendererFocusChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
@@ -830,6 +831,32 @@ async function rendererItemTargetChecks() {
     const noReply = await js("document.getElementById('alert').textContent");
     check('一件を選んで読む: 返事の無い一件では「「自分の質問を全部読む」の4件目の返事が見つかりませんでした。」と知らせる',
       noReply === '「自分の質問を全部読む」の4件目の返事が見つかりませんでした。', noReply);
+  } finally {
+    win.destroy();
+  }
+}
+
+// 主の処理の誤り（where が「(なし)」・「動かせませんでした」）は、「画面が変わったため」ではなく、もう一度押す文で読む（見直しの6）。
+async function rendererErrorTextChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), { query: { fake: 'chat' } });
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = pageWait(win);
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(300);
+    const texts = await js("[...document.querySelectorAll('#deck > article.card')[1].querySelectorAll('[data-item]')].map((n) => n.textContent)");
+    check('主の処理の誤り: 「動かせませんでした」は「うまく動きませんでした。」「もう一度押してください。」と読み、「画面が変わったため」とは言わない',
+      JSON.stringify(texts) === JSON.stringify(['うまく動きませんでした。\nもう一度押してください。']), texts);
   } finally {
     win.destroy();
   }
