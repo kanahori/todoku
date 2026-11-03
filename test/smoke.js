@@ -535,7 +535,7 @@ async function generateChecks() {
     });
     check('カードを作る: 題の元が無いときは、ランドマークの aria-label・最初の短い文字・aria-labelledby・直前の見出し・中の見出しから手元で題を作り、何も無いカードは作らない',
       titled.ok && JSON.stringify(titled.config.cards.map((c) => c.title))
-        === JSON.stringify(['町のメニュー', 'ごみの出し方', 'あすの天気', '町長の部屋', 'いま出ている注意報', '図書館の本の返し方']),
+        === JSON.stringify(['ごみの出し方', 'あすの天気', '町長の部屋', 'いま出ている注意報', '図書館の本の返し方', '町のメニュー']),
       titled.ok ? titled.config.cards.map((c) => c.title) : titled);
     if (titled.ok) store.remove(titled.config.id);
 
@@ -640,11 +640,13 @@ async function generateChecks() {
 
     // 本文の大半が最初の h2 より前の h3 の節にあり、本文を同じ class の div で書くページ（市の案内のページの作り）。
     // 節は h2 と h3 の両方で区切る。Claude の読むカードが幾つもの要素に当たっても、重なりは読む最初の一つで見る。丸ごとのカードも節に分ける。
-    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '借りられる場所', 'お知らせ', 'お問い合わせ'];
+    // サイトのメニュー（header の中の nav）は束の後ろへ。目次の項目が指す見出し（a の name で指す、文字の少ない「利用料」）も節にし、
+    // 3項目の一覧を含む「利用の流れ」は、一覧だけのカードでなく節にする。
+    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '利用料', '利用の流れ', '借りられる場所', 'お知らせ', 'サイトのメニュー', 'お問い合わせ'];
     const multi = await generateDeck({
-      BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.wysiwyg')] }), store, allowFixtures: true,
+      BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('menu', 'list', '.site-menu li'), noTitle('main', 'read', '.wysiwyg')] }), store, allowFixtures: true,
     });
-    check('カードを作る: h3 の節も節のカードにし（h2 の前にあるもの）、幾つもの要素に当たる読むカードは最初の一つ（頭の目次）だけと重なりを見る。お問い合わせは束の後ろ',
+    check('カードを作る: h3 の節も節のカードにし（h2 の前にあるもの）、幾つもの要素に当たる読むカードは最初の一つ（頭の目次）だけと重なりを見る。サイトのメニューとお問い合わせは束の後ろ。目次の項目の見出しは短くても節にし、一覧を含む節は節のまま',
       multi.ok && JSON.stringify(multi.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections), multi.ok ? multi.config.cards.map((c) => c.title) : multi);
     const { looksTextFree } = require('../src/main/structure');
     check('カードを作る: 節のカードの selector に、日本語の id（ページの文字）を使わない',
@@ -654,7 +656,7 @@ async function generateChecks() {
       BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('main', 'read', '#contents')] }), store, allowFixtures: true,
     });
     check('カードを作る: 本文を丸ごと読むカード（h1 の題になるもの）は、h2・h3 の節のカードに分け、頭の目次は読まない',
-      whole2.ok && whole2.split === 1 && JSON.stringify(whole2.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections.slice(1)),
+      whole2.ok && whole2.split === 1 && JSON.stringify(whole2.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections.filter((t) => t !== '目次を読む' && t !== 'サイトのメニュー')),
       whole2.ok ? whole2.config.cards.map((c) => c.title) : whole2);
     if (whole2.ok) {
       const about3 = await runCard(BrowserWindow, whole2.config, whole2.config.cards[0].id, { waitMs: 500 });
@@ -692,14 +694,14 @@ async function generateChecks() {
     });
     check('カードを作る: 本文の見出しごとの節を読むカードを足す（見出しの後に続く節・見出しを包んだ節。Claude のカードの中の節と、文字の少ない節は作らない）',
       cycle.ok && cycle.sections === 3
-        && JSON.stringify(cycle.config.cards.map((c) => c.title)) === JSON.stringify(['メニュー', '貸し自転車とは', '料金', '借りられる場所', '乗り方']),
+        && JSON.stringify(cycle.config.cards.map((c) => c.title)) === JSON.stringify(['貸し自転車とは', '料金', '借りられる場所', '乗り方', 'メニュー']),
       cycle.ok ? { sections: cycle.sections, cards: cycle.config.cards } : cycle);
     if (cycle.ok) {
-      const about = await runCard(BrowserWindow, cycle.config, cycle.config.cards[1].id, { waitMs: 500 });
+      const about = await runCard(BrowserWindow, cycle.config, cycle.config.cards[0].id, { waitMs: 500 });
       check('カードを作る: 節のカードは、見出しから次の見出しの手前までを読む',
         about.ok && about.text === '貸し自転車とは\n貸し自転車は、町の中を自転車で回りたい方のための仕組みです。一日に何度でも、空いている自転車を借りられます。\n返すときは、どの貸し場所に返しても構いません。',
         about.text);
-      const ride = await runCard(BrowserWindow, cycle.config, cycle.config.cards[4].id, { waitMs: 500 });
+      const ride = await runCard(BrowserWindow, cycle.config, cycle.config.cards[3].id, { waitMs: 500 });
       check('カードを作る: 見出しを包んだ節も、次の見出しの手前までを読む',
         ride.ok && ride.text === '乗り方\n貸し場所の機械にカードをかざすと、鍵が外れます。返すときは、自転車を台に戻して鍵をかけてください。', ride.text);
       store.remove(cycle.config.id);

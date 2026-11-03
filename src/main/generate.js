@@ -268,7 +268,9 @@ function pageInspect(tryOne, cards) {
       const href = a.getAttribute('href');
       if (!/^#./.test(href)) return false;
       try {
-        return Boolean(document.getElementById(decodeURIComponent(href.slice(1))));
+        // 行き先は id か、昔の書き方の a[name]。
+        const key = decodeURIComponent(href.slice(1));
+        return Boolean(document.getElementById(key) || document.querySelector(`a[name="${CSS.escape(key)}"]`));
       } catch (e) {
         return false;
       }
@@ -377,6 +379,29 @@ function pageInspect(tryOne, cards) {
     }
     return 'view';
   };
+  // サイトのメニューか（nav・header の中、または本文の区画の外にある、リンクやボタンだけの一覧）。束の後ろに回す。
+  // つくば市の自転車のページで、一枚目にサイト全体のメニュー（6件）が来た（2026-11-04 の Windows の確かめ）。
+  const mainEl = document.querySelector('main, [role="main"]');
+  const linkOnlyItems = (items) => items.length > 0 && items.filter((it) => {
+    const all = clean(it.textContent).replace(/\s/g, '');
+    const linked = [...it.querySelectorAll('a, button, [role="button"], [role="link"]')].map((a) => clean(a.textContent)).join('').replace(/\s/g, '')
+      + (it.matches('a, button, [role="button"], [role="link"]') ? clean(it.textContent).replace(/\s/g, '') : '');
+    return all !== '' && linked.includes(all);
+  }).length / items.length >= 0.8;
+  const chromeOf = (c, el) => {
+    if (!el) return false;
+    if (el.closest('nav, header, [role="navigation"], [role="banner"]')) return true;
+    if (mainEl && !mainEl.contains(el) && c.action === 'list') {
+      let items = [];
+      try {
+        items = [...document.querySelectorAll(c.selector)];
+      } catch (e) {
+        return false;
+      }
+      return linkOnlyItems(items);
+    }
+    return false;
+  };
   return cards.map((c) => {
     const probe = tryOne(c.selector);
     const containerOk = Boolean(c.container && one(c.container));
@@ -393,6 +418,7 @@ function pageInspect(tryOne, cards) {
       alts: alts.map((t) => t.slice(0, 200)), toc: c.action !== 'click' && isToc(region), crumb: isCrumb(region),
       headingOnly: c.action === 'read' && headingOnly(one(c.selector)),
       toggle: c.action === 'click' && probe.count === 1 ? toggleKind(one(c.selector)) : '',
+      chrome: probe.count > 0 ? chromeOf(c, region || one(c.selector)) : false,
       pos: region && order.has(region) ? order.get(region) : (one(c.selector) && order.get(one(c.selector))) || 0,
     };
   });
@@ -580,8 +606,33 @@ function pageSections(taken, maxSections, minChars, maxMust) {
       title: cap || label || heading || near, pos: order.get(top.el),
     });
   }
-  const holdsMust = (nodes) => mainLists.some((m) => nodes.some((n) => n === m.el || n.contains(m.el)));
-  const plain = () => mainLists.map(({ el, ...rest }) => rest);
+  // 節の中に必ず作る一覧（ul・ol）があれば、節を残して一覧の方を作らない（節が一覧も読むため）。必ず作る表のときは、今までどおり節を作らない。
+  // つくば市の自転車のページで、一覧を含む節が作られず、一覧だけのカードになって節の文が抜けた（2026-11-04 に Mac で本物を開いて確かめた）。
+  const dropMust = new Set();
+  const holdsMust = (nodes) => mainLists.some((m) => {
+    if (!nodes.some((n) => n === m.el || n.contains(m.el))) return false;
+    if (m.table) return true;
+    dropMust.add(m);
+    return false;
+  });
+  // 目次の項目が指す見出しは、短くても節の区切りにする（id か、昔の書き方の a[name] で指す）。
+  // つくば市の自転車のページで、目次にある「利用料」などの節が、文字が少ないので作られなかった。
+  const tocHeads = new Set();
+  for (const l of main.querySelectorAll('ul, ol')) {
+    if (!tocLike(l)) continue;
+    for (const a of l.querySelectorAll('a[href^="#"]')) {
+      let key = '';
+      try {
+        key = decodeURIComponent(a.getAttribute('href').slice(1));
+      } catch (e) {
+        continue;
+      }
+      const el = key ? document.getElementById(key) || document.querySelector(`a[name="${CSS.escape(key)}"]`) : null;
+      const h = el ? (el.matches('h1, h2, h3, h4, h5, h6') ? el : el.closest('h1, h2, h3, h4, h5, h6')) : null;
+      if (h) tocHeads.add(h);
+    }
+  }
+  const plain = () => mainLists.filter((m) => !dropMust.has(m)).map(({ el, ...rest }) => rest);
   if (!level) return { sections: [], mainLists: plain(), whole: [] };
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
@@ -591,6 +642,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     if (hidden(h) || h.closest('nav, aside')) continue;
     const title = textOf(h);
     if (!title || takenEls.some((t) => t.contains(h))) continue;
+    const need = tocHeads.has(h) ? 1 : minChars;
     // 節の中に、Claude が選んだカードの場所があれば作らない（同じ所を二度読むカードになるため）。
     const overlaps = (nodes) => nodes.some((n) => takenEls.some((t) => n === t || n.contains(t) || t.contains(n)));
     // 見出しを頭に持ち、ほかの中身もある区画（その見出しだけを含む section など）なら、その区画を読む。
@@ -598,7 +650,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     if (box && box !== main && main.contains(box) && box.children.length > 1 && box.querySelectorAll(stops).length === 1 && box.firstElementChild === h) {
       const sel = selectorOf(box);
       const chars = textOf(box).length - title.length;
-      if (sel && chars >= minChars && !overlaps([box]) && !holdsMust([box])) {
+      if (sel && chars >= need && !overlaps([box]) && !holdsMust([box])) {
         out.push({ selector: sel, until: null, title, chars, pos: order.get(box) });
       }
       continue;
@@ -613,7 +665,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
       range.push(n);
     }
     const sel = selectorOf(anchor);
-    if (sel && chars >= minChars && !overlaps(range) && !holdsMust(range)) {
+    if (sel && chars >= need && !overlaps(range) && !holdsMust(range)) {
       out.push({ selector: sel, until, title, chars, pos: order.get(anchor) });
     }
   }
@@ -639,6 +691,8 @@ function addSectionCards(cards, sections) {
     const card = { id: `section-${out.length + 1}`, title: unique, action: 'read', selector: s.selector };
     if (s.until) card.until = s.until;
     Object.defineProperty(card, 'pos', { value: Number(s.pos) || 0, enumerable: false });
+    // 「お問い合わせ」などの節も、束の後ろにまとめる。
+    Object.defineProperty(card, 'back', { value: BACK_TITLE.test(unique), enumerable: false });
     out.push(card);
   }
   return out;
@@ -779,7 +833,7 @@ function pickCards(candidates, probes) {
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
     if (c.action === 'list' && c.container && probe.containerOk) card.container = c.container;
     Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
-    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique), enumerable: false });
+    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome), enumerable: false });
     cards.push(card);
   });
   return cards;
