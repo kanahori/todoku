@@ -8,6 +8,7 @@
     "test": "node --test",
     "smoke": "electron test/smoke.js",
     "smoke:windows": "electron test/smoke.js --show-windows",
+    "demo:reset": "node scripts/demo-reset.js",
     "ui:repair": "electron test/ui-repair.js",
     "real:tsukuba": "electron test/real-tsukuba.js",
     "dist:win": "electron-builder --win --arm64 --x64",
