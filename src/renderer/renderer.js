@@ -278,6 +278,12 @@ async function openItemTarget(card, i) {
 }
 
 async function activateCard(card, node) {
+  // 読んでいる最中は、ほかのカードを動かさない。キーの守り（keydown）はあったが、クリックと、読み上げソフトが click として
+  // 送る操作（NVDA の閲覧モードの Enter・VoiceOver の VO+Space）には無く、二枚を同時に読めた（見直しの4。smoke で確かめた）。
+  if (busy) {
+    announce('読み込み中です。少しお待ちください。');
+    return;
+  }
   if (card.kind === 'goto') {
     card.open();
     return;

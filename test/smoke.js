@@ -335,6 +335,7 @@ async function main() {
   registerSettingsHandlers(require('electron').ipcMain, settingsStore);
   try {
     await rendererItemTargetChecks(settingsStore);
+    await rendererBusyChecks();
     await rendererFocusChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
@@ -829,6 +830,40 @@ async function rendererItemTargetChecks() {
     const noReply = await js("document.getElementById('alert').textContent");
     check('一件を選んで読む: 返事の無い一件では「「自分の質問を全部読む」の4件目の返事が見つかりませんでした。」と知らせる',
       noReply === '「自分の質問を全部読む」の4件目の返事が見つかりませんでした。', noReply);
+  } finally {
+    win.destroy();
+  }
+}
+
+// 読んでいる最中に、別のカードをクリック（読み上げソフトの閲覧モードの Enter・VO+Space も click として届く）しても、
+// 二枚を同時に読まず、「読み込み中です。少しお待ちください。」と知らせる（見直しの4）。
+async function rendererBusyChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = pageWait(win);
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    const headings = () => js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
+    // 時間のかかる読む所（四枚目）をクリックし、すぐにすぐ返る読む所（二枚目）をクリックする。
+    await js("document.querySelectorAll('#deck > article.card')[3].click()");
+    await wait(50);
+    await js("document.querySelectorAll('#deck > article.card')[1].click()");
+    await wait(150);
+    const said = await js("document.getElementById('status').textContent");
+    const during = await headings();
+    await wait(1500);
+    const after = await headings();
+    check('読んでいる最中: 別のカードをクリックしても読み始めず、「読み込み中です。少しお待ちください。」と知らせ、先のカードだけを読み終える',
+      said === '読み込み中です。少しお待ちください。' && during[1] === 'すぐ返る読む所' && after[1] === 'すぐ返る読む所' && after[3] === '時間のかかる読む所',
+      { said, during, after });
   } finally {
     win.destroy();
   }
