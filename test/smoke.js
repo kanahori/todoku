@@ -740,6 +740,20 @@ async function rendererItemTargetChecks() {
     const hint = await js("[...document.activeElement.closest('article.card').querySelectorAll('p[data-item]')].map((n) => n.textContent)");
     check('一件を選んで読む: 一覧を読むと、焦点は1件目にあり、一覧の後に「一件を選んで Enter キーを押すと、その返事を読みます。」がある',
       first.tag === 'LI' && first.text === '一つ目の質問' && first.heading === '自分の質問を全部読む（4件）' && hint.includes('一件を選んで Enter キーを押すと、その返事を読みます。'), { first, hint });
+    // 項目の端: 最初で上矢印なら「ここが一番上です。」、最後で下矢印なら「ここが最後です。」と知らせ、焦点は動かない。
+    await key('ArrowUp');
+    await wait(150);
+    const topSaid = await status();
+    const atTop = await active();
+    await key('End');
+    await key('ArrowDown');
+    await wait(150);
+    const endSaid = await status();
+    const atEnd = await active();
+    check('項目の端: 最初の項目で上矢印なら「ここが一番上です。」、最後の項目で下矢印なら「ここが最後です。」と知らせ、焦点は動かない',
+      topSaid === 'ここが一番上です。' && atTop.text === '一つ目の質問' && endSaid === 'ここが最後です。' && atEnd.text === '一件を選んで Enter キーを押すと、その返事を読みます。',
+      { topSaid, atTop, endSaid, atEnd });
+    await key('Home');
     await key('ArrowDown');
     await key('Enter');
     await wait(300);

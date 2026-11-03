@@ -16,7 +16,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## What it does
 
 - Each web app (a learning site, a city website, ...) has a small config file that says, card by card, where to read and what to press.
-- The app turns that config into a deck of cards. Up and Down Arrow move between cards, Enter or Space opens a card or reads the web app, Up and Down Arrow then read the result item by item, and Esc goes back. Tab stops only on the current card. The web app itself stays in a separate window behind the card screen and never takes the keyboard focus (except for a login, when the user asks for it).
+- The app turns that config into a deck of cards. Up and Down Arrow move between cards, Enter or Space opens a card or reads the web app, Up and Down Arrow then read the result item by item (past the last item the app says "ここが最後です。", above the first "ここが一番上です。"), and Esc goes back. Tab stops only on the current card. The web app itself stays in a separate window behind the card screen and never takes the keyboard focus (except for a login, when the user asks for it).
 - Items of a numbered list (`ol`) are read with their number first ("1 前の日の夜に、…"), following `start`, `reversed` and `value`; lists whose numbers are hidden with `list-style: none` are read without numbers.
 - In a table row, when only the heading cell (the `th` cells, or the first cell if there is none) has text and every other cell is empty, the row is read as "{name} なし", so an empty row is not mistaken for a row that could not be read.
 - `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...". Text in images is read from their `alt` text and `aria-label`, and slides that a carousel hides with `aria-hidden` are still read, because the person asked for them.
@@ -130,9 +130,9 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## Tests
 
 - `npm test`: 109 tests, 104 passed, 5 skipped (the Electron-only scripts), 0 failed.
-- `npm run smoke`: 150 checks, 150 passed, against the practice pages only.
+- `npm run smoke`: 153 checks, 153 passed, against the practice pages only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
-- Measured on macOS on 2026-11-04, at the commit that puts search, contact and site-name cards at the end of a generated deck.
+- Measured on macOS on 2026-11-04, at the commit that announces the first and last result items.
 
 ## Future
 
@@ -166,7 +166,7 @@ Claude がしていること（まとめ）
 - Claude に送るのは、文字を全部落としたページの作りだけです。ページの文字・URL・題・リンク・入力した値は送りません。ページを読み上げるのは、Claude ではなくアプリです。
 - 鍵（CARDS_ANTHROPIC_API_KEY）が無くても、この二つのほかは全部使えます。
 
-- ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをカードの束の画面にします。上下の矢印でカードを移り、Enter か Space でカードを開いて読み、結果は上下の矢印で一件ずつ読めます。Esc で戻ります。ウェブアプリの窓は、カードの画面の後ろの別の窓にあり、焦点を取りません（ログインのときだけ、使う人が前に出せます）。
+- ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをカードの束の画面にします。上下の矢印でカードを移り、Enter か Space でカードを開いて読み、結果は上下の矢印で一件ずつ読めます（最後の項目で下矢印なら「ここが最後です。」、最初の項目で上矢印なら「ここが一番上です。」と知らせます）。Esc で戻ります。ウェブアプリの窓は、カードの画面の後ろの別の窓にあり、焦点を取りません（ログインのときだけ、使う人が前に出せます）。
 - 番号の付いた一覧（ol）の項目は、「1 前の日の夜に、…」のように頭に番号を付けて読みます（start・reversed・value に従います。番号を出していない ol には付けません）。
 - 表の行で、見出しの列（th。無ければ最初の升目）にだけ文字があり、ほかの升目が全部空なら、「水戸市 なし」のように名前の後に「なし」と読みます。
 - `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。

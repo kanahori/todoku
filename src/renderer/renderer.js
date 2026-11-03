@@ -1170,8 +1170,15 @@ document.addEventListener('keydown', (e) => {
       return;
     }
   }
-  if (key === 'ArrowDown') items[Math.min(items.length - 1, k + 1)].focus();
-  else if (key === 'ArrowUp') items[Math.max(0, k - 1)].focus();
+  // 項目の端で、さらに下・上へ進もうとしたときは、黙らずに端だと知らせる（はじめの束の「ここが一番上です。」とそろえる）。
+  // 読んだ結果の最後で下矢印を押しても何も読まれず、黙ったのか終わりなのか分からなかった（2026-11-04 の Windows の確かめ）。
+  if (key === 'ArrowDown') {
+    if (k === items.length - 1) announce('ここが最後です。');
+    else items[k + 1].focus();
+  } else if (key === 'ArrowUp') {
+    if (k === 0) announce('ここが一番上です。');
+    else items[k - 1].focus();
+  }
   else if (key === 'Home') items[0].focus();
   else if (key === 'End') items[items.length - 1].focus();
   else if (key === 'Escape') cardNode.focus();
