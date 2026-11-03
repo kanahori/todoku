@@ -102,14 +102,20 @@ function popDeck() {
   }
 }
 
+// 新しい束のカードを先に入れて焦点を移し、それから古いカードを外す（焦点のある要素を先に DOM から外さない）。
+// 外してから焦点を移すと、カードの中の項目では NVDA が焦点を見失った（refreshCard の註）。束を移るときも同じ並びだった（見直しの5。
+// smoke で、Enter で先へ・Esc で戻るの二回とも、焦点のあるカードを先に外していたことを確かめた）。
 function renderDeck({ announcePosition = true } = {}) {
   const deck = current();
   const nodes = deck.cards.map((card) => renderCard(card));
-  deckEl.replaceChildren(...nodes);
+  const old = [...deckEl.children];
+  for (const n of old) n.setAttribute('data-leaving', '');
+  deckEl.append(...nodes);
   selectCard(deck.index, { announcePosition });
+  for (const n of old) n.remove();
 }
 
-function cardNodes() { return [...deckEl.querySelectorAll(':scope > article.card')]; }
+function cardNodes() { return [...deckEl.querySelectorAll(':scope > article.card:not([data-leaving])')]; }
 
 function selectCard(i, { announcePosition = true } = {}) {
   const deck = current();

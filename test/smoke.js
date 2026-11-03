@@ -337,6 +337,7 @@ async function main() {
     await rendererItemTargetChecks(settingsStore);
     await rendererBusyChecks();
     await rendererErrorTextChecks();
+    await rendererDeckFocusChecks();
     await rendererFocusChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
@@ -831,6 +832,49 @@ async function rendererItemTargetChecks() {
     const noReply = await js("document.getElementById('alert').textContent");
     check('一件を選んで読む: 返事の無い一件では「「自分の質問を全部読む」の4件目の返事が見つかりませんでした。」と知らせる',
       noReply === '「自分の質問を全部読む」の4件目の返事が見つかりませんでした。', noReply);
+  } finally {
+    win.destroy();
+  }
+}
+
+// 束を移る（Enter で先へ・Esc で戻る）とき、焦点のある要素を先に DOM から外さない（見直しの5）。
+// カードの中の項目では、同じ並び（外してから焦点を移す）で NVDA が焦点を見失った測りがある（renderer.js の refreshCard の註）。
+async function rendererDeckFocusChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = pageWait(win);
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    // 見張り: 焦点のある要素（か、それを含む要素）を DOM から外した回数と、焦点が body に落ちた回数。
+    await js(`(() => {
+      const t = { removedWithFocus: 0, bodyFocus: 0 };
+      window.__deckWatch = t;
+      const holdsFocus = (node) => node !== document.body && node.contains(document.activeElement);
+      for (const name of ['remove', 'replaceWith']) {
+        const orig = Element.prototype[name];
+        Element.prototype[name] = function (...a) { if (holdsFocus(this)) t.removedWithFocus++; return orig.apply(this, a); };
+      }
+      const origReplaceChildren = Element.prototype.replaceChildren;
+      Element.prototype.replaceChildren = function (...a) { if ([...this.children].some(holdsFocus)) t.removedWithFocus++; return origReplaceChildren.apply(this, a); };
+      document.addEventListener('focusout', () => setTimeout(() => { if (document.activeElement === document.body) t.bodyFocus++; }, 0), true);
+      return true;
+    })()`);
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    const inApp = await js("(() => { const a = document.activeElement; return a.tagName + ':' + (a.querySelector('h2') ? a.querySelector('h2').textContent : ''); })()");
+    await key('Escape');
+    await wait(100);
+    const back = await js("(() => { const a = document.activeElement; return a.tagName + ':' + (a.querySelector('h2') ? a.querySelector('h2').textContent : ''); })()");
+    const watch = await js('window.__deckWatch');
+    check('束を移る: Enter で先へ進むときも Esc で戻るときも、焦点のある要素を先に DOM から外さず、焦点は新しいカードにある',
+      watch.removedWithFocus === 0 && watch.bodyFocus === 0 && inApp === 'ARTICLE:試しのアプリ（作り物）' && back === 'ARTICLE:試しのアプリ（作り物）',
+      { watch, inApp, back });
   } finally {
     win.destroy();
   }
