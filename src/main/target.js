@@ -728,6 +728,21 @@ function showTarget(appId) {
   return true;
 }
 
+// ウェブアプリの窓を全部閉じる（Todoku の窓を閉じたとき）。閉じた数を返す。
+function closeAllTargets() {
+  const all = [...windows.values()];
+  windows.clear();
+  loginFocus.clear();
+  let n = 0;
+  for (const w of all) {
+    if (!w.isDestroyed()) {
+      w.destroy();
+      n += 1;
+    }
+  }
+  return n;
+}
+
 // ウェブアプリの窓を閉じる（カードの束を作れなかったとき・消したとき）。窓が無ければ何もしない。
 function closeTarget(appId) {
   const win = windows.get(appId);
@@ -737,5 +752,5 @@ function closeTarget(appId) {
 
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
-  readItemTarget,
+  readItemTarget, closeAllTargets,
 };

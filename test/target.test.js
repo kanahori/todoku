@@ -147,3 +147,16 @@ test('ウェブアプリの窓は、前に出さずに見せ、Todoku の窓が�
     setHomeWindow(null);
   }
 });
+
+test('Todoku の窓を閉じたときに、ウェブアプリの窓を全部閉じる（closeAllTargets）', async () => {
+  const { openTarget, closeAllTargets, setHomeWindow } = require('../src/main/target');
+  const { FakeWindow } = fakeWindows();
+  const destroyed = [];
+  class Win extends FakeWindow { destroy() { destroyed.push(this.title); this.gone = true; } isDestroyed() { return Boolean(this.gone); } }
+  setHomeWindow(null);
+  await openTarget(Win, { id: 'close-a', name: 'A', url: 'https://example.com/', cards: [] }, 'https://example.com/a');
+  await openTarget(Win, { id: 'close-b', name: 'B', url: 'https://example.com/', cards: [] }, 'https://example.com/b');
+  assert.equal(closeAllTargets(), 2);
+  assert.deepEqual(destroyed.sort(), ['A', 'B']);
+  assert.equal(closeAllTargets(), 0);
+});

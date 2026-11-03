@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget } = require('./target');
+const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget, closeAllTargets } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
@@ -92,7 +92,12 @@ function createWindow() {
   mainWindow = win;
   // ウェブアプリの窓に焦点が来てしまったときに、戻す先（target.js）。
   setHomeWindow(win);
-  win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
+  // Todoku の窓を閉じたら、ウェブアプリの窓も全部閉じる。残すと、窓が残ってアプリが終わらない
+  // （ウェブアプリの窓があるので window-all-closed が来ない。2026-11-04 に Mac で確かめた）。
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+    closeAllTargets();
+  });
   win.removeMenu();
   // メニューを外したので、文字の大きさのキー（Ctrl か Command と、プラス・マイナス・0）は主の処理で受ける。
   attachZoomKeys(win.webContents, settingsStore(), (message) => {
@@ -357,10 +362,26 @@ app.whenReady().then(async () => {
     },
   });
   createWindow();
+  // Dock から開き直したとき（macOS）: Todoku の窓が無ければ作る（ウェブアプリの窓の数では決めない）。
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   });
 });
+
+// 二つ目の起動は、一つ目の Todoku の窓を前に出して終わる（同じ userData を二つで書き合わないため）。
+// 試しの台本（TODOKU_TEST_HEADLESS）からは、作品を同時に起こすことがあるので、この守りを掛けない。
+if (!testHeadless()) {
+  if (!app.requestSingleInstanceLock()) {
+    app.quit();
+  } else {
+    app.on('second-instance', () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    });
+  }
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
