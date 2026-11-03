@@ -74,9 +74,18 @@ async function pageAction(selector, action, loginSelector, limit, waitMs) {
         return { found: false, reason: 'invalid' };
       }
       if (items.length > 0) {
-        const lines = items.map((it, i) => `${i + 1}件目: ${accessibleText(it)}`);
+        const texts = items.map((it) => accessibleText(it));
+        const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
-        return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
+        // 画面で1件ずつのカードにするため、1件ずつの文も返す（全体の上限は text と同じ）。
+        let left = limit;
+        const parts = [];
+        for (const t of texts) {
+          if (left <= 0) break;
+          parts.push(t.slice(0, left));
+          left -= t.length;
+        }
+        return { found: true, text: text.slice(0, limit), truncated: text.length > limit, items: parts };
       }
       if (loginSelector && query(loginSelector).el) return { found: false, reason: 'login' };
       if (Date.now() >= deadline) return { found: false, reason: 'none' };
@@ -175,7 +184,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に当たる所がありません';
     return { ok: false, where, message };
   }
-  return { ok: true, action: card.action, text: result.text, truncated: result.truncated };
+  return { ok: true, action: card.action, text: result.text, truncated: result.truncated, ...(result.items ? { items: result.items } : {}) };
 }
 
 // ページの中で動く関数（点検用）。selector が当たるかだけを返し、中身は読まない。
