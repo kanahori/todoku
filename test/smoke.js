@@ -421,6 +421,18 @@ async function focusAndSeparatorChecks() {
     check('焦点: 「ログインの窓を前に出す」の間だけ焦点を取れる窓にし、次にカードを読むと焦点を取れない窓に戻す',
       shown === true && duringLogin === true && target.isFocusable() === false, { shown, duringLogin, after: target.isFocusable() });
 
+    // ログインの後、Todoku の窓に戻ったら、カードを動かす前でも焦点の守りを戻す（見直しの7）。
+    // ログインの窓のページが後から自分で焦点を取っても、Todoku の窓へ返す。
+    showTarget('grab');
+    home.emit('focus');
+    let backCalls = 0;
+    const homeFocus2 = home.focus.bind(home);
+    home.focus = () => { backCalls += 1; if (!headless) homeFocus2(); };
+    target.emit('focus');
+    home.focus = homeFocus2;
+    check('焦点: ログインの後に Todoku の窓へ戻ったら、焦点を取れない窓に戻し、ウェブアプリの窓に焦点が来ても Todoku の窓へ返す',
+      target.isFocusable() === false && backCalls === 1, { focusable: target.isFocusable(), backCalls });
+
     // 区切り: 一件の中の別々の要素の文字の間に区切りを入れる。字の飾り（strong）は区切らない。aria-hidden の中は読まない。
     check('区切り: 一覧の一件の中で、日付と題の間に空白か読点が入る（字の飾りの所は区切らず、aria-hidden の中は読まない）',
       news.ok && JSON.stringify(news.items) === JSON.stringify(['2026年11月3日 Open Day のご案内', '2026年11月1日 重要：図書館の休館日', '2026年10月30日、ごみの出し方が変わります']),

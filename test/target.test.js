@@ -111,6 +111,7 @@ function fakeWindows() {
     moveTop() { raise(this); }
     destroy() {}
     on() {}
+    removeListener() {}
   }
   return { FakeWindow, order };
 }

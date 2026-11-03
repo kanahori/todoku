@@ -443,7 +443,24 @@ const windows = new Map();
 const loginFocus = new Set();
 // カードの画面の窓（Todoku の窓）。ウェブアプリの窓に焦点が来てしまったら、ここへ戻す。
 let homeWindow = null;
-function setHomeWindow(win) { homeWindow = win; }
+// Todoku の窓に焦点が戻ったら、ログインのために前に出していた窓を、焦点を取れない窓に戻す（見直しの7）。
+// 前は次にカードを動かすまで守りが外れたままで、その間にログインの窓のページが焦点を取ると、NVDA がそちらへ移りえた
+// （smoke で、Todoku の窓に戻った後もログインの窓が焦点を取れる窓のままで、焦点が返らないことを確かめた）。
+function endLoginFocus() {
+  for (const id of [...loginFocus]) {
+    const w = windows.get(id);
+    loginFocus.delete(id);
+    if (!w || w.isDestroyed()) continue;
+    if (w.isFocusable()) w.setFocusable(false);
+    // Windows では、ログインの間だけタスクバーに出していたのを戻す。
+    if (process.platform === 'win32') w.setSkipTaskbar(true);
+  }
+}
+function setHomeWindow(win) {
+  if (homeWindow && !homeWindow.isDestroyed()) homeWindow.removeListener('focus', endLoginFocus);
+  homeWindow = win;
+  if (win) win.on('focus', endLoginFocus);
+}
 
 // 試しの台本（test/headless.js）が TODOKU_TEST_HEADLESS=1 を立てたときは、窓を画面に出さず、焦点も動かさない。
 // 試しの窓が開いて、人が別のアプリで打っていた文字がその窓に入ったことがあった（2026-11-03）。アプリとして起こしたときは立たない。
