@@ -678,6 +678,14 @@ async function generateChecks() {
         d.ok && JSON.stringify(d.config.cards.map((c) => c.title)) === JSON.stringify(expect), d.ok ? d.config.cards.map((c) => c.title) : d);
       if (d.ok) store.remove(d.config.id);
     }
+    // 本物の Claude の案の形: Claude のカードが、最初の表と行の一番多い表を、もう読んでいる。必ず作る枠は、まだ読まれていない三つ目の表（市町村別）に使う。
+    const claimed = await generateDeck({
+      BrowserWindow, url: 'fixture:warnings-wide.html', store, allowFixtures: true,
+      callModel: async () => ({ cards: [noTitle('table', 'read', '#summary .wide-fix table'), noTitle('table', 'read', '#timeline .wide-fix table')] }),
+    });
+    check('カードを作る（本物の Claude の案の形）: 最初の表と行の一番多い表を Claude のカードが読んでいれば、必ず作る枠は三つ目の表（市町村別）に使う',
+      claimed.ok && claimed.config.cards.some((c) => c.title === '市町村別の警報・注意報' && c.joinWith), claimed.ok ? claimed.config.cards.map((c) => c.title) : claimed);
+    if (claimed.ok) store.remove(claimed.config.id);
     const wrapped = await generateDeck({ BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.container')] }), store, allowFixtures: true });
     check('カードを作る（後戻りの組み合わせ）: ページ全体を包む読むカードがあっても、必ず作る二つの表を作る',
       wrapped.ok && wrapped.config.cards.filter((c) => c.joinWith).length === 2, wrapped.ok ? wrapped.config.cards.map((c) => c.title) : wrapped);

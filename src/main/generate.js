@@ -540,11 +540,16 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   };
   const lists = [];
   const dataRows = (t) => [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td, th') && (r.querySelector('td') || r.parentElement.tagName !== 'THEAD')).length;
-  const tables = [...main.querySelectorAll('table')].filter((t) => !outside(t) && !t.parentElement.closest('table'));
+  // 画面に描かれていない表（説明を畳んだ中の表・幅で隠れる固定の列）は、そのままでは選ばない。組の片方が描かれていれば、その方を読む。
+  // 気象庁の警報のページで、畳んだ説明の中の表（4行）が「本文の最初の表」に選ばれた（本物の Claude の案を本物のページに当てて確かめた）。
+  const rendered = (el) => el.getClientRects().length > 0;
+  const nav = (el) => Boolean(el.closest('nav, header, footer, aside, [role="navigation"]'));
+  const tables = [...main.querySelectorAll('table')].filter((t) => !nav(t) && !t.parentElement.closest('table'));
   // 横に長い表を、左の固定の列（名前）と右の流れる列（値）の二つの表に分けて描くページがある（気象庁の警報のページ）。
   // 二つの表が、同じ親の隣り合う子の中にあり、行の数が同じなら、組にして一行ずつつないで読む（joinWith）。
   const paired = new Set();
   const pairOf = new Map();
+  const partnerOf = new Map(); // 組にした二つ目の表（同じ中身の写しも含む）
   for (const t of tables) {
     if (paired.has(t)) continue;
     let a = t;
@@ -553,15 +558,27 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     const u = sib ? (sib.matches('table') ? sib : sib.querySelector('table')) : null;
     if (u && u !== t && tables.includes(u) && !paired.has(u) && dataRows(u) === dataRows(t) && dataRows(t) >= 3) {
       paired.add(u);
+      partnerOf.set(t, u);
+      partnerOf.set(u, t);
       // 二つが同じ中身の写し（固定の列と流れる列を、同じ表を二つ描いて見せるページ。気象庁の早期注意情報）なら、つながず一つだけ読む。
       if (clean(t.textContent) !== clean(u.textContent)) pairOf.set(t, u);
     }
   }
   for (const t of tables) {
     if (paired.has(t)) continue;
-    const rowEls = [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td'));
+    // 読む表: ふつうはこの表。描かれていなくて、同じ中身の写しの片方が描かれていれば、そちらを読む。
+    // 中身の違う組（名前と値）は、隠れた方も含めてつないで読む（隠れた文字も読める）。どちらも描かれていなければ選ばない。
+    let el = t;
+    if (!rendered(t)) {
+      const u = partnerOf.get(t);
+      if (pairOf.has(t) && rendered(u)) el = t;
+      else if (u && rendered(u)) el = u;
+      else continue;
+    }
+    if (hidden(el)) continue;
+    const rowEls = [...el.querySelectorAll('tr')].filter((r) => r.querySelector('td'));
     const rows = pairOf.has(t) ? dataRows(t) : rowEls.length;
-    if (rows >= 3 && !linkOnly(rowEls)) lists.push({ el: t, rows, table: true, join: pairOf.get(t) || null });
+    if (rows >= 3 && !linkOnly(rowEls)) lists.push({ el, rows, table: true, join: el === t ? pairOf.get(t) || null : null });
   }
   // role の付いた表（role=table・grid）。行は role=row で、升目のある行。
   for (const t of main.querySelectorAll('[role="table"], [role="grid"]')) {
@@ -577,9 +594,13 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   // 表を先にする: 本文の最初の表と、行の一番多い表。表が一つも無いときだけ、行の一番多い一覧。
   const byOrder = (a, b) => order.get(a.el) - order.get(b.el);
   const bySize = (a, b) => b.rows - a.rows || byOrder(a, b);
-  const tableItems = lists.filter((x) => x.table);
+  // Claude のカードがもう読んでいる表（組の片方を読んでいるものも）は除いてから、本文の最初の表と行の一番多い表を選ぶ。
+  // 気象庁の警報のページで、Claude のカードが発表状況と時系列の表を読んでいたので、必ず作る二つの枠が両方そこに当たって外れ、
+  // 三つ目の大きな表（市町村別・45行）が作られなかった（本物の Claude の案を本物のページに当てて確かめた）。
+  const free = (x) => !overlapsTaken(x.el) && !(partnerOf.has(x.el) && overlapsTaken(partnerOf.get(x.el)));
+  const tableItems = lists.filter((x) => x.table && free(x));
   const firstTable = tableItems.slice().sort(byOrder)[0];
-  const largest = tableItems.length > 0 ? tableItems.slice().sort(bySize)[0] : lists.slice().sort(bySize)[0];
+  const largest = tableItems.length > 0 ? tableItems.slice().sort(bySize)[0] : lists.filter(free).sort(bySize)[0];
   const must = [];
   for (const x of [firstTable, largest]) {
     if (x && !must.includes(x) && must.length < maxMust) must.push(x);
@@ -599,12 +620,30 @@ function pageSections(taken, maxSections, minChars, maxMust) {
         else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
       }
     }
+    // 表の頭の、升目が一つだけの見出しの行（th）を題にする。表そのものの一行目か、分けて描いた表の頭（見出しの行だけの表）の一行目。
+    // 気象庁の警報の表は、題（「〇〇の警報・注意報（市町村別）」）が表の頭の見出しの行にあった。
+    // headOnly は、分けて描いた表の頭（升目の td の行が一つまで）。そのときは一行目が升目一つの th なら題にする。
+    // 表そのもののときは、名前の列だけの表（どの行も升目が一つ）の一行目と見分けるため、横に広がる升目か、次の行の升目が二つ以上のときだけ。
+    const titleRow = (tb, headOnly = false) => {
+      const r = tb && tb.rows ? tb.rows[0] : null;
+      if (!r || r.cells.length !== 1 || r.cells[0].tagName !== 'TH') return '';
+      const next = tb.rows[1];
+      return headOnly || r.cells[0].colSpan > 1 || (next && next.cells.length > 1) ? textOf(r.cells[0]) : '';
+    };
+    const headTable = (p) => p.matches('table') && [...p.rows].filter((r) => r.querySelector('td')).length <= 1;
+    let rowTitle = top.el.matches('table') ? titleRow(top.el) : '';
+    for (let n = top.el, d = 0; n && n !== main && !rowTitle && d < 6; n = n.parentElement, d++) {
+      for (let p = n.previousElementSibling; p && !rowTitle; p = p.previousElementSibling) {
+        if (headTable(p)) rowTitle = titleRow(p, true);
+        else if (p.matches('table') || p.querySelector('table')) break;
+      }
+    }
     // 見出しの無いページでは、表の前（6段上まで）にある短い文（40字まで）を題にする。見出しの行だけの表（分けて描いた表の頭）は飛ばす。
     let near = '';
     for (let n = top.el, d = 0; n && n !== main && !near && d < 6; n = n.parentElement, d++) {
       for (let p = n.previousElementSibling; p && !near; p = p.previousElementSibling) {
         if (p.matches('script, style')) continue;
-        if (p.matches('table') && !p.querySelector('td')) continue;
+        if (headTable(p)) continue;
         if (p.querySelector('table') || p.matches('table')) break;
         const t = textOf(p);
         if (t && t.length <= 40) near = t;
@@ -617,7 +656,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     mainLists.push({
       el: top.el, selector: top.table ? rowsOf(top.el) : `${sel} > li`, container: sel, table: top.table,
       ...(joinSel ? { joinWith: `${joinSel} tr:has(td, th):not(thead tr)` } : {}),
-      title: cap || label || heading || near, pos: order.get(top.el),
+      title: cap || label || heading || rowTitle || near, pos: order.get(top.el),
     });
   }
   // 節の中に必ず作る一覧（ul・ol）があれば、節を残して一覧の方を作らない（節が一覧も読むため）。必ず作る表のときは、今までどおり節を作らない。
