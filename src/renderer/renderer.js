@@ -189,8 +189,9 @@ function renderItems(items) {
         input.addEventListener('compositionend', () => item.onInput(input.value));
       }
       if (item.onEnter) {
+        // 変換を確定する Enter は渡さない（isComposing が立たず keyCode 229 だけが来る場合もある）。
         input.addEventListener('keydown', (e) => {
-          if (e.key !== 'Enter' || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+          if (e.key !== 'Enter' || e.altKey || e.ctrlKey || e.metaKey || e.isComposing || e.keyCode === 229) return;
           e.preventDefault();
           // 文書全体のキーの処理には渡さない（焦点を移した先で、同じ Enter がもう一度働かないように）。
           e.stopPropagation();
@@ -864,6 +865,7 @@ function searchCard() {
       },
       { text: '題と説明から、全部のアプリのカードを探します。', describe: true },
       { text: '入力した後、Escキーでこのカードへ戻り、下矢印キーで、アプリごとの見つかったカードへ移ります。' },
+      { text: '欄の中でEnterキーを押すと、最初に見つかったカードへ移ります。' },
       { text: searchCountText(search.query, search.total), searchCount: true },
     ],
   };
@@ -872,7 +874,8 @@ function searchCard() {
 function resultCard({ config, matches }) {
   const items = [];
   for (const c of matches) {
-    items.push({ button: `「${c.title}」へ移る`, onPress: () => goToFound(config.id, c.id) });
+    // 同じ題でもアプリごとに働きが違うので、一件ずつアプリの名前を付ける。
+    items.push({ button: `「${config.name}」の「${c.title}」へ移る`, onPress: () => goToFound(config.id, c.id) });
     if (c.description) items.push({ text: endSentence(c.description) });
   }
   return { kind: 'results', appId: config.id, heading: `「${config.name}」で見つかったカード（${matches.length}件）`, items };
@@ -980,7 +983,11 @@ function appDeck(config, hasParent = true) {
     'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
   ];
-  if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
+  if (hasParent) {
+    texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
+    // 基を使い慣れた方は、二枚目に表示設定があると思って探すので、在処と戻り方を言う。
+    texts.push(`表示設定は、はじめの画面の「${SETTINGS_HEADING}」のカードにあります。Escキーで、はじめの画面へ戻れます。`);
+  }
   if (clicks === 0) texts.splice(texts.indexOf('押す所のカードでは、カード内のボタンで押します。'), 1);
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
@@ -1061,7 +1068,7 @@ function topDeck(configs, problems) {
 
 // ---- キー ----
 document.addEventListener('keydown', (e) => {
-  if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing || e.keyCode === 229) return;
   const active = document.activeElement;
   const cardNode = active && active.closest ? active.closest('article.card') : null;
   if (!cardNode) return;

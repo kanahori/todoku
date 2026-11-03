@@ -468,6 +468,8 @@ async function rendererFocusChecks() {
     const firstTexts = await js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((n) => n.textContent)");
     check('はじめのカードの項目に、出典の文があり、URL は無い',
       firstTexts.includes('出典：作り物のサイトを加工して作成。') && !firstTexts.some((t) => /https?:/.test(t)), firstTexts);
+    check('はじめのカードの項目に、表示設定の在処と、Escキーではじめの画面へ戻れることを言う一文がある',
+      firstTexts.includes('表示設定は、はじめの画面の「表示設定」のカードにあります。Escキーで、はじめの画面へ戻れます。'), firstTexts);
     await key('End');
     const sourceButton = await focusState();
     check('はじめのカードの最後の項目は「出典のページを開く」ボタン', sourceButton.tag === 'BUTTON' && sourceButton.text === '出典のページを開く', sourceButton);
@@ -887,11 +889,14 @@ async function rendererSearchChecks(settingsStore) {
     await t.key('ArrowDown');
     const card = await t.active();
     const described = await t.js("(() => { const c = document.activeElement; const id = c.getAttribute('aria-describedby'); return id ? document.getElementById(id).textContent : null; })()");
+    const searchTexts = await t.js("[...document.activeElement.querySelectorAll('p[data-item]')].map((n) => n.textContent)");
     await t.key('Enter');
     const input = await t.active();
     check('探す欄: 三枚目のカード「カードを探す」で、Enter でラベル「探す言葉」の欄へ移る（カードを選ぶと何を探すかも読む）',
       card.heading === 'カードを探す' && described === '題と説明から、全部のアプリのカードを探します。'
         && input.tag === 'INPUT' && input.label === '探す言葉', { card, described, input });
+    check('探す欄: 説明の項目に、欄の中で Enter キーを押すと何が起きるかの一文がある',
+      searchTexts.includes('欄の中でEnterキーを押すと、最初に見つかったカードへ移ります。'), searchTexts);
 
     // 打つたびに絞り込む。続けて打っても、数は打ち終えてから一度だけ知らせる。
     await t.watchSaid();
@@ -929,8 +934,8 @@ async function rendererSearchChecks(settingsStore) {
     await t.wait(150);
     const moved = await t.active();
     const movedPos = await t.status();
-    check('探す欄: 見つかったカードの中は「「〇〇」へ移る」のボタンで、押すとそのアプリの束のそのカードへ移り、位置を知らせる',
-      first.text === '「すぐ返る読む所」へ移る' && second.text === '「すぐ返る一覧」へ移る'
+    check('探す欄: 見つかったカードの中は「「アプリの名前」の「〇〇」へ移る」のボタンで、押すとそのアプリの束のそのカードへ移り、位置を知らせる',
+      first.text === '「試しのアプリ（作り物）」の「すぐ返る読む所」へ移る' && second.text === '「試しのアプリ（作り物）」の「すぐ返る一覧」へ移る'
         && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '7件中3件目', { first, second, moved, movedPos });
     await t.key('Escape');
     await t.wait(100);
@@ -955,8 +960,18 @@ async function rendererSearchChecks(settingsStore) {
         && JSON.stringify(headsNone) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る']),
       { again, saidNone, headsNone, countNone });
 
-    // 欄の中の Enter で、最初の見つかったカードへ。
+    // 日本語入力の変換を確定する Enter（isComposing が立つもの・keyCode 229 だけが来るもの）では移らない。
     await t.type('一覧');
+    const imeEnter = (init) => t.js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify({ key: 'Enter', bubbles: true, cancelable: true, ...init })}))`);
+    await imeEnter({ isComposing: true });
+    await imeEnter({ keyCode: 229 });
+    await t.wait(150);
+    const composing = await t.active();
+    const keyCode229 = await t.js("new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229 }).keyCode");
+    check('探す欄: 変換を確定する Enter（isComposing の付いたもの・keyCode 229 のもの）では、欄から移らない',
+      composing.tag === 'INPUT' && composing.value === '一覧' && keyCode229 === 229, { composing, keyCode229 });
+
+    // 欄の中の Enter で、最初の見つかったカードへ。
     await t.watchSaid();
     await t.key('Enter');
     await t.wait(150);
