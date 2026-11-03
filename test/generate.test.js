@@ -50,7 +50,7 @@ const SETTLE = { stepMs: 1, minMs: 0, stableMs: 0, maxMs: 30 };
 // ページで動かす文の種類ごとに答える。inspect は案の数だけの probe を返す。
 function pageOf({ skeleton = SKELETON, probes, sections = [], mainList = null }) {
   return (script) => {
-    if (script.includes('pageSections')) return { sections, mainList };
+    if (script.includes('pageSections')) return { sections, mainLists: mainList ? [mainList] : [] };
     if (script.includes('pageSettleProbe')) return { nodes: 40, chars: 100, resources: 3, waiting: false };
     if (script.includes('pageSkeleton')) return { skeleton, nodes: 8, truncated: false };
     if (script.includes('pageInspect')) return probes;

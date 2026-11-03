@@ -28,6 +28,8 @@ const MAX_CARDS = 8;
 // 本文の節を読むカードの数の上限と、節にする文字の数の下限。
 const MAX_SECTIONS = 6;
 const SECTION_MIN_CHARS = 40;
+// Claude の案に無くても必ず作る、本文の表・一覧の数の上限。
+const MAX_MUST_LISTS = 2;
 const MAX_CANDIDATES = 16;
 // 題と束の名前の長さの上限（文字数）。
 const TITLE_MAX = 30;
@@ -373,9 +375,11 @@ function pageInspect(tryOne, cards) {
 // 節は、見出しを含む区画（その見出しだけを含む section など）か、見出しから次の同じ段か上の段の見出しの手前まで。
 // 文字が少ない節（minChars 字より少ない）と、Claude が選んだカード（taken の selector）の中にある節は作らない。
 // 自転車のページの「〇〇とは」の長い段落など、本文の節を読むカードが無かった（2026-11-04 の Windows の確かめ）。
-// あわせて、本文の区画の主な表・一覧（行の一番多い table か ul・ol。3行以上）を一つ返す（mainList）。
+// あわせて、本文の区画の主な表・一覧を、二つまで返す（mainLists）。本文の最初の表（3行以上）と、行の一番多い table か ul・ol（3行以上）。
+// 行の一番多い表だけでは、気象庁の警報のページで市町村別の表（49行）が選ばれ、一番大事な発表状況の表（8行）が作られなかった
+// （2026-11-04 の Windows の確かめ）。発表状況の表は、本文の最初の表だった。
 // Claude の案に無くても必ず一枚作るため（気象庁の警報のページで、一番大事な発表状況の表が、作るたびに入ったり入らなかったりした）。
-function pageSections(taken, maxSections, minChars) {
+function pageSections(taken, maxSections, minChars, maxMust) {
   const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
   const textOf = (el) => clean(el.innerText || el.textContent);
   const hidden = (el) => Boolean(el.closest('[aria-hidden="true"], [hidden]')) || getComputedStyle(el).display === 'none';
@@ -393,7 +397,7 @@ function pageSections(taken, maxSections, minChars) {
     }
     main = best;
   }
-  if (!main) return { sections: [], mainList: null };
+  if (!main) return { sections: [], mainLists: [] };
   const order = new Map();
   [...document.querySelectorAll('*')].forEach((e, i) => order.set(e, i));
   const selectorOf = (el) => {
@@ -435,28 +439,33 @@ function pageSections(taken, maxSections, minChars) {
     const rows = [...l.children].filter((c) => c.tagName === 'LI').length;
     if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol')) lists.push({ el: l, rows, table: false });
   }
-  lists.sort((a, b) => b.rows - a.rows || order.get(a.el) - order.get(b.el));
-  let mainList = null;
-  const top = lists[0];
-  if (top && !overlapsTaken(top.el)) {
-    const sel = selectorOf(top.el);
-    if (sel) {
-      const cap = top.table && top.el.caption ? textOf(top.el.caption) : '';
-      const label = clean(top.el.getAttribute('aria-label'));
-      let heading = '';
-      for (let n = top.el, d = 0; n && n !== main && !heading && d < 3; n = n.parentElement, d++) {
-        for (let p = n.previousElementSibling; p && !heading; p = p.previousElementSibling) {
-          const h = p.matches('h1, h2, h3, h4, h5, h6') ? p : null;
-          if (h) heading = textOf(h);
-          else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
-        }
-      }
-      mainList = {
-        selector: top.table ? `${sel} tr:has(td)` : `${sel} > li`, container: sel, table: top.table,
-        title: cap || label || heading, pos: order.get(top.el),
-      };
-    }
+  const firstTable = lists.filter((x) => x.table).sort((a, b) => order.get(a.el) - order.get(b.el))[0];
+  const largest = lists.slice().sort((a, b) => b.rows - a.rows || order.get(a.el) - order.get(b.el))[0];
+  const must = [];
+  for (const x of [firstTable, largest]) {
+    if (x && !must.includes(x) && must.length < maxMust) must.push(x);
   }
+  const mainLists = [];
+  for (const top of must) {
+    if (overlapsTaken(top.el)) continue;
+    const sel = selectorOf(top.el);
+    if (!sel) continue;
+    const cap = top.table && top.el.caption ? textOf(top.el.caption) : '';
+    const label = clean(top.el.getAttribute('aria-label'));
+    let heading = '';
+    for (let n = top.el, d = 0; n && n !== main && !heading && d < 3; n = n.parentElement, d++) {
+      for (let p = n.previousElementSibling; p && !heading; p = p.previousElementSibling) {
+        const h = p.matches('h1, h2, h3, h4, h5, h6') ? p : null;
+        if (h) heading = textOf(h);
+        else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
+      }
+    }
+    mainLists.push({
+      el: top.el, selector: top.table ? `${sel} tr:has(td)` : `${sel} > li`, container: sel, table: top.table,
+      title: cap || label || heading, pos: order.get(top.el),
+    });
+  }
+  const holdsMust = (nodes) => mainLists.some((m) => nodes.some((n) => n === m.el || n.contains(m.el)));
   let level = 0;
   for (const l of [2, 3, 4]) {
     if ([...main.querySelectorAll(`h${l}`)].some((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h))) {
@@ -464,7 +473,8 @@ function pageSections(taken, maxSections, minChars) {
       break;
     }
   }
-  if (!level) return { sections: [], mainList };
+  const plain = () => mainLists.map(({ el, ...rest }) => rest);
+  if (!level) return { sections: [], mainLists: plain() };
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
   const out = [];
@@ -480,7 +490,7 @@ function pageSections(taken, maxSections, minChars) {
     if (box && box !== main && main.contains(box) && box.children.length > 1 && box.querySelectorAll(stops).length === 1 && box.firstElementChild === h) {
       const sel = selectorOf(box);
       const chars = textOf(box).length - title.length;
-      if (sel && chars >= minChars && !overlaps([box]) && !(mainList && box.contains(top.el))) {
+      if (sel && chars >= minChars && !overlaps([box]) && !holdsMust([box])) {
         out.push({ selector: sel, until: null, title, chars, pos: order.get(box) });
       }
       continue;
@@ -495,15 +505,15 @@ function pageSections(taken, maxSections, minChars) {
       range.push(n);
     }
     const sel = selectorOf(anchor);
-    if (sel && chars >= minChars && !overlaps(range) && !(mainList && range.some((n) => n === top.el || n.contains(top.el)))) {
+    if (sel && chars >= minChars && !overlaps(range) && !holdsMust(range)) {
       out.push({ selector: sel, until, title, chars, pos: order.get(anchor) });
     }
   }
-  return { sections: out, mainList };
+  return { sections: out, mainLists: plain() };
 }
 
 function buildSectionsScript(taken) {
-  return `(${pageSections.toString()})(${JSON.stringify(taken)}, ${MAX_SECTIONS}, ${SECTION_MIN_CHARS})`;
+  return `(${pageSections.toString()})(${JSON.stringify(taken)}, ${MAX_SECTIONS}, ${SECTION_MIN_CHARS}, ${MAX_MUST_LISTS})`;
 }
 
 // 節を読むカードを足す。題は見出しの文字（重なれば番号）。束は全部で MAX_CARDS + MAX_SECTIONS 枚まで。
@@ -526,6 +536,12 @@ function addSectionCards(cards, sections) {
 }
 
 // 本文の主な表・一覧のカードを、Claude の案に無ければ足す。題は表の題（caption）・aria-label・直前の見出し、無ければ「表を読む」「一覧を読む」。
+function addMainListCards(cards, mainLists) {
+  let out = cards;
+  for (const m of Array.isArray(mainLists) ? mainLists : []) out = addMainListCard(out, m);
+  return out;
+}
+
 function addMainListCard(cards, mainList) {
   if (!mainList || !mainList.selector) return cards;
   const titles = new Set(cards.map((c) => c.title));
@@ -719,7 +735,7 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
   const taken = picked.filter((c) => c.action !== 'click').map((c) => c.selector);
   const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
-  const withMain = addMainListCard(picked, extras && extras.mainList);
+  const withMain = addMainListCards(picked, extras && extras.mainLists);
   const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
   if (cards.length === 0) return fail('no-cards');
   // 行き先が変わった（転送された）ときは、行き着いたページの URL を残す（http:// と https:// のときだけ）。
@@ -746,7 +762,7 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
     tried: candidates.length,
     dropped: candidates.length - picked.length,
     sections: cards.filter((c) => c.id.startsWith('section-')).length,
-    mainList: withMain.length > picked.length,
+    mainLists: withMain.length - picked.length,
     structure: { nodes, chars: limited.text.length, cut: truncated || limited.cut },
     at: now().toISOString(),
   };
