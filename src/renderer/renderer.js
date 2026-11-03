@@ -173,18 +173,20 @@ async function activateCard(card, node) {
 // ---- 読む先のカード ----
 // カードを描き直す。いまの束にそのカードがあるときだけ、置き換えて選んだままにする。
 // 描き直したカードの要素を返す（別の束へ移っていたら null）。
+// カードの要素（article）はそのまま残し、見出しの文字と中の項目だけを入れ替える。
+// 焦点のある要素を丸ごと作り直すと、NVDA がその要素を見失って黙ることがあった（2026-11-03 の確かめ）。
 function refreshCard(card) {
   const deck = current();
   const index = deck.cards.indexOf(card);
   if (index < 0 || !card.node || !card.node.isConnected) return null;
-  const old = card.node;
-  const hadFocus = old.contains(document.activeElement);
-  const fresh = renderCard(card, index);
-  old.replaceWith(fresh);
-  if (hadFocus || deck.index === index) {
-    cardNodes().forEach((n, k) => { n.tabIndex = k === deck.index ? 0 : -1; });
-  }
-  return fresh;
+  const node = card.node;
+  node.querySelector('h2').textContent = card.heading;
+  const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
+  const focusWasInside = node.contains(document.activeElement) && document.activeElement !== node;
+  node.querySelector('.items').replaceWith(renderItems(items));
+  // 中の項目に焦点があったなら、カードへ戻しておく（消えた要素に焦点を残さない）。
+  if (focusWasInside) node.focus();
+  return node;
 }
 
 const PROGRESS_EVERY_MS = 5000; // 進み具合を知らせる間隔（5秒に一度）
@@ -252,6 +254,7 @@ async function readCard(card) {
   }
   // 読み込み中に Esc で別の所へ移っていたら、結果はカードに入れておくだけにする。
   const wasInside = card.node && card.node.isConnected && card.node.contains(document.activeElement);
+  if (card.node) card.node.removeAttribute('aria-busy');
   node = refreshCard(card);
   if (!node) return;
   if (result.ok) announce(result.action === 'list' ? `「${card.title}」から${count}件読みました。` : `「${card.title}」を読みました。`);

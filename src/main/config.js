@@ -94,7 +94,8 @@ function validateConfig(config) {
 function loadConfigFile(file) {
   let config;
   try {
-    config = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // Windows のメモ帳や PowerShell で保存すると、頭に BOM が付くことがあるので取り除く。
+    config = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
   } catch (e) {
     return { file, errors: [{ where: '(全体)', message: `JSON として読めません: ${e.message}` }] };
   }

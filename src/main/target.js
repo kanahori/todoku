@@ -122,10 +122,14 @@ function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS) {
   return `(${pageAction.toString()})(${args})`;
 }
 
-// アプリごとに窓を一つ持つ。
+// アプリごとに窓を一つ持つ。見せておくのは、いま読むアプリの窓だけにする（ほかは隠す。閉じはしない）。
+// ウェブアプリの窓が二つ見えていると、二つ目を見せたときに NVDA がカードの画面を見失い、黙ることがあった（2026-11-03 の確かめ）。
 const windows = new Map();
 
 async function openTarget(BrowserWindow, config, url) {
+  for (const [id, other] of windows) {
+    if (id !== config.id && !other.isDestroyed() && other.isVisible()) other.hide();
+  }
   let win = windows.get(config.id);
   if (!win || win.isDestroyed()) {
     win = new BrowserWindow({

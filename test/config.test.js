@@ -66,3 +66,16 @@ test('同梱の cards/ の設定ファイルは全部読める', () => {
   assert.ok(results.length > 0);
   for (const r of results) assert.deepEqual(r.errors ?? [], [], r.file);
 });
+
+test('頭に BOM の付いた設定ファイルも読める（Windows のメモ帳などで保存したもの）', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const { loadConfigFile } = require('../src/main/config');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bom-'));
+  const file = path.join(dir, 'bom.json');
+  fs.writeFileSync(file, '﻿' + JSON.stringify(good()), 'utf8');
+  const r = loadConfigFile(file);
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.equal(r.errors, undefined);
+  assert.equal(r.config.id, 'demo');
+});
