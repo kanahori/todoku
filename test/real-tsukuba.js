@@ -51,6 +51,14 @@ app.whenReady().then(async () => {
     const empty = r.items ? r.items.filter((t) => t.trim() === '').length : null;
     console.log(`  ${card.id}: ${r.ok ? `${n}件・文字数 ${r.text.length}・空の項目 ${empty}` : `当たらない（${r.where}）`}`);
     check(`${card.id}: 当たり、空でない項目を読める`, r.ok && n > 0 && empty === 0, r.ok ? undefined : r.message);
+    // 日付の要素のあるカード（イベント情報）は、どの項目も「11月6日」の形の月日で始まる（文字は書き出さず、数だけ）。
+    if (card.dateSelector && r.ok) {
+      const dated = r.items.filter((t) => /^\d{1,2}月\d{1,2}日[ 、]/.test(t)).length;
+      // 頭の12字の形だけを書き出す（数字・月・日・読点・空白のほかは「字」にする）。
+      const head = r.items[0] ? r.items[0].slice(0, 12).replace(/[^\d月日、 ]/g, '字') : '';
+      console.log(`  ${card.id}: 月日で始まる項目 ${dated}件／${n}件・1件目の頭の形「${head}」`);
+      check(`${card.id}: どの項目も月日（「11月6日」の形）で始まる`, dated === n);
+    }
   }
 
   // 2. 試しのための古い行を一つ含む写しで、自動で直す一巡。

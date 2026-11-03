@@ -28,8 +28,11 @@ function resolveUrl(url, cardPath) {
 // ページの中で動く関数。外の変数は使えないので、引数だけで動くようにする。
 // 後から出てくる所に備えて、当たるまで少しずつ待つ。
 // container（list のカードだけ・任意）は、項目を入れる入れ物の selector。
+// dateSelector（list のカードだけ・任意）は、項目の中の日付の要素の selector。その要素の datetime か id に書かれた年・月・日から、
+// その要素を「11月6日」と読む。つくば市のイベントカレンダーの一覧は、日の欄が「6」だけで、月がどこにも読めなかった
+// （「6 金曜」と読んだ。2026-11-04 の Windows の確かめ）。月は日の欄の id（calendar_list_2026_11_6）にだけ書いてある。
 // 入れ物に当たって項目が 0件なら「0件」（found: true・items: []）、入れ物にも当たらなければ「当たらない」と返す。
-async function pageAction(selector, action, loginSelector, limit, waitMs, container) {
+async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector) {
   // 読む文を、行の並びとして取り出す。画面読み上げが読む文に近づける。
   // - 中の文字に加えて、画像の説明（alt）と aria-label も読む。aria-hidden="true" の中と script・style は読まない。
   //   当たった要素そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
@@ -76,9 +79,25 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     return pieces.map((p) => (p.drop ? p.t.replace(/[^\n]+/g, ' ') : p.alt ? ` ${p.t} ` : p.t)).join('');
   };
   // scope が 'item' なら当たった要素の全体で、'line'（ふだん）なら行ごとに、画像の説明の重なりを外す。
-  const textLines = (root, visibleOnly = false, scope = 'line') => {
+  // 日付の要素の datetime か id から「11月6日」を作る。読めなければ null（そのときは書いてあるまま読む）。
+  // その要素に無ければ、中の datetime を持つ要素（time など）を見る。
+  const dateLabel = (el) => {
+    const inner = el.querySelector('[datetime]');
+    const src = `${el.getAttribute('datetime') || ''} ${el.id || ''} ${inner ? inner.getAttribute('datetime') : ''}`;
+    const m = /(\d{4})[-_/](\d{1,2})[-_/](\d{1,2})(?!\d)/.exec(src);
+    if (!m) return null;
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    return month >= 1 && month <= 12 && day >= 1 && day <= 31 ? `${month}月${day}日` : null;
+  };
+  // replace は { node, text }。その要素を、中の文字の代わりに text として読む（日付の要素）。
+  const textLines = (root, visibleOnly = false, scope = 'line', replace = null) => {
     let out = '';
     const walk = (node, isRoot, keepNewlines, shown) => {
+      if (replace && node === replace.node) {
+        out += ` ${replace.text} `;
+        return;
+      }
       if (node.nodeType === 3) {
         if (shown) out += keepNewlines ? node.nodeValue : node.nodeValue.replace(/\s+/g, ' ');
         return;
@@ -146,8 +165,36 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       } catch (e) {
         return { found: false, reason: 'invalid' };
       }
+      // 日付の要素のあるカードは、日付の読める項目が出てくるまで待つ（待つ長さの内）。
+      // つくば市のイベントカレンダーは、読み込んだ直後は日の欄の無い仮の行が5件あり、0.6秒ほど後に日付つきの10件に描き直す
+      // （2026-11-04 に Mac で測った。仮の行を読んで「（5件）」「6 金曜」になっていた）。
+      const dateReady = () => items.some((it) => {
+        try {
+          const d = it.querySelector(dateSelector);
+          return Boolean(d && dateLabel(d));
+        } catch (e) {
+          return true;
+        }
+      });
+      if (items.length > 0 && dateSelector && !dateReady() && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 250));
+        continue;
+      }
       if (items.length > 0) {
-        const texts = items.map((it) => oneLine(textLines(it, false, 'item')));
+        const texts = items.map((it) => {
+          let replace = null;
+          if (dateSelector) {
+            let dateEl = null;
+            try {
+              dateEl = it.querySelector(dateSelector);
+            } catch (e) {
+              dateEl = null;
+            }
+            const label = dateEl ? dateLabel(dateEl) : null;
+            if (label) replace = { node: dateEl, text: label };
+          }
+          return oneLine(textLines(it, false, 'item', replace));
+        });
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
         // 画面で1件ずつのカードにするため、1件ずつの文も返す（全体の上限は text と同じ）。
@@ -203,8 +250,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
 }
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
-function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null) {
-  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container].map((v) => JSON.stringify(v)).join(', ');
+function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null) {
+  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector].map((v) => JSON.stringify(v)).join(', ');
   return `(${pageAction.toString()})(${args})`;
 }
 
@@ -324,12 +371,13 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   }
   const loginSelector = config.login ? config.login.selector : null;
   const container = card.action === 'list' && card.container ? card.container : null;
+  const dateSelector = card.action === 'list' && card.dateSelector ? card.dateSelector : null;
   // 押すカードは、押す前からダウンロードを待ち受ける。
   // 保存の名前の型（saveAs）があれば、始まったダウンロードをその名前で保存する。
   const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
-    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container));
+    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector));
   } catch (e) {
     if (watch) watch.cancel();
     throw e;

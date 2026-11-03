@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」のイベントカレンダー）。日の欄が日だけで、月が日の欄の id や datetime にだけ書いてある一覧。 -->
+<!-- #later は、読み込んだ直後は日の欄の無い仮の行が1件だけあり、0.6秒後に日付つきの2件に描き直す（本物のつくば市で見た動き）。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>あおば町のイベントカレンダー（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <main>
+    <h1>イベントカレンダー（作り物）</h1>
+    <table id="events">
+      <tr class="row"><td id="cal_list_2026_11_6" class="date">6</td><td>金曜</td><td><a href="#a">町民まつり</a></td></tr>
+      <tr class="row"><td class="date"><time datetime="2026-11-07">7</time></td><td>土曜</td><td><a href="#b">図書館のおはなし会</a></td></tr>
+      <tr class="row"><td class="date">8</td><td>日曜</td><td><a href="#c">月の書いていない行</a></td></tr>
+    </table>
+    <table id="later"><tr class="row"><td>読み込んでいます</td></tr></table>
+  </main>
+  <script>
+    setTimeout(() => {
+      document.getElementById('later').innerHTML =
+        '<tr class="row"><td id="cal_list_2026_12_5" class="date">5</td><td>土曜</td><td><a href="#d">冬の音楽会</a></td></tr>'
+        + '<tr class="row"><td id="cal_list_2026_12_12" class="date">12</td><td>土曜</td><td><a href="#e">もちつき大会</a></td></tr>';
+    }, 600);
+  </script>
+</body>
+</html>

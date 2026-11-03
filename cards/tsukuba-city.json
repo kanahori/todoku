@@ -36,6 +36,7 @@
       "path": "/calendar.html?eventTypeNo=1&type-display=0&area-display=0",
       "selector": "#calListTable tr.calListRow:has(.calPageLink)",
       "container": "#calListTable",
+      "dateSelector": "td.date",
       "description": "イベントカレンダーの今月の一覧を開き、催しのある日ごとに、日付と催しの題を読みます。無いときは、0件と読みます"
     },
     {

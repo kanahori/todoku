@@ -94,6 +94,18 @@ test('container は list のカードにだけ、空でない文字列で書け�
   assert.match(errors[0].message, /list/);
 });
 
+test('dateSelector は list のカードにだけ、空でない文字列で書ける', () => {
+  const c = good();
+  c.cards = [
+    { id: 'a', title: 'A', action: 'list', selector: 'tr.row', dateSelector: 'td.date' },
+    { id: 'b', title: 'B', action: 'read', selector: 'main', dateSelector: 'td.date' },
+    { id: 'c', title: 'C', action: 'list', selector: 'ol li', dateSelector: ' ' },
+  ];
+  const errors = validateConfig(c);
+  assert.deepEqual(errors.map((e) => e.where), ['cards[1].dateSelector', 'cards[2].dateSelector']);
+  assert.match(errors[0].message, /list/);
+});
+
 test('頭の description は、あれば文字列であること', () => {
   assert.deepEqual(validateConfig({ ...good(), description: '出典：作り物のサイト（https://example.com/）を加工して作成' }), []);
   assert.deepEqual(validateConfig({ ...good(), description: 3 }).map((e) => e.where), ['description']);

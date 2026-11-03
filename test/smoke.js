@@ -167,6 +167,19 @@ async function main() {
   const altRead = await runCard(BrowserWindow, altConfig, 'all');
   check('画像の説明: 読むカードでも、行の中の重なりを一度だけ読む', altRead.ok && altRead.text === altExpected.join('\n'), altRead.text);
   closeTarget('alt-text');
+
+  // 日だけの表: 日付の要素の id か datetime に書かれた年・月・日から「11月6日」と読む。読めない行は書いてあるまま。
+  const calConfig = { id: 'calendar', name: 'あおば町のイベントカレンダー（作り物）', url: 'fixture:calendar.html',
+    cards: [{ id: 'events', title: 'イベント', action: 'list', selector: '#events tr.row', dateSelector: 'td.date' }] };
+  const cal = await runCard(BrowserWindow, calConfig, 'events');
+  check('日付: 日の欄の id や datetime から月を足して「11月6日 金曜」と読み、月の分からない行は書いてあるまま読む',
+    cal.ok && JSON.stringify(cal.items) === JSON.stringify(['11月6日 金曜 町民まつり', '11月7日 土曜 図書館のおはなし会', '8 日曜 月の書いていない行']), cal.items);
+  const laterConfig = { ...calConfig, cards: [{ id: 'later', title: 'イベント', action: 'list', selector: '#later tr.row', dateSelector: 'td.date' }] };
+  closeTarget('calendar');
+  const later = await runCard(BrowserWindow, laterConfig, 'later');
+  check('日付: 読み込んだ直後の日付の無い仮の行は読まず、日付つきの行に描き直されるまで待って読む',
+    later.ok && JSON.stringify(later.items) === JSON.stringify(['12月5日 土曜 冬の音楽会', '12月12日 土曜 もちつき大会']), later.items);
+  closeTarget('calendar');
   const garbage = await runCard(BrowserWindow, city, 'garbage');
   check('ごみの日の表を 3行読める', garbage.ok && garbage.text.startsWith('3件あります。'), garbage);
 
