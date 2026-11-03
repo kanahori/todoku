@@ -562,6 +562,10 @@ async function generateChecks() {
     if (first.ok) {
       const table = await runCard(BrowserWindow, first.config, first.config.cards[0].id, { waitMs: 500 });
       check('カードを作る: 主な表のカードで、8行を読める', table.ok && table.items.length === 8 && table.items[0] === 'あおば市 大雨注意報', table.items);
+      const towns = await runCard(BrowserWindow, first.config, first.config.cards[3].id, { waitMs: 500 });
+      check('表の行: 見出しの列のほかの升目が全部空なら「さくら町 なし」と読み、一部だけ空の行（みどり市）には付けない',
+        towns.ok && towns.items.length === 12 && towns.items[0] === 'あおば市 大雨注意報 雷注意報' && towns.items[1] === 'みどり市 雷注意報'
+          && towns.items[2] === 'さくら町 なし' && towns.items.filter((t) => t.endsWith(' なし')).length === 5, towns.items);
       store.remove(first.config.id);
     }
     if (second.ok) store.remove(second.config.id);

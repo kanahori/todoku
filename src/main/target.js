@@ -275,7 +275,18 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
             }
           }
           const body = oneLine(textLines(it, false, 'item', replace));
-          return `${head}${body}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
+          // 表の行で、見出しの列（th。無ければ最初の升目）にだけ文字があり、残りの升目が全部空なら、名前の後に「なし」と読む。
+          // 名前だけ（「水戸市」）では、何も無いのか読めなかったのか分からなかった（2026-11-04 の Windows の確かめ）。
+          let none = '';
+          if (it.tagName === 'TR') {
+            const cells = [...it.cells];
+            let heads = cells.filter((c) => c.tagName === 'TH');
+            if (heads.length === 0) heads = cells.slice(0, 1);
+            const rest = cells.filter((c) => !heads.includes(c));
+            const empty = (c) => !(c.textContent || '').trim() && !c.querySelector('img[alt]:not([alt=""]), [aria-label]');
+            if (rest.length > 0 && rest.every(empty) && heads.some((h) => (h.textContent || '').trim())) none = ' なし';
+          }
+          return `${head}${body}${none}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
         });
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
