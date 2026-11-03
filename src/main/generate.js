@@ -257,6 +257,30 @@ function pageInspect(tryOne, cards) {
     const lm = region.closest(LANDMARKS);
     return lm ? clean(lm.getAttribute('aria-label')) : '';
   };
+  // その場所の中の短い文字を、出てくる順に（6つまで）。題が地名の一語のときに、代わりの題を探すのに使う。
+  const shortTexts = (region) => {
+    const out = [];
+    if (!region) return out;
+    const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
+    for (let k = 0; k < 200 && out.length < 6 && walker.nextNode(); k++) {
+      const parent = walker.currentNode.parentElement;
+      if (!parent || ['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE'].includes(parent.tagName) || hidden(parent)) continue;
+      const t = clean(walker.currentNode.nodeValue);
+      if (t && t.length <= SHORT_MAX && /[A-Za-zぁ-んァ-ヶ一-龠]/.test(t.replace(/[年月日時分秒曜]/g, ''))) out.push(t);
+    }
+    return out;
+  };
+  // 読む・一覧のカードの中身の文字（題と同じ一語だけのカードを落とすのに使う）。押すカードは見ない。
+  const bodyOf = (c) => {
+    if (c.action === 'click') return '';
+    let els = [];
+    try {
+      els = c.action === 'list' ? [...document.querySelectorAll(c.selector)] : [one(c.selector)].filter(Boolean);
+    } catch (e) {
+      return '';
+    }
+    return clean(els.map((e) => e.innerText || e.textContent).join(' ')).slice(0, 80);
+  };
   const firstShortText = (region) => {
     const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
     for (let k = 0; k < 200 && walker.nextNode(); k++) {
@@ -280,7 +304,8 @@ function pageInspect(tryOne, cards) {
     let title = nameOf(one(c.titleSelector));
     if (!title && c.action === 'click' && probe.count === 1) title = nameOf(one(c.selector));
     if (!title && probe.count > 0) title = placeName(regionOf(c));
-    return { count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200) };
+    const region = probe.count > 0 ? regionOf(c) : null;
+    return { count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200), body: bodyOf(c), texts: shortTexts(region) };
   });
 }
 
@@ -292,8 +317,27 @@ function cleanTitle(text, max = TITLE_MAX) {
   return String(text || '').replace(/\s+/g, ' ').trim().slice(0, max).trim();
 }
 
+// 地名の一語（「全国」「あおば県」「みどり市」など）。題がこれだけだと、何のカードか分からない。
+const PLACE_WORD = /^(全国|日本|国内|[一-龠ぁ-んァ-ヶー]{1,6}(都|道|府|県|市|区|町|村|郡|地方))$/;
+function isPlaceWord(text) {
+  return PLACE_WORD.test(text);
+}
+
+// 題が地名の一語になる読む・一覧のカードと、題の手がかりの無い検索のカードの題。
+// 中の短い文字のうち、題と違い、地名の一語でもない最初のものを題にする。無ければ操作の種類から作る。
+// 気象庁の警報のページで、「全国」「茨城県」「検索 1」という題のカードができた（2026-11-03 の Windows の確かめ）。
+function betterTitle(c, title, probe) {
+  const texts = Array.isArray(probe.texts) ? probe.texts : [];
+  const alt = texts.map((t) => cleanTitle(t)).find((t) => t && t !== title && !isPlaceWord(t));
+  if (alt) return alt;
+  if (c.role === 'search') return '検索する';
+  if (c.action === 'read') return `${title}の情報`;
+  return '地域を選ぶ';
+}
+
 // 試した結果から、残すカードを選び、題と id を付ける。
-// 落とすもの: 当たらない・中身が空（read は文字あり・list は1件以上・click は当たる数ちょうど1 でないもの）・同じ所の重なり。
+// 落とすもの: 当たらない・中身が空（read は文字あり・list は1件以上・click は当たる数ちょうど1 でないもの）・同じ所の重なり・
+// 中身が題と同じ一語だけの読む・一覧のカード（読んでも題をくり返すだけのため）。
 function pickCards(candidates, probes) {
   const cards = [];
   const seen = new Set();
@@ -307,6 +351,8 @@ function pickCards(candidates, probes) {
     if (seen.has(key)) return;
     seen.add(key);
     let title = cleanTitle(probe.title);
+    if (c.action !== 'click' && title && cleanTitle(probe.body) === title) return;
+    if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
     if (!title) {
       perRole[c.role] = (perRole[c.role] || 0) + 1;
       title = `${ROLE_LABELS[c.role]} ${perRole[c.role]}`;

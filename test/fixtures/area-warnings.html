@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば県」）。気象庁の警報のページで見た作り（地域の道しるべに「全国」の一語・県の見出しの下の町の一覧・名前の無い検索のボタン）をまねる。 -->
+<!-- 設定ファイルの無いページから作った束で、題が地名の一語や「検索 1」にならないか、中身が題と同じ一語だけのカードを作らないかの試し。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>警報と注意報の地域（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <header>
+    <form class="find" role="search">
+      <input type="text" class="word">
+      <button type="button" class="go"><span class="icon"></span></button>
+    </form>
+  </header>
+  <main>
+    <h1>警報と注意報（作り物）</h1>
+    <div class="crumb"><h2>全国</h2></div>
+    <section class="pref">
+      <h3>あおば県</h3>
+      <ul class="towns">
+        <li><a href="#aoba">あおば町</a></li>
+        <li><a href="#midori">みどり町</a></li>
+        <li><a href="#sakura">さくら町</a></li>
+      </ul>
+    </section>
+    <section class="today">
+      <h3>あおば県</h3>
+      <p>大雨注意報が出ています。</p>
+      <p>川には近づかないでください。</p>
+    </section>
+  </main>
+</body>
+</html>

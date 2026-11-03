@@ -155,6 +155,30 @@ test('試した結果で残すカードを選ぶ: 当たらない・空・押す
   assert.equal(capped[7].title, '本文 8');
 });
 
+test('題が地名の一語のカードと、題の手がかりの無い検索のカード: 中の短い文字か操作の種類を題にし、中身が題と同じ一語だけのカードは作らない', () => {
+  const candidates = [
+    { role: 'heading', action: 'read', selector: '.crumb', container: '', titleSelector: '' },
+    { role: 'list', action: 'list', selector: '.towns li', container: '.towns', titleSelector: '' },
+    { role: 'main', action: 'read', selector: '.today', container: '', titleSelector: '' },
+    { role: 'main', action: 'read', selector: '.area', container: '', titleSelector: '' },
+    { role: 'search', action: 'click', selector: '.go', container: '', titleSelector: '' },
+    { role: 'search', action: 'click', selector: '.go2', container: '', titleSelector: '' },
+    { role: 'menu', action: 'click', selector: '#town', container: '', titleSelector: '' },
+  ];
+  const probes = [
+    { count: 1, hasText: true, containerOk: false, title: '全国', body: '全国', texts: ['全国'] },
+    { count: 3, hasText: true, containerOk: true, title: 'あおば県', body: 'あおば町 みどり町 さくら町', texts: ['あおば町', 'みどり町', 'さくら町'] },
+    { count: 1, hasText: true, containerOk: false, title: 'あおば県', body: 'あおば県 大雨注意報が出ています。', texts: ['あおば県', '大雨注意報が出ています。'] },
+    { count: 1, hasText: true, containerOk: false, title: 'みどり市', body: 'みどり市 長い説明の文だけがあります', texts: ['みどり市'] },
+    { count: 1, hasText: true, containerOk: false, title: '', body: '', texts: [] },
+    { count: 1, hasText: true, containerOk: false, title: '', body: '', texts: ['くわしく探す'] },
+    // 押すカードの題が地名なのは、押す所の名前なので、そのまま。
+    { count: 1, hasText: true, containerOk: false, title: 'さくら町', body: '', texts: ['さくら町'] },
+  ];
+  assert.deepEqual(pickCards(candidates, probes).map((c) => c.title),
+    ['地域を選ぶ', '大雨注意報が出ています。', 'みどり市の情報', '検索する', 'くわしく探す', 'さくら町']);
+});
+
 test('束の名前はページの title（長ければ切る）。無ければホスト名、それも無ければ「新しいページ」', () => {
   assert.equal(deckName('  作り物の町\n のお知らせ ', 'https://example.com/'), '作り物の町 のお知らせ');
   assert.equal(deckName('あ'.repeat(60), 'https://example.com/').length, 40);

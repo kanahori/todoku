@@ -398,6 +398,28 @@ async function generateChecks() {
       titled.ok ? titled.config.cards.map((c) => c.title) : titled);
     if (titled.ok) store.remove(titled.config.id);
 
+    // 地名の一語と検索: 気象庁の警報のページで「全国」（中身も「全国」だけ）・「茨城県」・「検索 1」のカードができた（2026-11-03 の Windows の確かめ）。
+    // 中身が題と同じ一語だけのカードは作らず、題が地名の一語になるときは中の短い文か操作の種類を、手がかりの無い検索は「検索する」を題にする。
+    const area = await generateDeck({
+      BrowserWindow,
+      url: 'fixture:area-warnings.html',
+      callModel: async () => ({
+        cards: [
+          noTitle('heading', 'read', '.crumb'),
+          noTitle('list', 'list', '.towns li', '.towns'),
+          noTitle('main', 'read', '.today'),
+          noTitle('search', 'click', '.find .go'),
+        ],
+      }),
+      store,
+      allowFixtures: true,
+    });
+    check('カードを作る: 中身が題と同じ一語だけのカード（全国）は作らず、地名の一語の題は「地域を選ぶ」や中の短い文に、手がかりの無い検索は「検索する」にする',
+      area.ok && area.dropped === 1
+        && JSON.stringify(area.config.cards.map((c) => c.title)) === JSON.stringify(['地域を選ぶ', '大雨注意報が出ています。', '検索する']),
+      area.ok ? { dropped: area.dropped, titles: area.config.cards.map((c) => c.title) } : area);
+    if (area.ok) store.remove(area.config.id);
+
     // 待ち方: 主な区画（main）が空のうちと、ページが変わり続けているうちは、構造を集めない（表を後から描くページ）。
     let lateStructure = '';
     const started = Date.now();
