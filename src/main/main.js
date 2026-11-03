@@ -8,7 +8,10 @@ const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
 const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget, closeAllTargets } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
-const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
+const { createOverrideStore, applyOverrides, runCardWithAutoRepair, withTimeout } = require('./autofix');
+
+// 支援者の直しの案（repair:propose）で、Claude の一回の呼び出しを待つ長さの上限（SDK の既定は10分で、2回までやり直す。見直しの10）。
+const PROPOSE_TIMEOUT_MS = 120 * 1000;
 const { sourceOpenedMessage } = require('./messages');
 const {
   GenerateSchema, generateDeck, createGeneratedStore, failureMessage, doneMessage, exportDeck, exportedMessage,
@@ -153,8 +156,12 @@ ipcMain.handle('repair:propose', async (_event, appId) => {
   try {
     const problems = await checkCards(BrowserWindow, config);
     if (problems.length === 0) return { ok: true, proposals: [], errors: [] };
-    // Electron の通信（net.fetch）を使い、学内のプロキシの設定に従わせる。
-    const callModel = createClaudeCaller({ fetch: net.fetch.bind(net) });
+    // Electron の通信（net.fetch）を使い、学内のプロキシの設定に従わせる。一回の呼び出しは PROPOSE_TIMEOUT_MS で止める。
+    const caller = createClaudeCaller({ fetch: net.fetch.bind(net) });
+    const callModel = (req) => {
+      const controller = new AbortController();
+      return withTimeout(caller({ ...req, signal: controller.signal }), PROPOSE_TIMEOUT_MS, controller);
+    };
     const result = await proposeRepairs({ BrowserWindow, config, problems, callModel });
     lastProposals.set(appId, result.proposals);
     return { ok: true, ...result };
@@ -172,15 +179,24 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
   const wanted = new Set((Array.isArray(acceptedWheres) ? acceptedWheres : []).map(String));
   const accepted = proposals.filter((p) => wanted.has(p.where) && p.newSelector);
   if (accepted.length === 0) return { ok: false, message: '採った案がありません' };
-  const next = applyRepairs(config, accepted);
-  saveConfigFile(file, next, path.join(app.getPath('userData'), 'config-backups'));
-  const reloaded = loadConfigFile(file);
-  if (!reloaded.config) return { ok: false, message: '書き直した設定ファイルが読めません' };
-  baseConfigs.set(appId, reloaded.config);
-  refreshEffective(appId);
-  lastProposals.delete(appId);
-  const problems = await checkCards(BrowserWindow, configs.get(appId));
-  return { ok: true, written: accepted.length, problems };
+  // 書く・読み直す・点検し直すの途中で失敗しても、画面に理由を返す（前は try が無く、画面の側は例外だけを受けた。見直しの10）。
+  try {
+    const next = applyRepairs(config, accepted);
+    saveConfigFile(file, next, path.join(app.getPath('userData'), 'config-backups'));
+    const reloaded = loadConfigFile(file);
+    if (!reloaded.config) return { ok: false, message: '書き直した設定ファイルが読めません' };
+    baseConfigs.set(appId, reloaded.config);
+    refreshEffective(appId);
+    lastProposals.delete(appId);
+  } catch (e) {
+    return { ok: false, message: `設定ファイルに書けませんでした: ${e.message}` };
+  }
+  try {
+    const problems = await checkCards(BrowserWindow, configs.get(appId));
+    return { ok: true, written: accepted.length, problems };
+  } catch (e) {
+    return { ok: true, written: accepted.length, problems: [], message: `書きましたが、点検し直せませんでした: ${e.message}` };
+  }
 });
 
 // Claude を呼ぶ関数を作る。鍵が無ければ null（自動では直さず、「自動で直すこともできませんでした（Claude の鍵がありません）。」と知らせる）。
