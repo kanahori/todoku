@@ -513,6 +513,15 @@ async function autoRepairChecks() {
   }
 }
 
+// カードの画面の試しの待ちは、カードの画面の窓の中の時計で待つ（窓の中で setTimeout を置き、それが動くまで待つ）。
+// 画面は知らせを 50ミリ秒遅らせて知らせの欄に入れる（announce）。窓を出さない試しでは、Mac で隠れた窓の中の 50ミリ秒のタイマーが
+// 実際には 100〜200ミリ秒で動く（2026-11-04 に測った。主の処理のタイマーは 50〜52ミリ秒。backgroundThrottling: false・
+// Chromium の間引きを止める切り替え・powerSaveBlocker のどれでも変わらなかった）。主の処理の時計で 150ミリ秒待ってから読むと、
+// 知らせがまだ入っておらず、書き出し・消す・探す欄の知らせの試しが落ちた。窓の中の時計で待てば、先に置かれた知らせのタイマーが必ず先に動く。
+function pageWait(win) {
+  return (ms) => win.webContents.executeJavaScript(`new Promise((r) => setTimeout(r, ${Number(ms)}))`);
+}
+
 // カードの画面（src/renderer）の焦点の試し。cardsApi は偽物（test/renderer-preload.js）。
 // 2026-11-03 の Windows の確かめで、すぐ結果が返るカードでは「読んでいます。」の項目に焦点を移した直後にその項目が消え、
 // NVDA が焦点を見失った。すぐ返るときは読み込み中の項目を出さずに結果の最初へ、時間がかかるときは読み込み中の項目から結果の最初へ、
@@ -520,13 +529,12 @@ async function autoRepairChecks() {
 async function rendererFocusChecks() {
   const win = new BrowserWindow({
     show: false,
-    // 隠した窓でもタイマーを間引かせない（知らせの欄に 50ミリ秒遅れて入る文を、決まった待ちで読むため）。
-    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   try {
     await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
     const js = (code) => win.webContents.executeJavaScript(code);
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const wait = pageWait(win);
     const cardCount = () => js("document.querySelectorAll('#deck > article.card').length");
     for (let k = 0; k < 50 && (await cardCount()) < 3; k++) await wait(50);
     const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
@@ -756,13 +764,12 @@ async function rendererFocusChecks() {
 async function rendererGenerateChecks() {
   const win = new BrowserWindow({
     show: false,
-    // 隠した窓でもタイマーを間引かせない（知らせの欄に 50ミリ秒遅れて入る文を、決まった待ちで読むため）。
-    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   try {
     await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
     const js = (code) => win.webContents.executeJavaScript(code);
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const wait = pageWait(win);
     for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
     const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
     const headings = () => js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
@@ -895,7 +902,7 @@ async function openRendererWindow(settingsStore) {
   // 隠した窓でも、中身に焦点を渡す（:focus の見た目を測るため）。
   win.webContents.focus();
   const js = (code) => win.webContents.executeJavaScript(code);
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const wait = pageWait(win);
   for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
   const t = {
     win,
@@ -1148,6 +1155,8 @@ async function rendererSearchChecks(settingsStore) {
       composing.tag === 'INPUT' && composing.value === '一覧' && keyCode229 === 229, { composing, keyCode229 });
 
     // 欄の中の Enter で、最初の見つかったカードへ。
+    // 「一覧」と打ってから 0.4秒で数を知らせる（打ち終えてからの知らせ）。それが済んでから数え始め、Enter の知らせだけを数える。
+    await t.wait(600);
     await t.watchSaid();
     await t.key('Enter');
     await t.wait(150);
