@@ -228,18 +228,52 @@ function pageInspect(tryOne, cards) {
     }
     return '';
   };
-  const precedingHeading = (region) => {
+  const precedingHeadingEl = (region) => {
     let anc = region.parentElement;
     for (let depth = 0; anc && depth < 4; depth++, anc = anc.parentElement) {
       const before = [...anc.querySelectorAll(HEADINGS)]
         .filter((h) => !region.contains(h) && !hidden(h) && (h.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING));
       for (let k = before.length - 1; k >= 0; k--) {
-        const t = nameOf(before[k]);
-        if (t) return t;
+        if (nameOf(before[k])) return before[k];
       }
     }
-    return '';
+    return null;
   };
+  const precedingHeading = (region) => {
+    const h = precedingHeadingEl(region);
+    return h ? nameOf(h) : '';
+  };
+  // Claude が返した題の元（titleSelector）が、その場所の題として合っているか。
+  // 場所の中か、場所を囲む要素か、場所の直前の見出しか、場所（か3段上まで）のすぐ前の要素のときだけ使う。
+  // 合わない題の元を使うと、題と中身がずれた（「…ご案内 2」が目次で、「目次 2」が資料の一覧。2026-11-04 の Windows の確かめ）。
+  const titleFits = (el, region) => {
+    if (!el || !region) return false;
+    if (region.contains(el) || el.contains(region) || precedingHeadingEl(region) === el) return true;
+    for (let n = region, d = 0; n && d < 3; n = n.parentElement, d++) {
+      const p = n.previousElementSibling;
+      if (p && (p === el || p.contains(el))) return true;
+    }
+    return false;
+  };
+  // 目次: 中のリンクの多く（8割以上・2つ以上）が、同じページの中の、本当にある所（id）を指す一覧。
+  const isToc = (region) => {
+    if (!region) return false;
+    const links = [...region.querySelectorAll('a[href]')];
+    const inPage = links.filter((a) => {
+      const href = a.getAttribute('href');
+      if (!/^#./.test(href)) return false;
+      try {
+        return Boolean(document.getElementById(decodeURIComponent(href.slice(1))));
+      } catch (e) {
+        return false;
+      }
+    }).length;
+    return links.length >= 2 && inPage / links.length >= 0.8;
+  };
+  // パンくず（いまのページの場所の道しるべ）。読んでも中身が分からないので、カードにしない。
+  const CRUMB = '[class*="breadcrumb" i], [class*="topicpath" i], [class*="pankuzu" i], [id*="breadcrumb" i], [id*="topicpath" i], '
+    + '[id*="pankuzu" i], [aria-label*="パンくず"]';
+  const isCrumb = (region) => Boolean(region && (region.closest(CRUMB) || region.querySelector(CRUMB)));
   const labelledBy = (region) => {
     let n = region;
     for (let depth = 0; n && n !== document.body && depth < 5; depth++, n = n.parentElement) {
@@ -301,11 +335,17 @@ function pageInspect(tryOne, cards) {
   return cards.map((c) => {
     const probe = tryOne(c.selector);
     const containerOk = Boolean(c.container && one(c.container));
-    let title = nameOf(one(c.titleSelector));
-    if (!title && c.action === 'click' && probe.count === 1) title = nameOf(one(c.selector));
-    if (!title && probe.count > 0) title = placeName(regionOf(c));
     const region = probe.count > 0 ? regionOf(c) : null;
-    return { count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200), body: bodyOf(c), texts: shortTexts(region) };
+    const titleEl = one(c.titleSelector);
+    let title = titleFits(titleEl, region) ? nameOf(titleEl) : '';
+    if (!title && c.action === 'click' && probe.count === 1) title = nameOf(one(c.selector));
+    if (!title && probe.count > 0) title = placeName(region);
+    // 題が重なったときに、番号でなく別の題にするための候補（場所の中の見出し・直前の見出し・中の短い文字）。
+    const alts = region ? [innerHeading(region), precedingHeading(region), ...shortTexts(region)].filter(Boolean) : [];
+    return {
+      count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200), body: bodyOf(c), texts: shortTexts(region),
+      alts: alts.map((t) => t.slice(0, 200)), toc: c.action !== 'click' && isToc(region), crumb: isCrumb(region),
+    };
   });
 }
 
@@ -313,8 +353,30 @@ function buildInspectScript(candidates) {
   return `(${pageInspect.toString()})(${pageTry.toString()}, ${JSON.stringify(candidates)})`;
 }
 
+// 題と束の名前は、長ければ語の切れ目（読点・空白・括弧・スラッシュの前か、閉じ括弧の後）で切る。
+// 語の途中で切れた（「…／つくば市公」「…（予約電話番号、利用方」。2026-11-04 の Windows の確かめ）。
+// 切れ目が前すぎる（上限の半分より前）ときだけ、上限の字数で切る。
+const CUT_BEFORE = /[、。，．,\s／/｜|（(「『【［[〔・：:－—–〜~]/;
+const CUT_AFTER = /[）)」』】］\]〕]/;
 function cleanTitle(text, max = TITLE_MAX) {
-  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, max).trim();
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  let cut = -1;
+  for (let i = max; i > 0; i--) {
+    if (CUT_BEFORE.test(t[i]) || CUT_AFTER.test(t[i - 1])) {
+      cut = i;
+      break;
+    }
+  }
+  let head = cut >= Math.floor(max / 2) ? t.slice(0, cut) : t.slice(0, max);
+  // 開いたまま閉じていない括弧が残るなら、その括弧の前で切る（「…（予約電話番号」としない）。
+  const open = Math.max(...['（', '(', '「', '『', '【', '［', '['].map((b) => {
+    const at = head.lastIndexOf(b);
+    const close = { '（': '）', '(': ')', '「': '」', '『': '』', '【': '】', '［': '］', '[': ']' }[b];
+    return at >= 0 && head.indexOf(close, at) < 0 ? at : -1;
+  }));
+  if (open >= Math.floor(max / 2)) head = head.slice(0, open);
+  return head.replace(/[、。，．,\s・：:－—–〜~]+$/, '').trim();
 }
 
 // 地名の一語（「全国」「あおば県」「みどり市」など）。題がこれだけだと、何のカードか分からない。
@@ -362,6 +424,7 @@ function pickCards(candidates, probes) {
   const seen = new Set();
   const titles = new Set();
   const perRole = {};
+  let tocTaken = false;
   candidates.forEach((c, k) => {
     if (cards.length >= MAX_CARDS) return;
     const probe = probes[k];
@@ -372,13 +435,27 @@ function pickCards(candidates, probes) {
     let title = cleanTitle(probe.title);
     const body = cleanTitle(probe.body, 200);
     if (c.action !== 'click' && ((title && body === title) || isOneWord(body))) return;
+    // パンくずと、題が「現在のページ」のカードは作らない。
+    if (probe.crumb || /^現在(の)?(ページ|位置|地)$/.test(title)) return;
+    // 目次は「目次を読む」の一枚にまとめる（二つ目からは作らない）。
+    if (probe.toc || /^目次/.test(title)) {
+      if (tocTaken) return;
+      tocTaken = true;
+      title = '目次を読む';
+    }
     if (c.action === 'click' && title) title = clickTitle(title);
     if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
     if (!title) {
       perRole[c.role] = (perRole[c.role] || 0) + 1;
       title = `${ROLE_LABELS[c.role]} ${perRole[c.role]}`;
     }
+    // 題が重なったら、番号を付ける前に、場所の中の見出し・直前の見出し・中の短い文字から、まだ使っていない題を探す。
     let unique = title;
+    if (titles.has(unique)) {
+      const alt = (Array.isArray(probe.alts) ? probe.alts : []).map((t) => cleanTitle(t))
+        .find((t) => t.length >= 2 && !titles.has(t) && !isPlaceWord(t) && t !== body);
+      if (alt) unique = alt;
+    }
     for (let n = 2; titles.has(unique); n++) unique = `${title} ${n}`;
     titles.add(unique);
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
@@ -389,8 +466,10 @@ function pickCards(candidates, probes) {
 }
 
 // 束の名前: ページの title。無ければ URL のホスト名、それも無ければ「新しいページ」。
+// 「ページの題／サイトの名前」「ページの題 | サイトの名前」の形なら、ページの題の所だけを使う。
 function deckName(title, url) {
-  const name = cleanTitle(title, NAME_MAX);
+  const parts = String(title || '').split(/\s*[｜|／]\s*|\s+[-–—]\s+/).map((p) => p.trim()).filter(Boolean);
+  const name = cleanTitle(parts.length > 1 && parts[0].length >= 2 ? parts[0] : title, NAME_MAX);
   if (name) return name;
   try {
     const host = new URL(url).hostname;

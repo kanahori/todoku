@@ -191,6 +191,36 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
     ['市町村を選ぶ', 'サイト内を検索する', '施設を検索する']);
 });
 
+test('題と束の名前: 長ければ語の切れ目で切り、「ページの題／サイトの名前」はページの題だけにする', () => {
+  // 束の名前（40字まで）: サイトの名前を外す。
+  assert.equal(deckName('路線バスのご案内／あおば町公式ウェブサイト', 'https://example.com/'), '路線バスのご案内');
+  assert.equal(deckName('自転車の貸し出し | あおば町', 'https://example.com/'), '自転車の貸し出し');
+  assert.equal(deckName('お知らせ - あおば町', 'https://example.com/'), 'お知らせ');
+  // 語の切れ目（括弧の前・読点の前）で切る。
+  const long = 'あおば町の路線バスと乗り合いタクシーのご案内と時刻表の見方（予約電話番号、利用方法）';
+  assert.equal(deckName(long, 'https://example.com/'), 'あおば町の路線バスと乗り合いタクシーのご案内と時刻表の見方');
+  // カードの題（30字まで）
+  const candidates = [{ role: 'main', action: 'read', selector: '.a', container: '', titleSelector: '' }];
+  const probes = [{ count: 1, hasText: true, containerOk: false, title: '乗り合いタクシーの使い方と予約の仕方（予約電話番号、利用方法）', body: '本文の文があります。', texts: [] }];
+  assert.deepEqual(pickCards(candidates, probes).map((c) => c.title), ['乗り合いタクシーの使い方と予約の仕方']);
+});
+
+test('作った束: パンくずと「現在のページ」は作らず、目次は「目次を読む」の一枚にまとめ、重なった題は番号でなく中の見出しにする', () => {
+  const card = (selector, action = 'list') => ({ role: 'list', action, selector, container: '', titleSelector: '' });
+  const candidates = [card('.crumb li'), card('.here', 'read'), card('.toc li'), card('.toc2 li'), card('.s1', 'read'), card('.s2', 'read'), card('.s3', 'read')];
+  const p = (o) => ({ count: 2, hasText: true, containerOk: false, body: '本文の文があります。 二つ目の文です。', texts: [], alts: [], ...o });
+  const probes = [
+    p({ title: 'トップ', crumb: true }),
+    p({ title: '現在のページ' }),
+    p({ title: '路線バスのご案内', toc: true }),
+    p({ title: '資料の一覧', toc: true }),
+    p({ title: '利用方法', alts: ['利用方法', '予約のしかた'] }),
+    p({ title: '利用方法', alts: ['利用方法', '乗り方'] }),
+    p({ title: '利用方法', alts: ['利用方法'] }),
+  ];
+  assert.deepEqual(pickCards(candidates, probes).map((c) => c.title), ['目次を読む', '利用方法', '乗り方', '利用方法 2']);
+});
+
 test('束の名前はページの title（長ければ切る）。無ければホスト名、それも無ければ「新しいページ」', () => {
   assert.equal(deckName('  作り物の町\n のお知らせ ', 'https://example.com/'), '作り物の町 のお知らせ');
   assert.equal(deckName('あ'.repeat(60), 'https://example.com/').length, 40);

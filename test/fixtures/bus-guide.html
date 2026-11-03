@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」の路線バスの案内）。自治体の案内のページで見た作り（パンくず・目次・同じ見出しの節・資料の一覧・検索）をまねる。 -->
+<!-- 設定ファイルの無いページから作った束で、パンくずを作らず、目次を一枚にまとめ、重なった題を番号でなく中の見出しにするかの試し。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>路線バスのご案内（予約電話番号、利用方法）／あおば町公式ウェブサイト（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <header>
+    <form class="find" role="search"><input type="text" aria-label="サイト内の言葉"><button type="button">検索</button></form>
+    <nav class="breadcrumb" aria-label="パンくずリスト">
+      <ul class="crumb"><li><a href="#top">トップ</a></li><li><a href="#kurashi">くらし</a></li><li>路線バスのご案内</li></ul>
+    </nav>
+    <p class="now"><span>現在のページ</span></p>
+  </header>
+  <main>
+    <h1>路線バスのご案内</h1>
+    <h2 class="toc-title">目次</h2>
+    <ul class="toc">
+      <li><a href="#bus">路線バス</a></li>
+      <li><a href="#taxi">乗り合いタクシー</a></li>
+    </ul>
+    <section class="bus" id="bus">
+      <h2>利用方法</h2>
+      <p>路線バスは、町の中を一時間に一本走っています。乗るときに整理券を取ってください。</p>
+    </section>
+    <section class="taxi" id="taxi">
+      <h2>利用方法</h2>
+      <h3>予約のしかた</h3>
+      <p>乗り合いタクシーは、前の日までに電話で予約してください。電話の番号は、役場の窓口でお知らせします。</p>
+    </section>
+    <h2 class="docs-title">資料のダウンロード</h2>
+    <ul class="docs">
+      <li><a href="files/bus-map.pdf">路線図</a></li>
+      <li><a href="files/timetable.pdf">時刻表</a></li>
+    </ul>
+  </main>
+</body>
+</html>

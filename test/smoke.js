@@ -443,6 +443,32 @@ async function generateChecks() {
       area.ok ? { dropped: area.dropped, titles: area.config.cards.map((c) => c.title) } : area);
     if (area.ok) store.remove(area.config.id);
 
+    // 案内のページ: パンくず・「現在のページ」は作らず、目次は「目次を読む」の一枚にまとめ、Claude の題の元が場所に合わなければ使わず、
+    // 重なった題は番号でなく中の見出しにし、束の名前はサイトの名前を外して語の切れ目で切る（2026-11-04 の Windows の確かめ）。
+    const withTitle = (role, action, selector, titleSelector) => ({ ...noTitle(role, action, selector), titleSelector });
+    const guide = await generateDeck({
+      BrowserWindow,
+      url: 'fixture:bus-guide.html',
+      callModel: async () => ({
+        cards: [
+          noTitle('list', 'list', '.crumb li'),
+          noTitle('other', 'read', '.now'),
+          withTitle('list', 'list', '.toc li', 'h1'),
+          withTitle('list', 'list', '.docs li', 'h2.toc-title'),
+          noTitle('main', 'read', 'section.bus'),
+          noTitle('main', 'read', 'section.taxi'),
+          noTitle('search', 'click', '.find button'),
+        ],
+      }),
+      store,
+      allowFixtures: true,
+    });
+    check('カードを作る: パンくずと「現在のページ」を作らず、目次は「目次を読む」に、合わない題の元は使わず、重なった題は中の見出しにし、押すカードは「サイト内を検索する」にする',
+      guide.ok && guide.dropped === 2 && guide.config.name === '路線バスのご案内（予約電話番号、利用方法）'
+        && JSON.stringify(guide.config.cards.map((c) => c.title)) === JSON.stringify(['目次を読む', '資料のダウンロード', '利用方法', '予約のしかた', 'サイト内を検索する']),
+      guide.ok ? { name: guide.config.name, dropped: guide.dropped, titles: guide.config.cards.map((c) => c.title) } : guide);
+    if (guide.ok) store.remove(guide.config.id);
+
     // 待ち方: 主な区画（main）が空のうちと、ページが変わり続けているうちは、構造を集めない（表を後から描くページ）。
     let lateStructure = '';
     const started = Date.now();
