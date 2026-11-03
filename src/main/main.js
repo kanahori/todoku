@@ -21,7 +21,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1000,
     height: 760,
-    title: 'カードの画面',
+    title: 'Todoku',
     backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),

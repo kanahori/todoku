@@ -54,7 +54,7 @@ if (process.env.UI_REPAIR_AUTO === '1') {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   app.whenReady().then(async () => {
     await wait(3000);
-    const win = BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'カードの画面');
+    const win = BrowserWindow.getAllWindows().find((w) => w.getTitle() === 'Todoku');
     const js = (code) => win.webContents.executeJavaScript(code);
     const status = () => js(`document.getElementById('status').textContent`);
     const section = `[...document.querySelectorAll('section.maint')].find((s) => s.querySelector('h3').textContent.startsWith('練習の講座（画面が変わった後'))`;

@@ -9,6 +9,11 @@ if (!process.versions.electron) {
 
 const path = require('node:path');
 const { app, BrowserWindow } = require('electron');
+// 落ちたときに、エラーのダイアログを出して止まらないようにする（試しは画面の前に人がいない前提で動くため）。
+// エラーは書き出し、終わりの番号 3 で終わる。
+const { dialog: errorDialog } = require('electron');
+errorDialog.showErrorBox = (title, content) => { console.log(`エラー: ${title} ${content}`); app.exit(3); };
+process.on('uncaughtException', (e) => { console.log(`エラー: ${e.stack}`); app.exit(3); });
 const { loadConfigFile } = require('../src/main/config');
 const { runCard, checkCards } = require('../src/main/target');
 
