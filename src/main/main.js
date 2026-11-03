@@ -4,9 +4,11 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { runCard, checkCards, showTarget } = require('./target');
+const { checkCards, showTarget } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
+const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
+const { sourceOpenedMessage } = require('./messages');
 const { proxySwitches } = require('./proxy');
 
 // 環境変数にプロキシがあれば、Electron に渡す（学内のネットワークで、外のページに届くように）。窓を作る前に渡す。
@@ -17,8 +19,31 @@ const CARDS_DIR = path.join(__dirname, '..', '..', 'cards');
 const CARDS_LOCAL_DIR = process.env.CARDS_LOCAL_DIR || null;
 
 // 読めた設定ファイル（id → 中身）と、その場所（id → ファイルのパス）。
+// configs は手元の自動の直しを当てた後の中身（カードを動かすときに使う）、baseConfigs は設定ファイルのままの中身。
 const configs = new Map();
+const baseConfigs = new Map();
 const configPaths = new Map();
+
+// 自動で直した所（手元にだけ効く上書き）。置き場は app.getPath('userData') の下の repairs/。
+let overrideStore = null;
+function store() {
+  if (!overrideStore) overrideStore = createOverrideStore(path.join(app.getPath('userData'), 'repairs'));
+  return overrideStore;
+}
+
+// 設定ファイルのままの中身に手元の直しを当てて、configs に持ち直す。当てた直しの一覧を返す。
+function refreshEffective(appId) {
+  const base = baseConfigs.get(appId);
+  if (!base) return [];
+  const { config, active } = applyOverrides(base, store().load(appId));
+  configs.set(appId, config);
+  return active;
+}
+
+// 画面に渡す直しの形（どのカード・前と後のセレクタ・理由・日時）。
+function repairView(r) {
+  return { cardId: r.cardId, title: r.title, action: r.action, before: r.before, after: r.after, reason: r.reason, at: r.at };
+}
 // 最後に作った直しの案（id → 案の一覧）。画面からは「どの場所の案を採るか」だけを受け取る。
 const lastProposals = new Map();
 
@@ -50,15 +75,18 @@ ipcMain.handle('configs:load', () => {
   if (CARDS_LOCAL_DIR) sources.push({ dir: CARDS_LOCAL_DIR, label: '手元' });
   const results = loadConfigSources(sources);
   configs.clear();
+  baseConfigs.clear();
   configPaths.clear();
+  const repairs = new Map();
   for (const r of results) {
     if (r.config) {
-      configs.set(r.config.id, r.config);
+      baseConfigs.set(r.config.id, r.config);
       configPaths.set(r.config.id, r.path);
+      repairs.set(r.config.id, refreshEffective(r.config.id).map(repairView));
     }
   }
-  // ファイルのパスは画面に渡さない。
-  return results.map(({ path: _p, ...rest }) => rest);
+  // ファイルのパスは画面に渡さない。設定ファイルは書いてあるままの中身を渡し、手元の直しは repairs で別に渡す。
+  return results.map(({ path: _p, ...rest }) => ({ ...rest, repairs: rest.config ? repairs.get(rest.config.id) || [] : [] }));
 });
 
 // 全部のカードを点検し、当たらない行の一覧を返す。
@@ -108,20 +136,79 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
   saveConfigFile(file, next, path.join(app.getPath('userData'), 'config-backups'));
   const reloaded = loadConfigFile(file);
   if (!reloaded.config) return { ok: false, message: '書き直した設定ファイルが読めません' };
-  configs.set(appId, reloaded.config);
+  baseConfigs.set(appId, reloaded.config);
+  refreshEffective(appId);
   lastProposals.delete(appId);
-  const problems = await checkCards(BrowserWindow, reloaded.config);
+  const problems = await checkCards(BrowserWindow, configs.get(appId));
   return { ok: true, written: accepted.length, problems };
 });
 
-ipcMain.handle('card:run', async (_event, appId, cardId) => {
+// Claude を呼ぶ関数を作る。鍵が無ければ null（自動では直さず、「自動で直せませんでした。」と知らせる）。
+function makeCallModel() {
+  if (!hasApiKey()) return null;
+  // Electron の通信（net.fetch）を使い、学内のプロキシの設定に従わせる。
+  return createClaudeCaller({ fetch: net.fetch.bind(net) });
+}
+
+// カードを動かす。当たらなければ、その場で自動で直す（autofix.js）。
+ipcMain.handle('card:run', async (event, appId, cardId) => {
   const config = configs.get(appId);
   if (!config) return { ok: false, where: '(なし)', message: `アプリ「${appId}」の設定ファイルがありません` };
   try {
-    return await runCard(BrowserWindow, config, cardId);
+    const result = await runCardWithAutoRepair({
+      BrowserWindow,
+      config,
+      cardId,
+      callModel: makeCallModel(),
+      store: store(),
+      onRepairing: () => { if (!event.sender.isDestroyed()) event.sender.send('card:repairing', { appId, cardId }); },
+    });
+    const { config: _next, repaired, ...rest } = result;
+    if (repaired) {
+      refreshEffective(appId);
+      return { ...rest, repaired: repairView(repaired) };
+    }
+    return rest;
   } catch (e) {
     return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
   }
+});
+
+// 自動で直した所の一覧（支援者の保守のカードで使う）。
+ipcMain.handle('repair:list', (_event, appId) => {
+  if (!baseConfigs.get(appId)) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
+  return { ok: true, repairs: refreshEffective(appId).map(repairView) };
+});
+
+// 自動で直したカードを、直す前に戻す（手元の上書きを外す）。
+ipcMain.handle('repair:undo', (_event, appId, cardId) => {
+  if (!baseConfigs.get(appId)) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
+  const removed = store().remove(appId, cardId);
+  refreshEffective(appId);
+  return removed ? { ok: true, repair: repairView(removed) } : { ok: false, message: 'このカードには、自動で直した所がありません。' };
+});
+
+// 自動で直した所を、設定ファイルに書く（配る）。書き方は「採る」の流れと同じ（書く前の中身を控えに残す）。
+ipcMain.handle('repair:publish', (_event, appId, cardId) => {
+  const base = baseConfigs.get(appId);
+  const file = configPaths.get(appId);
+  if (!base || !file) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
+  const active = refreshEffective(appId);
+  const r = active.find((x) => x.cardId === cardId);
+  const index = base.cards.findIndex((c) => c.id === cardId);
+  if (!r || index < 0) return { ok: false, message: 'このカードには、自動で直した所がありません。' };
+  try {
+    saveConfigFile(file, applyRepairs(base, [{ index, newSelector: r.after }]), path.join(app.getPath('userData'), 'config-backups'));
+  } catch (e) {
+    return { ok: false, message: '設定ファイルに書けませんでした。書いてよい置き場の設定ファイルか、確かめてください。' };
+  }
+  const reloaded = loadConfigFile(file);
+  if (!reloaded.config) return { ok: false, message: '書き直した設定ファイルが読めません。' };
+  baseConfigs.set(appId, reloaded.config);
+  // 設定ファイルに書いたので、手元の上書きは外す。
+  store().remove(appId, cardId);
+  refreshEffective(appId);
+  return { ok: true, message: `「${r.title}」の直しを、設定ファイルに書きました。` };
 });
 
 // 出典のページ（設定ファイルの sourceUrl）を既定のブラウザで開く。画面からは appId だけを受け取り、URL は受け取らない。
@@ -133,7 +220,7 @@ ipcMain.handle('source:open', async (_event, appId) => {
   if (!url) return { ok: false, message: '出典のページの書き方が正しくありません。' };
   try {
     await shell.openExternal(url);
-    return { ok: true, message: '出典のページを、既定のブラウザで開きました。' };
+    return { ok: true, message: sourceOpenedMessage() };
   } catch (e) {
     return { ok: false, message: '出典のページを開けませんでした。' };
   }

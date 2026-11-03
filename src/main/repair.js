@@ -32,13 +32,13 @@ function hasApiKey(env = process.env) {
 }
 
 // 本物の Claude を呼ぶ関数を作る。試しでは、同じ形の偽の関数を渡す。
-// 返すのは async ({ system, user }) => { proposals } 。
+// 返すのは async ({ system, user, signal }) => { proposals } 。signal（任意）で途中で止められる（自動で直すときの時間切れ）。
 function createClaudeCaller({ model = process.env.CARDS_REPAIR_MODEL || DEFAULT_MODEL, fetch } = {}) {
   // 鍵は環境変数 CARDS_ANTHROPIC_API_KEY から読み、明示して渡す。
   const Anthropic = require('@anthropic-ai/sdk');
   const { betaZodOutputFormat } = require('@anthropic-ai/sdk/helpers/beta/zod');
   const client = new Anthropic({ apiKey: process.env[API_KEY_ENV], ...(fetch ? { fetch } : {}) });
-  return async ({ system, user }) => {
+  return async ({ system, user, signal }) => {
     const response = await client.beta.messages.parse({
       model,
       max_tokens: 16000,
@@ -48,7 +48,7 @@ function createClaudeCaller({ model = process.env.CARDS_REPAIR_MODEL || DEFAULT_
       output_config: { effort: 'high', format: betaZodOutputFormat(RepairSchema) },
       system,
       messages: [{ role: 'user', content: user }],
-    });
+    }, signal ? { signal } : undefined);
     if (response.stop_reason === 'refusal') {
       throw new Error('Claude が案を作るのを断りました');
     }

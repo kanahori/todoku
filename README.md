@@ -12,6 +12,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - The app turns that config into a screen of plain buttons. A screen reader user moves with Tab and presses Enter or Space; the result is read out.
 - `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...". Text in images is read from their `alt` text and `aria-label`, and slides that a carousel hides with `aria-hidden` are still read, because the person asked for them.
 - When a web app changes its screen and a config line no longer matches, the app reports only which line fails. Claude then proposes a repaired selector from the page structure (with all text removed), and a person accepts or rejects each proposal.
+- On the user's side, the repair can also happen on the spot: when a card cannot find what it should read or press, and an API key is set, the app asks Claude for that one card, tries the proposal on the page that is already open, and adopts it only if it looks right. The fix is kept locally (see "Automatic repair on the user's side" below) and can be undone from the card.
 
 ## Getting started (Windows)
 
@@ -56,6 +57,16 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - Claude receives the failing lines (location in the config, card title, action, old selector) and that structure, and returns a proposed selector with a short reason (structured output).
 - Each proposal is tried on the current page and shown with the number of matches. A person chooses "accept" or "reject" for each one; only accepted proposals are written to the config file, and the previous file is backed up to the app's user data folder (`config-backups`).
 
+## Automatic repair on the user's side
+
+- Trigger: a `read`, `list` or `click` card finds nothing on the page ("cannot read"; an empty list found through `container` is "0 items", not a failure). Login screens, broken config syntax and pages that fail to open are not repaired.
+- The app collects the structure of the page that is already open (no reload), checks that it contains no page text, and sends Claude only the failing line and that structure. It waits at most 45 seconds; while waiting, the usual "reading" progress messages say that the card is being repaired.
+- The proposal is tried on the current page and adopted only if it looks right: `read` matches at least one element with some text, `list` matches at least one item, `click` matches exactly one element.
+- After adopting, a `read` / `list` card is read again and the screen reader hears "画面が変わったので、読む所を直しました。" once. A `click` card is not pressed again; the user is told that it was fixed and decides whether to press it.
+- The fix applies only on this computer. The bundled `cards/*.json` are not changed. Each app gets an override file in the app's user data folder (`repairs/<app id>.json`) with the card, the original and the new selector, Claude's reason and the time, so the fix still works after a restart. If a newer config file changes that selector, the override is ignored.
+- Undo: the repaired card has a "直す前に戻す" button. Supporters can open the "自動で直した所（支援者向け）" card at the end of the app's cards to see every automatic fix, write one into the config file (the same way as accepted proposals, with a backup in `config-backups`), or undo it.
+- Without an API key, or when Claude fails, times out or the proposal does not look right, the card says "cannot read" as before with one more sentence: "自動で直せませんでした。"
+
 ## Config file format (short)
 
 - `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card; keep URLs out of it, because screen readers read them almost character by character), optional `sourceUrl` (the `http(s)://` page of the source; the app's first card gets a "出典のページを開く" button that opens it in the default browser), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
@@ -96,5 +107,6 @@ Todoku（とどく）は、視覚に障害のある方が、カードの簡単�
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをふつうのボタンのカードの画面にします。画面読み上げソフトの利用者は、Tab で移り、Enter か Space で押すと、結果が読み上げられます。
 - `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。
 - ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。Claude が、文字を全部落としたページの構造から直したセレクタの案を作り、人が案ごとに「採る／採らない」を選びます。
+- 使う人の側でも、その場で直せます。カードが読む所・押す所を見つけられず、鍵（CARDS_ANTHROPIC_API_KEY）があるときは、いま開いているページの構造からそのカードの案だけを作り、ページで試して確からしいときだけ採ります。直しはその機械の中だけに残り、カードの中の「直す前に戻す」ボタンで戻せます。
 - 動かし方・設定・使った部品は、上の英語の節をご覧ください。
 - 練習のページ（みどり市・講座のページ）は作り物で、実在の自治体や人とは関係ありません。

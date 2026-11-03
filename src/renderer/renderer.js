@@ -37,6 +37,47 @@ let idSeq = 0;
 
 function current() { return stack[stack.length - 1]; }
 
+// ---- 自動で直した所（手元にだけ効く上書き）----
+// アプリごとに、カードの id → 直し（{ cardId, title, action, before, after, reason, at }）。
+const repairsByApp = new Map();
+// いま自動で直しているカード（"アプリの id/カードの id"）。主の処理の知らせ（card:repairing）で入る。
+const repairingNow = new Set();
+
+function repairsOf(appId) {
+  if (!repairsByApp.has(appId)) repairsByApp.set(appId, new Map());
+  return repairsByApp.get(appId);
+}
+
+// 読む所か押す所か（知らせの言い回しで使う）。
+function placeWord(action) { return action === 'click' ? '押す所' : '読む所'; }
+
+// 直したカードの中に足す項目: 直したことの一文と「直す前に戻す」ボタン。
+function repairItems(card) {
+  const r = repairsOf(card.appId).get(card.cardId);
+  if (!r) return [];
+  return [
+    { text: `このカードの${placeWord(card.action)}は、画面が変わったときに自動で直したものです。`, repairItem: true },
+    { button: '直す前に戻す', repairItem: true, onPress: () => undoRepair(card) },
+  ];
+}
+
+async function undoRepair(card) {
+  let r;
+  try {
+    r = await window.cardsApi.undoRepair(card.appId, card.cardId);
+  } catch (e) {
+    r = { ok: false, message: '直す前に戻せませんでした。' };
+  }
+  if (!r.ok) {
+    announce(r.message, true);
+    return;
+  }
+  repairsOf(card.appId).delete(card.cardId);
+  card.items = (card.items || []).filter((it) => !it.repairItem);
+  refreshCard(card);
+  announce(`「${card.title}」の${placeWord(card.action)}を、直す前に戻しました。`);
+}
+
 function pushDeck(deck) {
   stack.push({ index: 0, ...deck });
   renderDeck();
@@ -167,6 +208,10 @@ async function activateCard(card, node) {
     showClickConfirm(card, node);
     return;
   }
+  if (card.kind === 'maint') {
+    await openMaint(card);
+    return;
+  }
   enterCard(node);
 }
 
@@ -221,11 +266,19 @@ async function readCard(card) {
   // 「〇〇を読んでいます。」の知らせは出さない。焦点が移る「読んでいます。…」の項目と、見出しの「（読んでいます）」・aria-busy で
   // 同じことを言っているため（2026-11-03 の NVDA の確かめで、3回続けて聞こえた）。5秒ごとの知らせと、終わりの知らせは残す。
   // 5秒に一度だけ、たった秒を知らせる。見える項目の文も書き換える。
+  // 画面が変わって自動で直している間は、同じ形で「読む所を直しています」と言う。
+  const key = `${card.appId}/${card.cardId}`;
+  repairingNow.delete(key);
   const timer = setInterval(() => {
     const sec = Math.round((Date.now() - started) / 1000);
+    const repairing = repairingNow.has(key);
     const item = card.node && card.node.isConnected ? card.node.querySelector('[data-loading]') : null;
-    if (item) item.textContent = `読んでいます。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`;
-    announce(`「${card.title}」を読み始めて、${sec}秒たちました。`);
+    if (item) {
+      item.textContent = repairing
+        ? `画面が変わったので、読む所を直しています。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`
+        : `読んでいます。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`;
+    }
+    announce(repairing ? `「${card.title}」の読む所を直しています。${sec}秒たちました。` : `「${card.title}」を読み始めて、${sec}秒たちました。`);
   }, PROGRESS_EVERY_MS);
   let result;
   try {
@@ -235,8 +288,10 @@ async function readCard(card) {
   } finally {
     clearTimeout(loadingTimer);
     clearInterval(timer);
+    repairingNow.delete(key);
     busy = false;
   }
+  if (result.repaired) repairsOf(card.appId).set(card.cardId, result.repaired);
   let count = 0;
   if (result.ok) {
     const texts = Array.isArray(result.items) ? result.items : String(result.text || '').split('\n').filter((t) => t.trim() !== '');
@@ -271,11 +326,21 @@ async function readCard(card) {
     card.heading = `${card.title}（読めません）`;
     card.items = [{ text: unreadableText(card, result), result: true }];
   }
+  // 自動で直したカードは、最後に直したことの一文と「直す前に戻す」ボタンを置く。
+  card.items.push(...repairItems(card));
   // 読み込み中に Esc で別の所へ移っていたら、結果はカードに入れておくだけにする。
   const wasInside = card.node && card.node.isConnected && card.node.contains(document.activeElement);
   if (card.node) card.node.removeAttribute('aria-busy');
   // 焦点を移す先（結果の最初の項目）を先に作って焦点を移し、それから読み込み中の項目を外す（refreshCard の中）。
   const node = refreshCard(card, { focusResult: wasInside });
+  if (result.repaired) {
+    ensureMaintCard(card.appId);
+    // 直したことは、読んだ知らせの前に一度だけ言う。
+    const fixed = '画面が変わったので、読む所を直しました。';
+    if (result.action === 'list') announce(fixed + (count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`));
+    else announce(`${fixed}「${card.title}」を読みました。`);
+    return;
+  }
   if (!node) return;
   if (result.ok && result.action === 'list') announce(count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`);
   else if (result.ok) announce(`「${card.title}」を読みました。`);
@@ -288,9 +353,11 @@ function unreadableText(card, result) {
   const message = String(result.message || '');
   if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
+  // 自動で直そうとして直せなかったとき（鍵が無い・Claude が失敗した・確からしくない）は、一文足す。
+  const notFixed = result.autoRepairFailed ? '\n自動で直せませんでした。' : '';
   // 入れ物（container）のあるカードは、0件なら「（0件）」と出るので、ここに来るのは本当に見つからないときだけ。
-  if (card.action === 'list' && !card.hasContainer) return '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。';
-  return '画面が変わったため、読む所が見つかりませんでした。';
+  if (card.action === 'list' && !card.hasContainer) return `画面が変わったため、読む所が見つかりませんでした。${notFixed}\n本当に0件のこともあります。`;
+  return `画面が変わったため、読む所が見つかりませんでした。${notFixed}`;
 }
 
 // ---- 押すカード（押す前に確かめる二段）----
@@ -304,23 +371,132 @@ function showClickConfirm(card, node) {
         busy = true;
         button.textContent = `「${card.title}」を押す（押しています）`;
         announce(`「${card.title}」を押しています。`);
+        const key = `${card.appId}/${card.cardId}`;
+        repairingNow.delete(key);
         let r;
         try {
           r = await window.cardsApi.runCard(card.appId, card.cardId);
         } catch (e) {
           r = { ok: false, message: e.message };
         } finally {
+          repairingNow.delete(key);
           busy = false;
           button.textContent = `「${card.title}」を押す`;
         }
+        if (r.repaired) {
+          // 押す所を直したときは、押し直さない。直したことを知らせ、もう一度押すかは使う人に任せる。
+          repairsOf(card.appId).set(card.cardId, r.repaired);
+          card.items = (card.items || []).filter((it) => !it.repairItem).concat(repairItems(card));
+          // 押すボタンは作り直されるので、焦点は「「〇〇」を押します。」の項目へ移す（下矢印キーで押すボタンへ）。
+          refreshCard(card, { focusResult: true });
+          ensureMaintCard(card.appId);
+          announce(`画面が変わったので、押す所を直しました。もう一度押すときは、「${card.title}」を押すボタンを押してください。`);
+          return;
+        }
         // 押した結果ダウンロードが始まったときは、保存したか（できなかったか）を知らせる。
         if (r.ok && r.download) announce(r.download.message, !r.download.ok);
-        else announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}`, !r.ok);
+        else announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}${r.autoRepairFailed ? '。自動で直せませんでした。' : ''}`, !r.ok);
       },
     },
+    ...repairItems(card),
   ];
   const fresh = refreshCard(card);
   if (fresh) enterCard(fresh, true);
+}
+
+// ---- 自動で直した所（支援者向けのカード）----
+// どのカード・前と後のセレクタ・理由・日時を読み、設定ファイルに書く（配る）か、直す前に戻すかを選ぶ。
+const MAINT_HEADING = '自動で直した所（支援者向け）';
+
+function formatAt(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso || '');
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}時${String(d.getMinutes()).padStart(2, '0')}分`;
+}
+
+// 支援者向けのカードで配った・戻したカードから、直したことの一文と「直す前に戻す」ボタンを外す（焦点は動かさない）。
+function dropRepairItems(appId, cardId) {
+  const card = current().cards.find((c) => c.appId === appId && c.cardId === cardId);
+  if (!card || !(card.items || []).some((it) => it.repairItem)) return;
+  card.items = card.items.filter((it) => !it.repairItem);
+  refreshCard(card);
+}
+
+function maintCard(appId) {
+  return { kind: 'maint', appId, heading: MAINT_HEADING, items: [] };
+}
+
+// いまの束がそのアプリの束で、支援者向けのカードがまだ無ければ、最後に足す（焦点は動かさない）。
+function ensureMaintCard(appId) {
+  const deck = current();
+  if (!deck || deck.appId !== appId || deck.cards.some((c) => c.kind === 'maint')) return;
+  const card = maintCard(appId);
+  deck.cards.push(card);
+  deckEl.append(renderCard(card, deck.cards.length - 1));
+}
+
+async function openMaint(card) {
+  let r;
+  try {
+    r = await window.cardsApi.listRepairs(card.appId);
+  } catch (e) {
+    r = { ok: false, message: '自動で直した所を読めませんでした。' };
+  }
+  const repairs = r.ok ? r.repairs : [];
+  repairsOf(card.appId).clear();
+  for (const x of repairs) repairsOf(card.appId).set(x.cardId, x);
+  if (!r.ok) {
+    card.items = [{ text: r.message, result: true }];
+  } else if (repairs.length === 0) {
+    card.items = [{ text: '自動で直した所は、いまはありません。', result: true }];
+  } else {
+    card.items = [{ text: `自動で直した所が${repairs.length}件あります。手元にだけ効いています。`, result: true }];
+    for (const x of repairs) {
+      card.items.push(
+        { label: 'カード', text: x.title },
+        { label: '直す前のセレクタ', text: x.before },
+        { label: '直した後のセレクタ', text: x.after },
+        { label: '理由', text: x.reason || '（理由はありません）' },
+        { label: '日時', text: formatAt(x.at) },
+        {
+          button: `「${x.title}」の直しを設定ファイルに書く（配る）`,
+          onPress: async () => {
+            let p;
+            try {
+              p = await window.cardsApi.publishRepair(card.appId, x.cardId);
+            } catch (e) {
+              p = { ok: false, message: '設定ファイルに書けませんでした。' };
+            }
+            announce(p.message, !p.ok);
+            if (!p.ok) return;
+            dropRepairItems(card.appId, x.cardId);
+            await openMaint(card);
+          },
+        },
+        {
+          button: `「${x.title}」を直す前に戻す`,
+          onPress: async () => {
+            let u;
+            try {
+              u = await window.cardsApi.undoRepair(card.appId, x.cardId);
+            } catch (e) {
+              u = { ok: false, message: '直す前に戻せませんでした。' };
+            }
+            if (!u.ok) {
+              announce(u.message, true);
+              return;
+            }
+            announce(`「${x.title}」の${placeWord(x.action)}を、直す前に戻しました。`);
+            dropRepairItems(card.appId, x.cardId);
+            await openMaint(card);
+          },
+        },
+      );
+    }
+  }
+  card.heading = `${MAINT_HEADING}（${repairs.length}件）`;
+  const node = refreshCard(card, { focusResult: true });
+  return node;
 }
 
 // ---- 束を作る ----
@@ -390,7 +566,9 @@ function appDeck(config, hasParent = true) {
       items: [],
     });
   }
-  return { name: config.name, cards };
+  // 自動で直した所があれば、支援者向けのカードを最後に置く。
+  if (repairsOf(config.id).size > 0) cards.push(maintCard(config.id));
+  return { name: config.name, appId: config.id, cards };
 }
 
 function topDeck(configs, problems) {
@@ -469,6 +647,16 @@ document.addEventListener('keydown', (e) => {
 // 押すカードの結果にならなかったダウンロード（押してから遅れて始まったもの）が終わったときに知らせる。
 if (window.cardsApi.onDownloadDone) window.cardsApi.onDownloadDone((r) => announce(r.message, !r.ok));
 
+// ---- 自動で直し始めた知らせ ----
+// 読むカードは、5秒ごとの知らせと読み込み中の項目の文で「読む所を直しています」と言う。押すカードは、ここで一度だけ言う。
+if (window.cardsApi.onRepairing) {
+  window.cardsApi.onRepairing(({ appId, cardId }) => {
+    repairingNow.add(`${appId}/${cardId}`);
+    const card = stack.flatMap((d) => d.cards).find((c) => c.appId === appId && c.cardId === cardId);
+    if (card && card.kind === 'click') announce('画面が変わったので、押す所を直しています。少しお待ちください。');
+  });
+}
+
 // ---- はじめ ----
 (async () => {
   let results;
@@ -480,6 +668,10 @@ if (window.cardsApi.onDownloadDone) window.cardsApi.onDownloadDone((r) => announ
     return;
   }
   const configs = results.filter((r) => r.config).map((r) => r.config);
+  for (const r of results) {
+    if (!r.config) continue;
+    for (const x of r.repairs || []) repairsOf(r.config.id).set(x.cardId, x);
+  }
   const problems = [];
   for (const r of results) {
     for (const e of r.errors || []) problems.push(`${r.file} の ${e.where}: ${e.message}`);

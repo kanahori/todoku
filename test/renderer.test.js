@@ -50,3 +50,14 @@ test('押した結果のダウンロードは、保存したか（できなか�
   assert.match(source, /if \(r\.ok && r\.download\) announce\(r\.download\.message, !r\.download\.ok\)/);
   assert.match(source, /onDownloadDone\(\(r\) => announce\(r\.message, !r\.ok\)\)/);
 });
+
+test('押すカードを自動で直したときは押し直さず、もう一度押すかを使う人に任せる知らせを出す', () => {
+  assert.match(source, /画面が変わったので、押す所を直しました。もう一度押すときは、「\$\{card\.title\}」を押すボタンを押してください。/);
+  assert.match(source, /画面が変わったので、押す所を直しています。少しお待ちください。/);
+  assert.match(source, /r\.autoRepairFailed \? '。自動で直せませんでした。' : ''/);
+});
+
+test('読めないときの文に、自動で直せなかったときだけ「自動で直せませんでした。」を足す', () => {
+  const body = source.slice(source.indexOf('function unreadableText('), source.indexOf('// ---- 押すカード'));
+  assert.match(body, /result\.autoRepairFailed \? '\\n自動で直せませんでした。' : ''/);
+});

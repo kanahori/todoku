@@ -229,7 +229,70 @@ async function main() {
       none.ok && Array.isArray(none.items) && none.items.length === 0, none);
   }
 
+  await autoRepairChecks();
   await rendererFocusChecks();
+}
+
+// 使う人の側で、その場で自動で直す一巡（Claude を呼ぶ所は偽の返事。Mac には鍵が無いので本物は呼ばない）。
+// みどり市の「画面が変わった後」のページで、カルーセルのカードの selector が当たらない
+// → いま開いているページの構造から案を作る → 試して確からしいので採る → 読み直して 4件読める → 手元に残す
+// → 次の起動でも効く → 元に戻すと、また当たらない。リポジトリの cards/*.json は書き換えない。
+async function autoRepairChecks() {
+  const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('../src/main/autofix');
+  const cityFile = path.join(__dirname, '..', 'cards', 'practice-city.json');
+  const cityBefore = fs.readFileSync(cityFile, 'utf8');
+  const base = { ...loadConfigFile(cityFile).config, id: 'practice-city-auto', url: 'fixture:city-top-after.html' };
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'autofix-smoke-'));
+  try {
+    const store = createOverrideStore(path.join(userData, 'repairs'));
+    let sentUser = '';
+    let calls = 0;
+    const fakeModel = async ({ user }) => {
+      calls += 1;
+      sentUser = user;
+      return { proposals: [{ where: 'cards[0].selector', selector: '.hero .vis-item:not(.is-clone)', reason: 'カルーセルの部品が作りを組み替え、.slide が .vis-item に変わったため。' }] };
+    };
+    let repairingSaid = 0;
+    const first = await runCardWithAutoRepair({
+      BrowserWindow, config: applyOverrides(base, store.load(base.id)).config, cardId: 'carousel', callModel: fakeModel, store,
+      options: { waitMs: 500 }, onRepairing: () => { repairingSaid += 1; },
+    });
+    check('自動で直す: 当たらないカルーセルのカードを直し、読み直して 4件読める',
+      first.ok && first.repaired && first.repaired.after === '.hero .vis-item:not(.is-clone)'
+        && first.text.startsWith('4件あります。') && first.text.includes('2件目: マイナンバーカードの休日窓口'), first);
+    check('自動で直す: Claude を1回だけ呼び、直し始めた知らせを1回出した', calls === 1 && repairingSaid === 1, { calls, repairingSaid });
+    check('自動で直す: Claude に送る文に、ページの文字が入っていない',
+      sentUser.includes('vis-item') && !sentUser.includes('市民まつり') && !sentUser.includes('マイナンバー') && !sentUser.includes('図書館'), sentUser.slice(0, 300));
+    const saved = store.load(base.id);
+    check('自動で直す: 手元の上書きのファイルに、カード・前と後のセレクタ・理由・日時を残した',
+      saved.length === 1 && saved[0].cardId === 'carousel' && saved[0].before === '.hero .slide'
+        && saved[0].after === '.hero .vis-item:not(.is-clone)' && saved[0].reason !== '' && !Number.isNaN(Date.parse(saved[0].at)), saved);
+    check('自動で直す: リポジトリの cards/practice-city.json は書き換えていない', fs.readFileSync(cityFile, 'utf8') === cityBefore);
+
+    // 次の起動: 上書きのファイルを読み直して当てると、Claude を呼ばずに読める。
+    const reopened = createOverrideStore(path.join(userData, 'repairs'));
+    const effective = applyOverrides(base, reopened.load(base.id));
+    const second = await runCardWithAutoRepair({ BrowserWindow, config: effective.config, cardId: 'carousel', callModel: fakeModel, store: reopened, options: { waitMs: 500 } });
+    check('自動で直す: 次の起動でも直しが効き、Claude を呼ばずに 4件読める',
+      effective.active.length === 1 && second.ok && !second.repaired && second.text.startsWith('4件あります。') && calls === 1, { second, calls });
+
+    // 元に戻す: 上書きを外すと、設定ファイルのままの selector に戻り、また当たらない。
+    reopened.remove(base.id, 'carousel');
+    const undone = applyOverrides(base, reopened.load(base.id));
+    const third = await runCardWithAutoRepair({ BrowserWindow, config: undone.config, cardId: 'carousel', callModel: null, store: reopened, options: { waitMs: 500 } });
+    check('自動で直す: 元に戻すと、設定ファイルのままの selector になり、読めない（鍵が無いので「自動で直せませんでした」の印）',
+      undone.config.cards[0].selector === '.hero .slide' && !third.ok && third.autoRepairFailed === true && third.where === 'cards[0].selector', third);
+
+    // 確からしくない案（当たる数 0）は採らない。
+    const weak = await runCardWithAutoRepair({
+      BrowserWindow, config: undone.config, cardId: 'carousel', store: reopened, options: { waitMs: 500 },
+      callModel: async () => ({ proposals: [{ where: 'cards[0].selector', selector: '.hero .no-such-item', reason: '試し' }] }),
+    });
+    check('自動で直す: 当たらない案は採らず、手元にも残さない',
+      !weak.ok && weak.autoRepairFailed === true && weak.autoRepairReason === 'not-confident' && reopened.load(base.id).length === 0, weak);
+  } finally {
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
 }
 
 // カードの画面（src/renderer）の焦点の試し。cardsApi は偽物（test/renderer-preload.js）。
@@ -341,6 +404,69 @@ async function rendererFocusChecks() {
     const said = await js("document.getElementById('status').textContent");
     check('ボタンを押すと、そのアプリの出典のページを開くよう頼み、開いたことを知らせる',
       JSON.stringify(opened) === JSON.stringify(['fake-app']) && said === '出典のページを、既定のブラウザで開きました。', { opened, said });
+
+    // 5. 自動で直した読む所: 読んだ結果に焦点が移り、直したことを一度だけ知らせ、カードの中に「直す前に戻す」ボタンがある。
+    const status = () => js("document.getElementById('status').textContent");
+    await key('Escape');
+    await key('Home');
+    for (let k = 0; k < 4; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(900);
+    const fixed = await focusState();
+    const fixedSaid = await status();
+    check('自動で直した読む所: 焦点が結果の最初の項目にあり、「画面が変わったので、読む所を直しました。」と知らせる',
+      fixed.connected && fixed.firstResult && fixed.text === '直した所の文'
+        && fixedSaid === '画面が変わったので、読む所を直しました。「画面が変わった読む所」を読みました。', { fixed, fixedSaid });
+    const fixedItems = await js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + n.textContent)");
+    check('自動で直した読む所: カードの中に、直したことの一文と「直す前に戻す」ボタンがある',
+      fixedItems.includes('P:このカードの読む所は、画面が変わったときに自動で直したものです。') && fixedItems[fixedItems.length - 1] === 'BUTTON:直す前に戻す', fixedItems);
+    const headings = await js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
+    check('自動で直したら、束の最後に「自動で直した所（支援者向け）」のカードが足される',
+      headings[headings.length - 1] === '自動で直した所（支援者向け）', headings);
+    // 二度目に読んだときは、直したことを言わない。
+    await key('Escape');
+    await key('Enter');
+    await wait(900);
+    const againSaid = await status();
+    check('自動で直した読む所: 二度目に読んだときは、直したことを言わない', againSaid === '「画面が変わった読む所」を読みました。', againSaid);
+
+    // 支援者向けのカード: どのカード・前と後のセレクタ・理由・日時を読める。
+    await key('Escape');
+    await key('End');
+    await key('Enter');
+    await wait(300);
+    const maintTexts = await js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.textContent)");
+    check('支援者向けのカードで、カード・直す前と後のセレクタ・理由・日時と、配るボタン・戻すボタンを読める',
+      maintTexts[0] === '自動で直した所が1件あります。手元にだけ効いています。' && maintTexts.includes('画面が変わった読む所')
+        && maintTexts.includes('#d') && maintTexts.includes('#d2') && maintTexts.includes('id が変わったため。')
+        && maintTexts.some((t) => /^2026年11月3日 \d+時05分$/.test(t))
+        && maintTexts.includes('「画面が変わった読む所」の直しを設定ファイルに書く（配る）') && maintTexts.includes('「画面が変わった読む所」を直す前に戻す'), maintTexts);
+
+    // 直す前に戻す（読む所のカードの中のボタン）。
+    await key('Escape');
+    for (let k = 0; k < 2; k++) await key('ArrowUp');
+    await key('Enter');
+    await wait(900);
+    await key('End');
+    const undoButton = await focusState();
+    await js('document.activeElement.click()');
+    await wait(300);
+    const undoSaid = await status();
+    const afterUndo = await focusState();
+    const undoneLog = await js('window.fakeLog.undone()');
+    const leftItems = await js("[...document.querySelectorAll('#deck > article.card')[4].querySelectorAll('[data-item]')].map((n) => n.textContent)");
+    check('「直す前に戻す」を押すと、戻すよう頼み、「…読む所を、直す前に戻しました。」と知らせ、ボタンが消えて焦点はカードに戻る',
+      undoButton.text === '直す前に戻す' && JSON.stringify(undoneLog) === JSON.stringify(['fake-app/fixed-read'])
+        && undoSaid === '「画面が変わった読む所」の読む所を、直す前に戻しました。'
+        && !leftItems.includes('直す前に戻す') && afterUndo.connected && afterUndo.tag === 'ARTICLE', { undoButton, undoneLog, undoSaid, afterUndo, leftItems });
+
+    // 直せなかった読む所: 今の「読めません」の形に「自動で直せませんでした。」の一文が足される。
+    await key('ArrowDown');
+    await key('Enter');
+    await wait(900);
+    const unfixed = await focusState();
+    check('直せなかった読む所: 「読めません」の中に「自動で直せませんでした。」が足される',
+      unfixed.heading === '直せない読む所（読めません）' && unfixed.text === '画面が変わったため、読む所が見つかりませんでした。\n自動で直せませんでした。', unfixed);
   } finally {
     win.destroy();
   }
