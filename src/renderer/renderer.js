@@ -1,14 +1,20 @@
 'use strict';
-// カードの画面の土台。設定ファイルからカードを作る。
-// カードはふつうの button にして、Tab と Enter・Space だけで全部の操作ができるようにする。
-// ウェブアプリの操作（読む・押す）はまだつないでいない。
+// カードの画面。基のカード型ページ（授業の教材のページ）と同じ形と操作にする。
+// - 束は、カードを縦に一列に並べたもの。上下の矢印でカードを移り、Home と End で最初と最後へ。端では止まる。
+// - Enter かスペースで、カードの先へ進むか、カードの中へ入る。中では上下の矢印で項目を一つずつ読み、Esc でカードへ戻る。
+// - カードの上の Esc で、一つ上の束へ戻る。戻った先では、さっき進んだカードに焦点を戻す。
+// - 束の中で Tab が止まるのは、いまのカード一枚だけ。Alt・Ctrl・Command と一緒のキーは横取りしない。
+// - 位置は、見えない控えめな知らせの欄に「3件中2件目」とだけ入れる（見出しはカードの名前として読まれるため）。
 
+const deckEl = document.getElementById('deck');
 const statusEl = document.getElementById('status');
+const alertEl = document.getElementById('alert');
 
-function announce(message) {
-  // 同じ文を続けて入れても読まれるように、いったん空にしてから入れる。
-  statusEl.textContent = '';
-  setTimeout(() => { statusEl.textContent = message; }, 50);
+// 同じ文を続けて入れても読まれるように、いったん空にしてから入れる。
+function announce(message, strong = false) {
+  const target = strong ? alertEl : statusEl;
+  target.textContent = '';
+  setTimeout(() => { target.textContent = message; }, 50);
 }
 
 function el(tag, props = {}, children = []) {
@@ -21,198 +27,294 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-// カードを押したときの処理。結果は「結果」の欄に書き、読み上げにも知らせる。
-async function runCard(config, card, button) {
-  if (button.getAttribute('aria-busy') === 'true') return;
-  button.setAttribute('aria-busy', 'true');
-  announce(`${card.title}。動かしています。`);
+// ---- 束（いまいる所）----
+// 束は { name, cards, index } 。cards の一枚は { heading, items, kind, open } 。
+// kind: 'goto'（先へ進む）・'read'（Enter でウェブアプリを読み、中に1件ずつの項目）・'info'（中を読むだけ）・'click'（押すカード）。
+// items の一つは { label?, text } か { button, onPress } 。
+const stack = [];
+let busy = false;
+let idSeq = 0;
+
+function current() { return stack[stack.length - 1]; }
+
+function pushDeck(deck) {
+  stack.push({ index: 0, ...deck });
+  renderDeck();
+}
+
+function popDeck() {
+  if (stack.length <= 1) {
+    announce('ここが一番上です。');
+    return;
+  }
+  stack.pop();
+  renderDeck();
+}
+
+function renderDeck() {
+  const deck = current();
+  const nodes = deck.cards.map((card, i) => renderCard(card, i));
+  deckEl.replaceChildren(...nodes);
+  selectCard(deck.index, { announcePosition: true });
+}
+
+function cardNodes() { return [...deckEl.querySelectorAll(':scope > article.card')]; }
+
+function selectCard(i, { announcePosition = true } = {}) {
+  const deck = current();
+  const nodes = cardNodes();
+  if (nodes.length === 0) return;
+  const next = Math.max(0, Math.min(nodes.length - 1, i));
+  nodes.forEach((n, k) => { n.tabIndex = k === next ? 0 : -1; });
+  deck.index = next;
+  nodes[next].focus();
+  if (announcePosition) announce(`${nodes.length}件中${next + 1}件目`);
+}
+
+function renderCard(card, i) {
+  const headingId = `card-h-${++idSeq}`;
+  const node = el('article', {
+    class: `card card-${card.kind}`,
+    role: 'group',
+    'aria-roledescription': 'カード',
+    'aria-labelledby': headingId,
+    tabindex: '-1',
+  });
+  node.append(el('h2', { id: headingId, text: card.heading }));
+  if (card.note) node.append(el('p', { class: 'card-note', text: card.note }));
+  node.append(renderItems(card.items || []));
+  // マウスで押したときも、キーと同じ動きにする。
+  node.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    current().index = i;
+    activateCard(card, node);
+  });
+  card.node = node;
+  return node;
+}
+
+function renderItems(items) {
+  const box = el('div', { class: 'items' });
+  const dl = el('dl');
+  let useDl = false;
+  for (const item of items) {
+    if (item.button) {
+      const b = el('button', { type: 'button', 'data-item': '', tabindex: '-1', class: 'item-button', text: item.button });
+      b.addEventListener('click', () => item.onPress(b));
+      box.append(b);
+    } else if (item.label) {
+      useDl = true;
+      dl.append(el('dt', { 'data-item': '', tabindex: '-1', text: item.label }));
+      // 内容の側は、見出しを繰り返さない。
+      dl.append(el('dd', { 'data-item': '', tabindex: '-1', text: item.text }));
+    } else {
+      box.append(el('p', { 'data-item': '', tabindex: '-1', class: 'item-text', text: item.text }));
+    }
+  }
+  if (useDl) box.prepend(dl);
+  return box;
+}
+
+function itemNodes(cardNode) { return [...cardNode.querySelectorAll('[data-item]')]; }
+
+function enterCard(cardNode) {
+  const items = itemNodes(cardNode);
+  if (items.length === 0) {
+    announce('このカードの中には、読む項目がありません。');
+    return;
+  }
+  items[0].focus();
+}
+
+// カードの上の Enter・スペース・クリック。
+async function activateCard(card, node) {
+  if (card.kind === 'goto') {
+    card.open();
+    return;
+  }
+  if (card.kind === 'read') {
+    await readCard(card, node);
+    return;
+  }
+  if (card.kind === 'click') {
+    showClickConfirm(card, node);
+    return;
+  }
+  enterCard(node);
+}
+
+// ---- 読む先のカード ----
+async function readCard(card, node) {
+  busy = true;
+  node.setAttribute('aria-busy', 'true');
+  announce(`${card.title}を読んでいます。`);
   let result;
   try {
-    result = await window.cardsApi.runCard(config.id, card.id);
+    result = await window.cardsApi.runCard(card.appId, card.cardId);
   } catch (e) {
-    result = { ok: false, where: '(なし)', message: e.message };
+    result = { ok: false, message: e.message };
+  } finally {
+    busy = false;
+    node.removeAttribute('aria-busy');
   }
-  button.removeAttribute('aria-busy');
-
-  const heading = document.getElementById('result-heading');
-  const body = document.getElementById('result-body');
-  document.getElementById('result').hidden = false;
-  heading.textContent = `結果: ${card.title}`;
-
-  let message;
-  if (result.needLogin) {
-    message = `${result.message}。`;
-  } else if (!result.ok) {
-    message = `うまくいきませんでした。設定ファイルの ${result.where} が当たりません。${result.message}。`;
-  } else if (result.action === 'click') {
-    message = '押しました。';
-  } else if (!result.text) {
-    message = '読む所は見つかりましたが、文字がありません。';
+  if (result.ok) {
+    const texts = Array.isArray(result.items) ? result.items : String(result.text || '').split('\n').filter((t) => t.trim() !== '');
+    card.items = texts.map((t) => ({ text: t }));
+    card.heading = result.action === 'list' ? `${card.title}（${texts.length}件）` : card.title;
+    if (result.truncated) card.items.push({ text: '長いので、ここまでで切りました。' });
+  } else if (result.needLogin) {
+    card.heading = `${card.title}（ログインが要ります）`;
+    card.items = [{ text: result.message }];
   } else {
-    message = result.text + (result.truncated ? '（長いので、ここで切りました）' : '');
+    card.heading = `${card.title}（読めません）`;
+    card.items = [{ text: `画面が変わったため読めません。${result.message}` }];
   }
-  body.textContent = message;
-  announce(`${card.title}。${message}`);
+  const fresh = renderCard(card, current().index);
+  node.replaceWith(fresh);
+  selectCard(current().index, { announcePosition: false });
+  if (result.ok) announce(result.action === 'list' ? `${card.items.length}件読みました。` : '読みました。');
+  enterCard(fresh);
 }
 
-function renderApp(config) {
-  const headingId = `app-${config.id}`;
-  const list = el('ul', { class: 'cards' });
-  for (const card of config.cards) {
-    // 名前は題だけにし、補足は説明として分けて読ませる（NVDA で題と補足がつながって読まれたため）。
-    const titleId = `title-${config.id}-${card.id}`;
-    const descId = `desc-${config.id}-${card.id}`;
-    const children = [el('span', { class: 'card-title', id: titleId, text: card.title })];
-    const attrs = { type: 'button', class: 'card', 'data-card': card.id, 'aria-labelledby': titleId };
-    if (card.description) {
-      children.push(el('span', { class: 'card-description', id: descId, text: card.description }));
-      attrs['aria-describedby'] = descId;
-    }
-    const button = el('button', attrs, children);
-    button.addEventListener('click', () => runCard(config, card, button));
-    list.append(el('li', {}, [button]));
+// ---- 押すカード（押す前に確かめる二段）----
+function showClickConfirm(card, node) {
+  card.items = [
+    { text: `「${card.title}」を押します。` },
+    {
+      button: '押す',
+      onPress: async () => {
+        if (busy) return;
+        busy = true;
+        announce(`${card.title}を押しています。`);
+        let r;
+        try {
+          r = await window.cardsApi.runCard(card.appId, card.cardId);
+        } catch (e) {
+          r = { ok: false, message: e.message };
+        } finally {
+          busy = false;
+        }
+        announce(r.ok ? `${card.title}を押しました。` : `押せませんでした。${r.message}`, !r.ok);
+      },
+    },
+  ];
+  const fresh = renderCard(card, current().index);
+  node.replaceWith(fresh);
+  selectCard(current().index, { announcePosition: false });
+  enterCard(fresh);
+}
+
+// ---- 束を作る ----
+const KEYS_TEXT = '上下の矢印でカードを移ります。\nEnter で、カードの先へ進むか、カードの中を読みます。\nカードの中では、上下の矢印で一つずつ読みます。\nEsc で一つ戻ります。';
+const NVDA_TEXT = 'NVDA では、NVDA キーとスペースでフォーカスモードに替えると、矢印でカードを移れます。\n替えなくても、H で見出しを順に読めます。';
+
+function appDeck(config) {
+  const cards = [{
+    kind: 'info',
+    heading: config.name,
+    items: [
+      { label: '読む先', text: `${config.cards.length}件あります。` },
+      { label: '動かし方', text: KEYS_TEXT },
+      { label: '戻る', text: 'カードの上で Esc を押すと、どこを読みますかに戻ります。' },
+    ],
+  }];
+  for (const c of config.cards) {
+    cards.push({
+      kind: c.action === 'click' ? 'click' : 'read',
+      appId: config.id,
+      cardId: c.id,
+      title: c.title,
+      heading: c.title,
+      note: c.description,
+      items: [],
+    });
   }
-  return el('section', { 'aria-labelledby': headingId }, [
-    el('h2', { id: headingId, text: config.name }),
-    list,
-    renderMaintenance(config),
-  ]);
+  return { name: config.name, cards };
 }
 
-// 設定ファイルの点検と、直しの案を選ぶ所。
-function renderMaintenance(config) {
-  const headingId = `maint-${config.id}`;
-  const area = el('div', { class: 'maint-area' });
-  // ボタンの一覧（VoiceOver のローター・NVDA+F7）でどのアプリの点検か分かるよう、名前にアプリ名を含める。
-  // 見える文は名前の一部のまま（見える文と読まれる名前を合わせる）。
-  const checkButton = el('button', {
-    type: 'button',
-    class: 'tool-button',
-    'aria-label': `${config.name}の画面が変わっていないか点検する`,
-    text: '画面が変わっていないか点検する',
-  });
-  checkButton.addEventListener('click', () => checkApp(config, area, checkButton));
-  return el('section', { class: 'maint', 'aria-labelledby': headingId }, [
-    el('h3', { id: headingId, text: `${config.name} の設定の点検` }),
-    checkButton,
-    area,
-  ]);
+function topDeck(configs, problems) {
+  const cards = [{
+    kind: 'info',
+    heading: 'どこを読みますか',
+    items: [
+      { label: 'アプリ', text: `${configs.length}件あります。` },
+      { label: '動かし方', text: KEYS_TEXT },
+      { label: 'NVDA', text: NVDA_TEXT },
+    ],
+  }];
+  for (const config of configs) {
+    cards.push({
+      kind: 'goto',
+      heading: config.name,
+      open: () => pushDeck(appDeck(config)),
+    });
+  }
+  if (problems.length > 0) {
+    cards.push({
+      kind: 'info',
+      heading: `読めなかった設定ファイル（${problems.length}件）`,
+      items: problems.map((p) => ({ text: p })),
+    });
+  }
+  return { name: 'どこを読みますか', cards };
 }
 
-async function checkApp(config, area, button) {
-  // 使用不能にせず aria-busy にする（NVDA で「使用不能」と読まれたため）。押されている間の二度目は無視する。
-  if (button.getAttribute('aria-busy') === 'true') return;
-  button.setAttribute('aria-busy', 'true');
-  announce('点検しています。');
-  const result = await window.cardsApi.checkCards(config.id);
-  button.removeAttribute('aria-busy');
-  if (!result.ok) {
-    area.replaceChildren(el('p', { text: result.message }));
-    announce(result.message);
+// ---- キー ----
+document.addEventListener('keydown', (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  const active = document.activeElement;
+  const cardNode = active && active.closest ? active.closest('article.card') : null;
+  if (!cardNode) return;
+  const onCard = active === cardNode;
+  const key = e.key;
+  const handled = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(key);
+  if (!handled) return;
+  if (busy && key !== 'Escape') {
+    e.preventDefault();
+    announce('読み込み中です。少しお待ちください。');
     return;
   }
-  showProblems(config, area, result.problems);
-}
-
-function showProblems(config, area, problems) {
-  if (problems.length === 0) {
-    area.replaceChildren(el('p', { text: '全部のカードが当たりました。直すところはありません。' }));
-    announce('全部のカードが当たりました。');
+  if (onCard) {
+    const deck = current();
+    if (key === 'ArrowDown') selectCard(deck.index + 1);
+    else if (key === 'ArrowUp') selectCard(deck.index - 1);
+    else if (key === 'Home') selectCard(0);
+    else if (key === 'End') selectCard(cardNodes().length - 1);
+    else if (key === 'Enter' || key === ' ') activateCard(deck.cards[deck.index], cardNode);
+    else if (key === 'Escape') popDeck();
+    e.preventDefault();
     return;
   }
-  const list = el('ul', {}, problems.map((p) => el('li', { text: `${p.title ?? p.where}（${p.where}）: ${p.message}` })));
-  const proposeButton = el('button', { type: 'button', class: 'tool-button', text: '直しの案を作る' });
-  proposeButton.addEventListener('click', () => propose(config, area, proposeButton));
-  area.replaceChildren(el('p', { text: `当たらないカードが ${problems.length}枚あります。` }), list, proposeButton);
-  announce(`当たらないカードが ${problems.length}枚あります。直しの案を作るボタンがあります。`);
-}
-
-async function propose(config, area, button) {
-  if (button.getAttribute('aria-busy') === 'true') return;
-  button.setAttribute('aria-busy', 'true');
-  announce('直しの案を作っています。しばらくかかります。');
-  const result = await window.cardsApi.proposeRepairs(config.id);
-  button.removeAttribute('aria-busy');
-  if (!result.ok) {
-    area.append(el('p', { text: result.message }));
-    announce(result.message);
-    return;
-  }
-  const form = el('form', { class: 'proposals' });
-  result.proposals.forEach((p, i) => {
-    const name = `choice-${config.id}-${i}`;
-    const canUse = p.newSelector && p.matches > 0;
-    // 読み上げで案の欄に入ったとき、題とボタンだけでなく、案と理由もその場で読まれるようにする。
-    const described = `${name}-proposal ${name}-reason`;
-    const yes = el('input', { type: 'radio', name, value: 'yes', id: `${name}-yes`, 'aria-describedby': described });
-    const no = el('input', { type: 'radio', name, value: 'no', id: `${name}-no`, 'aria-describedby': described });
-    no.checked = true;
-    if (!canUse) yes.disabled = true;
-    const matchText = !p.newSelector ? '案はありません' : p.matches < 0 ? '書き方が正しくありません' : `今のページで ${p.matches}か所に当たります`;
-    form.append(el('fieldset', { 'data-where': p.where }, [
-      el('legend', { text: `${p.title}（${p.where}）` }),
-      el('p', { text: `前: ${p.oldSelector}` }),
-      el('p', { id: `${name}-proposal`, text: `案: ${p.newSelector || 'なし'}。${matchText}。` }),
-      el('p', { id: `${name}-reason`, text: `理由: ${p.reason}` }),
-      el('label', { for: `${name}-yes` }, [yes, ' 採る']),
-      el('label', { for: `${name}-no` }, [no, ' 採らない']),
-    ]));
-  });
-  for (const e of result.errors) form.append(el('p', { text: `${e.where}: ${e.message}` }));
-  const apply = el('button', { type: 'submit', class: 'tool-button', text: '採った案を設定ファイルに書く' });
-  form.append(apply);
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const wheres = [...form.querySelectorAll('fieldset')]
-      .filter((fs) => fs.querySelector('input[value="yes"]').checked)
-      .map((fs) => fs.getAttribute('data-where'));
-    const r = await window.cardsApi.applyRepairs(config.id, wheres);
-    if (!r.ok) {
-      announce(r.message);
-      form.append(el('p', { text: r.message }));
-      return;
-    }
-    const rest = r.problems.length === 0 ? '全部のカードが当たるようになりました。' : `まだ当たらないカードが ${r.problems.length}枚あります。`;
-    const msg = `${r.written}件の案を設定ファイルに書きました。${rest}`;
-    area.replaceChildren(el('p', { text: msg }));
-    announce(msg);
-  });
-  area.append(form);
-  announce(`直しの案が ${result.proposals.length}件できました。1件ずつ、採るか採らないかを選んでください。`);
-  const firstChoice = form.querySelector('input');
-  if (firstChoice) firstChoice.focus();
-}
-
-function renderProblems(results) {
-  const section = document.getElementById('problems');
-  const list = document.getElementById('problems-list');
-  list.replaceChildren();
-  for (const r of results) {
-    for (const e of r.errors) {
-      list.append(el('li', { text: `${r.file} の ${e.where}: ${e.message}` }));
-    }
-  }
-  section.hidden = list.children.length === 0;
-}
-
-async function start() {
-  const results = await window.cardsApi.loadConfigs();
-  const apps = document.getElementById('apps');
-  const ok = results.filter((r) => r.config);
-  apps.replaceChildren(...ok.map((r) => renderApp(r.config)));
-  renderProblems(results);
-  document.getElementById('loading').remove();
-
-  const cardCount = ok.reduce((n, r) => n + r.config.cards.length, 0);
-  const badCount = results.length - ok.length;
-  let message = `${ok.length}件のアプリ、${cardCount}枚のカードを読みました。`;
-  if (badCount > 0) message += `読めなかった設定ファイルが${badCount}件あります。`;
-  announce(message);
-
-  const first = apps.querySelector('.card');
-  if (first) first.focus();
-}
-
-start().catch((e) => {
-  announce(`設定ファイルを読めませんでした。${e.message}`);
+  // カードの中の項目。ボタンの上の Enter とスペースは、ボタンの働きに任せる。
+  const items = itemNodes(cardNode);
+  const k = items.indexOf(active);
+  if (k < 0) return;
+  if ((key === 'Enter' || key === ' ') && active.tagName === 'BUTTON') return;
+  if (key === 'ArrowDown') items[Math.min(items.length - 1, k + 1)].focus();
+  else if (key === 'ArrowUp') items[Math.max(0, k - 1)].focus();
+  else if (key === 'Home') items[0].focus();
+  else if (key === 'End') items[items.length - 1].focus();
+  else if (key === 'Escape') cardNode.focus();
+  else return;
+  e.preventDefault();
 });
+
+// ---- はじめ ----
+(async () => {
+  let results;
+  try {
+    results = await window.cardsApi.loadConfigs();
+  } catch (e) {
+    deckEl.replaceChildren(el('p', { text: `設定ファイルを読めませんでした。${e.message}` }));
+    announce(`設定ファイルを読めませんでした。${e.message}`, true);
+    return;
+  }
+  const configs = results.filter((r) => r.config).map((r) => r.config);
+  const problems = [];
+  for (const r of results) {
+    for (const e of r.errors || []) problems.push(`${r.file} の ${e.where}: ${e.message}`);
+  }
+  // アプリが一つだけなら、どこを読みますかの束を飛ばす。
+  if (configs.length === 1 && problems.length === 0) pushDeck(appDeck(configs[0]));
+  else pushDeck(topDeck(configs, problems));
+})();

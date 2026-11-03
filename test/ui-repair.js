@@ -4,6 +4,14 @@
 // 作品のコードは変えない。Claude を呼ぶ所だけを、決まった案を返す偽物に差し替える。
 // 手元の置き場には、画面が変わった後の練習のページを指す設定ファイルを、一時のフォルダに置く。
 
+// 2026-11-03: 画面を基のカード型ページの形に作り直している途中で、点検と直しの案の欄は、まだ新しい画面にない。
+// 直しの案を利用者の画面と保守の画面に作り直したら（作る順の (5)）、この起こし方も作り直す。
+if (process.versions.electron) {
+  console.log('直しの案の欄は、新しい画面で作り直している途中です。npm run ui:repair は、作り直すまで使えません。');
+  require('electron').app.exit(0);
+  return;
+}
+
 if (!process.versions.electron) {
   require('node:test')('直しの案の欄を画面に出す起こし方（Electron の上でだけ動く）', { skip: 'npm run ui:repair で動かす' }, () => {});
   return;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- 対比の最小: 文字 7.82:1（暗い表示の強調 #7cb8f7 と面 #1d2025。明るい表示では控えめな文字 #474d58 と面 #f6f7f9 の 7.93:1）、線 3.86:1（輪郭 #767d8a と面 #f6f7f9。フォーカスの枠は文字の色で 15.03:1 以上）。2026-11-03 に WCAG の式で計算。 -->
+<!-- 対比の最小: 文字 7.37:1（注釈 #434d5b とフォーカス中の項目の背景 #e8eefc）、線 3.76:1（罫線 #78818f と地 #f8fafc）。2026-11-03 に WCAG の式で計算。配色は基のカード型ページの標準の値。 -->
 <html lang="ja">
 <head>
   <meta charset="utf-8">
@@ -8,23 +8,15 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>カードの画面</h1>
-  </header>
   <main id="main">
-    <p id="loading">設定ファイルを読んでいます。</p>
-    <div id="apps"></div>
-    <section id="result" aria-labelledby="result-heading" hidden>
-      <h2 id="result-heading">結果</h2>
-      <p id="result-body" class="result-body"></p>
-    </section>
-    <section id="problems" aria-labelledby="problems-heading" hidden>
-      <h2 id="problems-heading">読めなかった設定ファイル</h2>
-      <ul id="problems-list"></ul>
-    </section>
+    <h1 id="page-title">Todoku</h1>
+    <div id="deck">
+      <p id="loading">設定ファイルを読んでいます。</p>
+    </div>
   </main>
-  <!-- 読み上げに知らせる所。中身を書き換えると読まれる。 -->
+  <!-- 読み上げに知らせる所。見える欄は置かない。ふつうの知らせと、強い知らせを分ける。 -->
   <div id="status" role="status" aria-live="polite" class="visually-hidden"></div>
+  <div id="alert" role="alert" aria-live="assertive" class="visually-hidden"></div>
   <script src="renderer.js"></script>
 </body>
 </html>

@@ -1,184 +1,112 @@
-/* カードの画面の見た目。色の対比は index.html の頭のコメントを参照。
-   色の役目は7つ（地・面・文字・控えめな文字・輪郭・強調・強調の上の文字）。赤は使わない。
-   余白は 6・12・20・32・52px の五段、角の丸みは 3px、影は付けない。 */
+/* カードの画面の見た目。基のカード型ページの標準の配色と寸法に合わせる。
+   色の対比は index.html の頭のコメントを参照。高コントラストの配色と「ゆったり」は、表示設定の段で足す。 */
 :root {
-  --ji: #ffffff;
-  --men: #f6f7f9;
-  --moji: #1a1c20;
-  --hikaeme: #474d58;
-  --rinkaku: #767d8a;
-  --kyocho: #084b8f;
-  --kyocho-ue: #ffffff;
-  --s1: 6px;
-  --s2: 12px;
-  --s3: 20px;
-  --s4: 32px;
-  --s5: 52px;
-  color-scheme: light dark;
+  --ji: #f8fafc;
+  --card: #ffffff;
+  --moji: #1f2933;
+  --chushaku: #434d5b;
+  --kyocho: #1e40af;
+  --keisen: #78818f;
+  --focus-ji: #e8eefc;
   color: var(--moji);
   background: var(--ji);
-  font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", sans-serif;
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", sans-serif;
   font-size: 16px;
-  line-height: 1.85;
+  line-height: 1.7;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ji: #14161a;
-    --men: #1d2025;
-    --moji: #e8eaed;
-    --hikaeme: #b4bac4;
-    --rinkaku: #8b93a1;
-    --kyocho: #7cb8f7;
-    --kyocho-ue: #0d1013;
-  }
-}
+body { margin: 0; }
 
-body {
-  margin: 0;
-  padding: var(--s4) var(--s5);
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 1rem;
 }
 
 h1 {
-  font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
-  font-weight: 600;
-  font-size: 2rem;
-  line-height: 1.4;
-  margin: 0 0 var(--s4);
-  padding-bottom: var(--s2);
-  border-bottom: 1px solid var(--rinkaku);
+  font-size: 1.4rem;
+  margin: 0.5rem 0 1rem;
 }
 
-h2 {
-  font-size: 1.375rem;
-  line-height: 1.5;
-  margin: var(--s5) 0 var(--s3);
-  padding-bottom: var(--s1);
-  border-bottom: 1px solid var(--rinkaku);
+#deck {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-h3 {
-  font-size: 1.125rem;
-  line-height: 1.5;
-  margin: var(--s4) 0 var(--s2);
-  padding-bottom: var(--s1);
-  border-bottom: 1px solid var(--rinkaku);
-}
-
-p { margin: 0 0 var(--s2); }
-
-/* カード。押せる囲みとして、面の色の地に 1px の輪郭。 */
-.cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-  gap: var(--s3);
-}
-
+/* カード: 白い面に、注釈の色の 1px の輪郭、角 10px。 */
 .card {
-  display: block;
-  width: 100%;
-  min-height: 6rem;
-  padding: var(--s3);
-  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--chushaku);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.card-note {
+  color: var(--chushaku);
+  margin: 0.25rem 0 0;
+}
+
+.card[aria-busy="true"] h2::after {
+  content: "（読んでいます）";
+  color: var(--chushaku);
+  font-weight: normal;
+}
+
+.items:empty { display: none; }
+.items { margin-top: 0.5rem; }
+
+/* 項目の見出しと内容は、二列の表のように並べる。狭いときは一列。 */
+.items dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+.items dt { font-weight: bold; }
+.items dd { margin: 0; white-space: pre-line; }
+.item-text { margin: 0.25rem 0; white-space: pre-line; }
+
+@media (max-width: 480px) {
+  .items dl { grid-template-columns: 1fr; }
+  .items dd { margin-bottom: 0.5rem; }
+}
+
+.item-button {
   font: inherit;
+  min-height: 44px;
+  padding: 0.25rem 1rem;
   color: var(--moji);
-  background: var(--men);
-  border: 1px solid var(--rinkaku);
-  border-radius: 3px;
+  background: var(--card);
+  border: 2px solid var(--keisen);
+  border-radius: 6px;
+  margin: 0.25rem 0;
   cursor: pointer;
 }
 
-.card:hover {
-  border-color: var(--kyocho);
-  box-shadow: inset 0 0 0 1px var(--kyocho);
-}
-
-.card-title {
-  display: block;
-  font-weight: 700;
-  font-size: 1.125rem;
-  line-height: 1.5;
-  color: var(--kyocho);
-}
-
-.card-description {
-  display: block;
-  margin-top: var(--s1);
-  color: var(--hikaeme);
-}
-
-.card[aria-busy="true"] { border-style: dashed; cursor: wait; }
-
-/* フォーカスは、文字の色の 3px の輪郭を 3px 離して。 */
-.card:focus-visible,
-.tool-button:focus-visible,
-.proposals input:focus-visible {
-  outline: 3px solid var(--moji);
+/* フォーカス: 強調の色の 4px の線を 3px 離す。中の項目は背景も変える。 */
+.card:focus,
+.item-button:focus {
+  outline: 4px solid var(--kyocho);
   outline-offset: 3px;
 }
-
-/* 結果の欄 */
-#result {
-  margin-top: var(--s5);
-}
-.result-body {
-  white-space: pre-line;
-  padding: var(--s3);
-  background: var(--men);
-  border: 1px solid var(--rinkaku);
-  border-radius: 3px;
+[data-item]:focus {
+  outline: 4px solid var(--kyocho);
+  outline-offset: 3px;
+  background: var(--focus-ji);
+  color: var(--moji);
+  border-radius: 4px;
 }
 
-/* 設定の点検と、直しの案 */
-.maint { margin-top: var(--s4); }
-
-.tool-button {
-  font: inherit;
-  font-weight: 700;
-  min-height: 44px;
-  color: var(--kyocho-ue);
-  background: var(--kyocho);
-  border: 1px solid var(--kyocho);
-  border-radius: 3px;
-  padding: var(--s1) var(--s3);
-  margin: var(--s1) 0;
-  cursor: pointer;
-}
-.tool-button:hover { text-decoration: underline; }
-.tool-button[aria-busy="true"] { border-style: dashed; cursor: wait; }
-
-.proposals fieldset {
-  margin: var(--s3) 0;
-  padding: var(--s2) var(--s3) var(--s3);
-  background: var(--men);
-  border: 1px solid var(--rinkaku);
-  border-radius: 3px;
-}
-.proposals legend {
-  font-weight: 700;
-  padding: 0 var(--s1);
-}
-.proposals label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s1);
-  min-height: 44px;
-  margin-right: var(--s4);
-}
-.proposals input {
-  width: 24px;
-  height: 24px;
-  accent-color: var(--kyocho);
-}
-
-/* 読めなかった設定ファイル。赤は使わず、太字と左の線で目立たせる。 */
-#problems-list {
-  font-weight: 700;
-  border-left: 3px solid var(--moji);
-  padding-left: var(--s4);
+/* OS の強制配色（ハイコントラスト）のときは、そちらを優先し、線は OS の文字の色で描く。 */
+@media (forced-colors: active) {
+  .card { border-color: CanvasText; }
+  .card:focus, [data-item]:focus, .item-button:focus { outline-color: Highlight; }
 }
 
 .visually-hidden {
