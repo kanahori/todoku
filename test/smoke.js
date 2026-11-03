@@ -160,12 +160,15 @@ async function main() {
   // 画像の説明（alt）と文字の重なり: 同じか、片方が他方を含むときは一度だけ読む。違う中身は両方読む。
   const altConfig = { id: 'alt-text', name: 'あおば町のリンク集（作り物）', url: 'fixture:alt-text.html',
     cards: [{ id: 'links', title: 'リンク集', action: 'list', selector: '#links li' }, { id: 'all', title: 'リンク集', action: 'read', selector: '#links' }] };
-  const altExpected = ['あおば町の地図のサイト「あおばマップ」', 'こども学習を支援サイト「まなび」', '図書館の開館日', 'あおば町の路線バスの時刻表', '町民プール 夏の行事'];
+  const altExpected = ['あおば町の地図のサイト「あおばマップ」', 'こども学習を支援サイト「まなび」', '図書館の開館日', 'あおば町の路線バスの時刻表',
+    '探究学習の支援サイト「steam まなび」', 'あおば町在宅医療・介護連携の事業', 'AOBA OPEN DATA', '町民プール 夏の行事'];
   const altList = await runCard(BrowserWindow, altConfig, 'links');
   check('画像の説明: 一覧の項目の中で、画像の説明と文字が同じか片方が他方を含むときは一度だけ読み、違う中身は両方読む',
     altList.ok && JSON.stringify(altList.items) === JSON.stringify(altExpected), altList.items);
   const altRead = await runCard(BrowserWindow, altConfig, 'all');
-  check('画像の説明: 読むカードでも、行の中の重なりを一度だけ読む', altRead.ok && altRead.text === altExpected.join('\n'), altRead.text);
+  // 読むカードは行ごとに読む。「・」で終わる行は次の行につなぐが、英字の二行（AOBA と OPEN DATA）は別の行のまま。
+  const altReadExpected = [...altExpected.slice(0, 6), 'AOBA', 'OPEN DATA', altExpected[7]];
+  check('画像の説明: 読むカードでも、行の中の重なりを一度だけ読む', altRead.ok && altRead.text === altReadExpected.join('\n'), altRead.text);
   closeTarget('alt-text');
 
   // 日だけの表: 日付の要素の id か datetime に書かれた年・月・日から「11月6日」と読む。読めない行は書いてあるまま。

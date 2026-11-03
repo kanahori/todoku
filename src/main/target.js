@@ -55,15 +55,27 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
   // 画像の説明（alt）と文字の重なり。項目（一覧の1件・読むカードの1行）の中で、画像の説明と文字が同じか、
   // 片方が他方を含むときは、一度だけ読む（長い方を残す）。「〇〇ロゴ」「〇〇のロゴ」は、ロゴの語を外して比べる。
   // 「〇〇の写真」「〇〇の画像」は外さない（写真があることも中身なので、「役場の写真」と「あおば町役場」は両方読む）。
-  // 1字だけ違う同じ長さの文（8字以上）も同じとみる（ページの書き損じで二度読まれた）。違う中身は両方残す。
+  // 比べる前に、全角と半角・大文字と小文字をそろえ、空白と記号を外す。それでも1〜2字だけ違う（8字以上の）ときも同じとみて、
+  // 文字の方（alt でない方）だけを読む（「探求…steam…」と「探究…STEAM…」。ページの書き損じで二度読まれた）。違う中身は両方残す。
   // つくば市のトップで「つくミルロゴ、つくば市地図データサイト「つくミル」」と重ねて読んだ（2026-11-04 の Windows の確かめ）。
   const ALT_OPEN = '\u0001';
   const ALT_CLOSE = '\u0002';
   const settleAlts = (s) => {
     if (!s.includes(ALT_OPEN)) return s;
     const pieces = s.split(/(\u0001[^\u0002]*\u0002)/).map((t) => (t.startsWith(ALT_OPEN) ? { alt: true, t: t.slice(1, -1) } : { alt: false, t }));
-    const core = (t) => t.replace(/\s+/g, '').replace(/(の)?(ロゴマーク|ロゴ)$/, '');
-    const near = (a, b) => a.length >= 8 && a.length === b.length && [...a].filter((ch, i) => ch !== b[i]).length <= 1;
+    const core = (t) => t.normalize('NFKC').toLowerCase().replace(/(の)?(ロゴマーク|ロゴ)\s*$/, '').replace(/[\s\p{P}\p{S}]+/gu, '');
+    // 二つの文の違い（足す・消す・置き換えるの字数）が2字までか。
+    const near = (a, b) => {
+      if (Math.min(a.length, b.length) < 8 || Math.abs(a.length - b.length) > 2) return false;
+      let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+      for (let i = 1; i <= a.length; i++) {
+        const cur = [i];
+        for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (Math.min(...cur) > 2) return false;
+        prev = cur;
+      }
+      return prev[b.length] <= 2;
+    };
     const texts = pieces.filter((p) => !p.alt).map((p) => core(p.t));
     const textAll = texts.join('');
     const kept = [];
@@ -140,12 +152,24 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         .replace(/([（「『【]) /g, '$1')
         // 同じ文が続けて二度出たら一度にする（画像の alt とその下の文字が同じときなど）。
         .replace(/(\S.{3,}?) \1(?= |$)/g, '$1');
-      if (line && line !== lines[lines.length - 1]) lines.push(line);
+      if (!line || line === lines[lines.length - 1]) continue;
+      // 前の行が「・」「／」などのつなぎで終わるか、この行がそれで始まるときは、一つの名前の続きなので前の行につなぐ。
+      const last = lines[lines.length - 1];
+      if (last !== undefined && (/[・／/＆&＋+－-]$/.test(last) || /^[・／/＆&＋+－-]/.test(line))) lines[lines.length - 1] = last + line;
+      else lines.push(line);
     }
     return lines;
   };
   // 一覧の1件は、一つの項目として読む。行の区切りは、句読点で終わっていなければ読点にする。
-  const oneLine = (lines) => lines.reduce((acc, line) => (acc === '' ? line : `${acc}${/[、。，．！？：:,.;；]$/.test(acc) ? ' ' : '、'}${line}`), '')
+  // 行の間は、ふつうは読点で区切る。前の行が句読点で終わるときは空白にする。
+  // 一つの名前が二つの要素に分かれているときは区切らない: 前の行が「・」「／」などのつなぎで終わるか、次の行がそれで始まるときは
+  // そのままつなぎ、前の行の終わりと次の行の頭がどちらも英数字なら空白でつなぐ（「在宅医療・、介護連携」「TSUKUBA、OPEN DATA」と読んだ）。
+  const joint = (acc, line) => {
+    if (/[・／/＆&＋+－\-ー]$/.test(acc) || /^[・／/＆&＋+－\-]/.test(line)) return '';
+    if (/[A-Za-z0-9]$/.test(acc) && /^[A-Za-z0-9]/.test(line)) return ' ';
+    return /[、。，．！？：:,.;；]$/.test(acc) ? ' ' : '、';
+  };
+  const oneLine = (lines) => lines.reduce((acc, line) => (acc === '' ? line : `${acc}${joint(acc, line)}${line}`), '')
     .replace(/(\S.{3,}?)[、 ]\1(?=[、 ]|$)/g, '$1');
   const query = (s) => {
     try {
