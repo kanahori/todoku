@@ -491,6 +491,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   // 自転車のページで、本文を丸ごと読むカードがあり、重なりの判断で節のカードが全部はじかれた（2026-11-04 の Windows の確かめ）。
   // 読むカードが読むのは、当たる要素の最初の一つだけなので、重なりの判断もその一つで見る（一覧のカードは全部）。
   const takenEls = [];
+  const takenCards = [];
   const whole = [];
   for (const t of taken) {
     const s = Array.isArray(t) ? t[0] : t;
@@ -501,12 +502,25 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     } catch (e) {
       // 書き方の誤りのある selector は、もう落としてある
     }
-    if (els.length === 1 && sectionHeads.filter((h) => els[0].contains(h)).length >= 2) whole.push(s);
-    else takenEls.push(...els);
+    // 本文を丸ごと読むカード: 読むカードは最初の一つが、一覧のカードは項目の全部が、節の見出しを二つ以上含むもの。
+    // 一覧のカードで、本文の div を項目にしたもの（.wysiwyg など）が節を全部はじいた（頼み16 の後戻り。作り物のページで再現した）。
+    const covered = firstOnly ? els.slice(0, 1) : els;
+    if (els.length > 0 && sectionHeads.filter((h) => covered.some((e) => e.contains(h))).length >= 2) whole.push(s);
+    else {
+      takenEls.push(...els);
+      if (els.length > 0) takenCards.push(els);
+    }
   }
   // 本文の主な表・一覧。
   const outside = (el) => Boolean(el.closest('nav, header, footer, aside, [role="navigation"]')) || hidden(el);
-  const overlapsTaken = (el) => takenEls.some((t) => el === t || el.contains(t) || t.contains(el));
+  // 必ず作る表を作らないのは、Claude のカードがその表そのものか、表の行の半分以上を項目にしているときだけ。
+  // 表を含む大きな包み（本文の全部を読むカードなど）や、表の中の升目だけのカードでは、表は作る
+  // （包み全体を読むカードがあると、発表状況の表も市町村別の表も作られなかった。頼み16 の後戻り。作り物のページで再現した）。
+  const overlapsTaken = (el) => {
+    if (takenEls.includes(el)) return true;
+    const rows = el.matches('table') ? [...el.rows] : [...el.querySelectorAll('[role="row"], :scope > li')];
+    return rows.length > 0 && rows.filter((r) => takenEls.includes(r)).length / rows.length >= 0.5;
+  };
   // 目次（同じページの中を指すリンクの一覧）は、主な一覧にしない。
   const tocLike = (l) => {
     const links = [...l.querySelectorAll('a[href]')];
@@ -644,7 +658,17 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     if (!title || takenEls.some((t) => t.contains(h))) continue;
     const need = tocHeads.has(h) ? 1 : minChars;
     // 節の中に、Claude が選んだカードの場所があれば作らない（同じ所を二度読むカードになるため）。
-    const overlaps = (nodes) => nodes.some((n) => takenEls.some((t) => n === t || n.contains(t) || t.contains(n)));
+    // 節を作らないのは、Claude のカードがその節を読むとき: カードの要素が節の範囲を全部含むか、カードの要素の半分以上が節の中にあって、
+    // 節の文字の半分以上を読むとき。節の中の一部に、ほかの所にも当たるカードがかかるだけなら、節は作る
+    // （目次のリンクの一覧の selector が節の中の一覧にも当たり、節がはじかれた。頼み16 の後戻り。作り物のページで再現した）。
+    const textLen = (els) => els.reduce((n, e) => n + textOf(e).length, 0);
+    const overlaps = (nodes) => takenCards.some((els) => {
+      if (els.some((e) => nodes.every((n) => e === n || e.contains(n)))) return true;
+      const inside = els.filter((e) => nodes.some((n) => n === e || n.contains(e)));
+      if (inside.length === 0 || inside.length / els.length < 0.5) return false;
+      const all = textLen(nodes);
+      return all === 0 || textLen(inside) / all >= 0.5;
+    });
     // 見出しを頭に持ち、ほかの中身もある区画（その見出しだけを含む section など）なら、その区画を読む。
     const box = h.parentElement;
     if (box && box !== main && main.contains(box) && box.children.length > 1 && box.querySelectorAll(stops).length === 1 && box.firstElementChild === h) {
@@ -937,7 +961,7 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const taken = picked.filter((c) => c.action !== 'click').map((c) => [c.selector, c.action]);
   const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
   const whole = new Set(extras && Array.isArray(extras.whole) ? extras.whole : []);
-  const kept = picked.filter((c) => !(c.action === 'read' && whole.has(c.selector)));
+  const kept = picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector)));
   const withMain = addMainListCards(kept, extras && extras.mainLists);
   const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
   dumpFile(id, 'c-deck.json', {

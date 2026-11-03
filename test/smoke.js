@@ -666,6 +666,23 @@ async function generateChecks() {
       store.remove(whole2.config.id);
     }
 
+    // 頼み16 の後戻りの組み合わせ（Claude の案で、節や必ず作る表が消えたもの）。
+    // 本文の子を全部項目にした一覧・目次の一覧の selector が節の中の一覧にも当たるもの・ページ全体を包む読むカード。
+    const sectionTitles = ['あおチャリとは', '料金', '利用料', '利用の流れ', '借りられる場所', 'お知らせ', 'お問い合わせ'];
+    for (const [label, cardsOf, expect] of [
+      ['本文の子を全部項目にした一覧', [noTitle('list', 'list', '.free-layout-area > div > *')], sectionTitles],
+      ['目次の一覧（節の中の一覧にも当たる selector）', [noTitle('list', 'list', '.wysiwyg ul li')], ['目次を読む', ...sectionTitles]],
+    ]) {
+      const d = await generateDeck({ BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: cardsOf }), store, allowFixtures: true });
+      check(`カードを作る（後戻りの組み合わせ）: ${label}があっても、節のカードを全部作る`,
+        d.ok && JSON.stringify(d.config.cards.map((c) => c.title)) === JSON.stringify(expect), d.ok ? d.config.cards.map((c) => c.title) : d);
+      if (d.ok) store.remove(d.config.id);
+    }
+    const wrapped = await generateDeck({ BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.container')] }), store, allowFixtures: true });
+    check('カードを作る（後戻りの組み合わせ）: ページ全体を包む読むカードがあっても、必ず作る二つの表を作る',
+      wrapped.ok && wrapped.config.cards.filter((c) => c.joinWith).length === 2, wrapped.ok ? wrapped.config.cards.map((c) => c.title) : wrapped);
+    if (wrapped.ok) store.remove(wrapped.config.id);
+
     // main も見出しも無く、表を名前の列と値の列の二つに分けて描くページ（気象台の警報のページの作り）。
     // body を本文の区画とみて、最初の表と行の一番多い表を、二つの表の行をつないで読むカード（joinWith）にし、role の無い div の並びも表の切り替えとみる。
     const wide = await generateDeck({
