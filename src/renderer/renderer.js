@@ -84,6 +84,12 @@ function renderCard(card, i) {
   // 説明（設定ファイルの description）は、見出しの次の項目にして、矢印で選べるようにする（カードの外に情報を作らない）。
   const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
   node.append(renderItems(items));
+  // 行き先のカードは Enter で先へ進むので、中の一文（Enter で何が起きるか）を、カードを選んだときに見出しの後で読ませる。
+  const described = node.querySelector('[data-describe]');
+  if (described) {
+    described.id = `card-d-${idSeq}`;
+    node.setAttribute('aria-describedby', described.id);
+  }
   // マウスで押したときも、キーと同じ動きにする。
   node.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
@@ -127,6 +133,7 @@ function renderItems(items) {
       const p = el('p', { 'data-item': '', tabindex: '-1', class: item.note ? 'item-text card-note' : 'item-text', text: item.text });
       if (item.result) p.setAttribute('data-result', '');
       if (item.loading) p.setAttribute('data-loading', '');
+      if (item.describe) p.setAttribute('data-describe', '');
       box.append(p);
     }
   }
@@ -198,7 +205,7 @@ async function readCard(card) {
     const sec = Math.round((Date.now() - started) / 1000);
     const item = card.node && card.node.isConnected ? card.node.querySelector('[data-loading]') : null;
     if (item) item.textContent = `読んでいます。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`;
-    announce(`${sec}秒たちました。`);
+    announce(`「${card.title}」を読み始めて、${sec}秒たちました。`);
   }, PROGRESS_EVERY_MS);
   let result;
   try {
@@ -213,7 +220,11 @@ async function readCard(card) {
   if (result.ok) {
     const texts = Array.isArray(result.items) ? result.items : String(result.text || '').split('\n').filter((t) => t.trim() !== '');
     count = texts.length;
-    if (result.action === 'list') {
+    if (count === 0) {
+      // 中に読む項目が無いカード。上下矢印キーの対象から外すと、いま選んでいるカードが消えるので外さず、見出しの件数と中の一文の両方で言う。
+      card.items = [{ text: 'このカードの中には、読む項目がありません。', result: true }];
+      card.heading = `${card.title}（0件）`;
+    } else if (result.action === 'list') {
       // 読んだ1件ずつを ul の li にする（NVDA が「2の4」と位置を読む）。
       card.items = texts.map((t) => ({ listItem: t }));
       card.heading = `${card.title}（${count}件）`;
@@ -244,6 +255,8 @@ async function readCard(card) {
   node = refreshCard(card);
   if (!node) return;
   if (result.ok) announce(result.action === 'list' ? `「${card.title}」から${count}件読みました。` : `「${card.title}」を読みました。`);
+  else if (result.needLogin) announce(`「${card.title}」は、ログインが要ります。`);
+  else announce(`「${card.title}」を読めませんでした。`);
   if (wasInside) enterCard(node, true);
 }
 
@@ -262,9 +275,10 @@ function showClickConfirm(card, node) {
     { text: `「${card.title}」を押します。`, result: true },
     {
       button: `「${card.title}」を押す`,
-      onPress: async () => {
+      onPress: async (button) => {
         if (busy) return;
         busy = true;
+        button.textContent = `「${card.title}」を押す（押しています）`;
         announce(`「${card.title}」を押しています。`);
         let r;
         try {
@@ -273,6 +287,7 @@ function showClickConfirm(card, node) {
           r = { ok: false, message: e.message };
         } finally {
           busy = false;
+          button.textContent = `「${card.title}」を押す`;
         }
         announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}`, !r.ok);
       },
@@ -283,23 +298,41 @@ function showClickConfirm(card, node) {
 }
 
 // ---- 束を作る ----
-// はじめのカードのキーの説明。基の書き方（キーには「キー」を付け、カードは「選ぶ」、中は「カード内へ移動する」・一文ごとに改行）。
-// Enter の意味は束ごとに違うので、それぞれの束のはじめのカードで言う。
+// はじめのカードは、見出しを名前にし、中の最初の項目で何ができるかを一文で言う（件数も同じ文に）。
+// キーの説明は基の書き方（キーには「キー」を付け、カードは「選ぶ」、中は「カード内へ移動する」）で、一文を一つの項目にする。
+// Enter の二つの意味（先へ進む／カード内へ移動する）は、はじめのカードで分けて言い、行き先のカードでは中の一文でも言う。
 const APP_NAME = 'Todoku';
-const NVDA_TEXT = 'NVDA キーとスペースキーでフォーカスモードに替えると、上下矢印キーでカードを選べます。\n替えなくても、H キーで見出しを順に読めます。';
+const NVDA_TEXTS = [
+  'NVDAでは、NVDAキーとスペースキーでフォーカスモードに替えると、上下矢印キーでカードを選べます。',
+  '替えなくても、Hキーで見出しを順に読めます。',
+];
 
-function appDeck(config) {
-  const cards = [{
-    kind: 'info',
-    heading: config.name,
-    items: [
-      { text: `「${config.name}」を、カードで読めます（読む先 ${config.cards.length}件）。` },
-      { label: '上下矢印キー', text: 'カードを選びます。' },
-      { label: 'スペースキーまたはEnterキー', text: 'そのカードの所を読みに行き、カード内へ移動します。\nもう一度押すと、読み直します。' },
-      { label: 'カードの中の上下矢印キー', text: '読んだものを1件ずつ読みます。' },
-      { label: 'Escキー', text: 'カードの中からカードへ戻ります。\nカードの上で押すと、「' + APP_NAME + '」に戻ります。' },
-    ],
-  }];
+function sentences(texts) { return texts.map((text) => ({ text })); }
+
+// 説明の文の終わりに「。」が無ければ足す（一文として読まれるように）。
+function endSentence(text) {
+  const t = String(text).trim();
+  return /[。．.！？!?]$/.test(t) ? t : `${t}。`;
+}
+
+// hasParent: 上に「Todoku」の束があるか（アプリが一つだけのときは無い）。
+function appDeck(config, hasParent = true) {
+  const reads = config.cards.filter((c) => c.action !== 'click').length;
+  const clicks = config.cards.length - reads;
+  const counts = [reads > 0 ? `読む所${reads}件` : '', clicks > 0 ? `押す所${clicks}件` : ''].filter(Boolean).join('・');
+  const texts = [
+    `「${config.name}」の画面を、カードで読めます（${counts || 'カード0件'}）。`,
+    '上下矢印キーでカードを選びます。',
+    'スペースキーまたはEnterキーで、カード内へ移動します。',
+    '読む所のカードでは、カード内へ移動するときに、ウェブアプリのその所を読みます。',
+    '読む所のカードの上で、もう一度スペースキーまたはEnterキーを押すと、読み直します。',
+    '押す所のカードでは、カード内のボタンで押します。',
+    'カード内では、上下矢印キーで項目を一つずつ選びます。',
+    'Escキーで、カードの中からカードへ戻ります。',
+  ];
+  if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
+  if (clicks === 0) texts.splice(texts.indexOf('押す所のカードでは、カード内のボタンで押します。'), 1);
+  const cards = [{ kind: 'info', heading: config.name, items: sentences(texts) }];
   for (const c of config.cards) {
     cards.push({
       kind: c.action === 'click' ? 'click' : 'read',
@@ -308,7 +341,7 @@ function appDeck(config) {
       cardId: c.id,
       title: c.title,
       heading: c.title,
-      note: c.description,
+      note: c.description ? endSentence(c.description) : undefined,
       items: [],
     });
   }
@@ -319,19 +352,22 @@ function topDeck(configs, problems) {
   const cards = [{
     kind: 'info',
     heading: APP_NAME,
-    items: [
-      { text: `ウェブアプリの画面を、カードで読めます（アプリ ${configs.length}件）。` },
-      { label: '上下矢印キー', text: 'アプリのカードを選びます。' },
-      { label: 'スペースキーまたはEnterキー', text: 'そのアプリを開きます。\nはじめのカードでは、カード内へ移動します。' },
-      { label: 'Escキー', text: 'カードの中からカードへ戻ります。' },
-      { label: 'NVDA', text: NVDA_TEXT },
-    ],
+    items: sentences([
+      `ウェブアプリの画面を、カードで読めます（アプリ${configs.length}件）。`,
+      '上下矢印キーでカードを選びます。',
+      'スペースキーまたはEnterキーで、カード内へ移動します。',
+      'ただし、アプリの名前のカードでは、スペースキーまたはEnterキーで、そのアプリのカードへ進みます。',
+      'カード内では、上下矢印キーで項目を一つずつ選びます。',
+      'Escキーで、カードの中からカードへ戻ります。',
+      ...NVDA_TEXTS,
+    ]),
   }];
   for (const config of configs) {
     cards.push({
       kind: 'goto',
       heading: config.name,
-      open: () => pushDeck(appDeck(config)),
+      items: [{ text: `スペースキーまたはEnterキーで、「${config.name}」のカードへ進みます。`, describe: true }],
+      open: () => pushDeck(appDeck(config, true)),
     });
   }
   if (problems.length > 0) {
@@ -399,7 +435,7 @@ document.addEventListener('keydown', (e) => {
   for (const r of results) {
     for (const e of r.errors || []) problems.push(`${r.file} の ${e.where}: ${e.message}`);
   }
-  // アプリが一つだけなら、どこを読みますかの束を飛ばす。
-  if (configs.length === 1 && problems.length === 0) pushDeck(appDeck(configs[0]));
+  // アプリが一つだけなら、「Todoku」の束を飛ばす。
+  if (configs.length === 1 && problems.length === 0) pushDeck(appDeck(configs[0], false));
   else pushDeck(topDeck(configs, problems));
 })();
