@@ -14,6 +14,10 @@
   <header>
     <h1>練習のページ</h1>
     <button type="button" class="compose">新しい知らせを書く</button>
+    <!-- 押すとページの中に表を出し、URL の # から後だけを変える（気象庁の「データを表示」をまねる）。 -->
+    <button type="button" id="show-table">表を表示</button>
+    <!-- 押すと小さなファイル（作り物の値）をダウンロードさせる。 -->
+    <a id="download-sample" href="data:text/csv;charset=utf-8,date%2Cvalue%0A2026-11-01%2C12.3%0A" download="practice-data.csv">作り物の値をダウンロード</a>
   </header>
   <main>
     <h2>受信箱</h2>
@@ -33,6 +37,7 @@
       <h2>次の締め切り</h2>
       <ul id="deadline-list"></ul>
     </section>
+    <section id="shown-area"></section>
     <section id="compose-area" hidden>
       <h2>新しい知らせ</h2>
       <label>本文 <textarea id="compose-body"></textarea></label>
@@ -42,6 +47,13 @@
     document.querySelector('button.compose').addEventListener('click', () => {
       document.getElementById('compose-area').hidden = false;
       document.body.dataset.composed = 'yes';
+    });
+    document.getElementById('show-table').addEventListener('click', () => {
+      const table = document.createElement('table');
+      table.id = 'shown-table';
+      table.innerHTML = '<tr><th>日</th><th>値（作り物）</th></tr><tr><td>1日</td><td>12.3</td></tr>';
+      document.getElementById('shown-area').append(table);
+      location.hash = 'shown';
     });
     setTimeout(() => {
       const li = document.createElement('li');

@@ -23,7 +23,15 @@ function check(name, ok, detail) {
   console.log(`${ok ? '通った' : '落ちた'}: ${name}${ok ? '' : ` — ${JSON.stringify(detail)}`}`);
 }
 
+// ダウンロードの保存先は、試しでは一時のフォルダにする。
+const os = require('node:os');
+const fs = require('node:fs');
+const { attachDownloads } = require('../src/main/download');
+const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'download-smoke-'));
+const lateDownloads = [];
+
 async function main() {
+  attachDownloads(require('electron').session.defaultSession, { getDir: () => downloadDir, onDone: (r) => lateDownloads.push(r) });
   const { config, errors } = loadConfigFile(path.join(__dirname, 'fixtures', 'sample.json'));
   if (!config) throw new Error(`sample.json を読めません: ${JSON.stringify(errors)}`);
 
@@ -40,6 +48,30 @@ async function main() {
   const win = BrowserWindow.getAllWindows()[0];
   const composed = await win.webContents.executeJavaScript('document.body.dataset.composed');
   check('押したあと、ページの中で書く欄が開いた', composed === 'yes', composed);
+
+  // ページの中の動きで # から後だけが変わっても、次のカードで読み込み直さない（読み込み直すと、出した表が消える）。
+  const withHash = { ...config, cards: [...config.cards, { id: 'show-table', title: '表を表示', action: 'click', selector: '#show-table' }] };
+  const shown = await runCard(BrowserWindow, withHash, 'show-table', { downloadStartMs: 300 });
+  const hashUrl = BrowserWindow.getAllWindows()[0].webContents.getURL();
+  check('表を表示を押すと、URL の # から後だけが変わる', shown.ok && hashUrl.endsWith('practice.html#shown'), { shown, hashUrl });
+  const afterHash = await runCard(BrowserWindow, withHash, 'inbox');
+  const tableStill = await BrowserWindow.getAllWindows()[0].webContents.executeJavaScript("Boolean(document.getElementById('shown-table'))");
+  check('# が付いた後に別のカードを読んでも、読み込み直さない（出した表が残る）', afterHash.ok && tableStill === true, { afterHash, tableStill });
+
+  // 押した結果のダウンロードは、ダイアログを出さずに保存先のフォルダへ、元の名前で保存する（同じ名前があれば番号を付ける）。
+  {
+    const withDownload = { ...config, cards: [...config.cards, { id: 'download', title: '作り物の値をダウンロード', action: 'click', selector: '#download-sample' }] };
+    fs.writeFileSync(path.join(downloadDir, 'practice-data.csv'), 'いまあるファイル');
+    const got = await runCard(BrowserWindow, withDownload, 'download');
+    check('押した結果のダウンロードを「「practice-data (1).csv」をダウンロードのフォルダに保存しました。」と返す',
+      got.ok && got.action === 'click' && got.download && got.download.ok === true
+        && got.download.message === '「practice-data (1).csv」をダウンロードのフォルダに保存しました。', got);
+    const saved = path.join(downloadDir, 'practice-data (1).csv');
+    check('保存したファイルの中身が、ダウンロードさせた中身と同じ',
+      fs.existsSync(saved) && fs.readFileSync(saved, 'utf8') === 'date,value\n2026-11-01,12.3\n', fs.readdirSync(downloadDir));
+    check('前からあったファイルは書き換えない', fs.readFileSync(path.join(downloadDir, 'practice-data.csv'), 'utf8') === 'いまあるファイル');
+    check('押すカードが受け取ったダウンロードは、別の知らせ（onDone）を出さない', lateDownloads.length === 0, lateDownloads);
+  }
 
   // 後から出てくる所は、出てくるまで待って読む。
   const late = { ...config, cards: [{ id: 'late', title: '次の締め切り', action: 'read', selector: '#deadline-list' }] };
@@ -129,8 +161,6 @@ async function main() {
     carousel2.ok && carousel2.text.startsWith('4件あります。') && carousel2.text.includes('2件目: マイナンバーカードの休日窓口'), carousel2);
 
   // 直しの一巡（Claude を呼ぶ所は偽の返事）: 当たらない → 構造を集める → 案 → 採る → 設定ファイルが直る → 当たる。
-  const os = require('node:os');
-  const fs = require('node:fs');
   const { proposeRepairs, applyRepairs, saveConfigFile } = require('../src/main/repair');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'repair-smoke-'));
   try {
@@ -169,6 +199,7 @@ async function main() {
 app.whenReady()
   .then(main)
   .then(() => {
+    fs.rmSync(downloadDir, { recursive: true, force: true });
     const failed = checks.filter((c) => !c.ok).length;
     console.log(`${checks.length}件のうち、${checks.length - failed}件が通りました。`);
     app.exit(failed === 0 ? 0 : 1);

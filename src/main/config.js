@@ -5,6 +5,7 @@
 // {
 //   "id": "sample",                 // 英数字とハイフン
 //   "name": "練習用のアプリ",        // 読み上げで使う名前
+//   "description": "出典：…",       // 任意。アプリの説明。アプリのはじめのカードの最後の項目として読まれる
 //   "url": "https://example.com/",  // 開くページ。"fixture:practice.html" なら test/fixtures/ の練習のページ
 //   "login": { "selector": "body.notloggedin", "path": "/login/index.php" },
 //                                   // 任意。selector が当たったらログインが要ると見なし、path（任意）のログインの画面を開く
@@ -47,6 +48,9 @@ function validateConfig(config) {
   }
   if (typeof config.url !== 'string' || !(/^https?:\/\//.test(config.url) || FIXTURE_PATTERN.test(config.url))) {
     add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が要ります');
+  }
+  if (config.description !== undefined && typeof config.description !== 'string') {
+    add('description', '文字列が要ります');
   }
   if (config.login !== undefined) {
     if (config.login === null || typeof config.login !== 'object' || typeof config.login.selector !== 'string' || config.login.selector.trim() === '') {

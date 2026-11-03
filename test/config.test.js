@@ -91,3 +91,17 @@ test('container は list のカードにだけ、空でない文字列で書け�
   assert.deepEqual(errors.map((e) => e.where), ['cards[1].container', 'cards[2].container']);
   assert.match(errors[0].message, /list/);
 });
+
+test('頭の description は、あれば文字列であること', () => {
+  assert.deepEqual(validateConfig({ ...good(), description: '出典：作り物のサイト（https://example.com/）を加工して作成' }), []);
+  assert.deepEqual(validateConfig({ ...good(), description: 3 }).map((e) => e.where), ['description']);
+});
+
+test('気象庁の三つの設定ファイルは、頭の description に出典の文を持ち、読める', () => {
+  const { loadConfigFile } = require('../src/main/config');
+  for (const name of ['jma-daily.json', 'jma-forecast.json', 'jma-obsdl.json']) {
+    const r = loadConfigFile(path.join(__dirname, '..', 'cards', name));
+    assert.ok(r.config, `${name}: ${JSON.stringify(r.errors)}`);
+    assert.match(r.config.description, /^出典：気象庁ホームページ（https:\/\/[^）]+）を加工して作成$/);
+  }
+});

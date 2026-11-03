@@ -27,3 +27,19 @@ test('0件のときは、見出し「〇〇（0件）」と中の一文を出す
   assert.match(readCardBody, /（0件）/);
   assert.match(readCardBody, /このカードの中には、読む項目がありません。/);
 });
+
+test('list のカードで 0件のときは「「〇〇」は0件でした。」と知らせる', () => {
+  assert.match(readCardBody, /count === 0 \? `「\$\{card\.title\}」は0件でした。`/);
+  assert.doesNotMatch(readCardBody, /から0件読みました/);
+  assert.match(readCardBody, /から\$\{count\}件読みました。/);
+});
+
+test('設定ファイルの頭の description は、アプリのはじめのカードの項目になる', () => {
+  const appDeckBody = source.slice(source.indexOf('function appDeck('), source.indexOf('function topDeck('));
+  assert.match(appDeckBody, /texts\.push\(endSentence\(config\.description\)\)/);
+});
+
+test('押した結果のダウンロードは、保存したか（できなかったか）を知らせる', () => {
+  assert.match(source, /if \(r\.ok && r\.download\) announce\(r\.download\.message, !r\.download\.ok\)/);
+  assert.match(source, /onDownloadDone\(\(r\) => announce\(r\.message, !r\.ok\)\)/);
+});

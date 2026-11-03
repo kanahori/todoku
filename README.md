@@ -43,6 +43,11 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - `CARDS_LOCAL_DIR` (optional): a folder of extra config files (`*.json`) that are loaded after the bundled `cards/`. Use it for sites whose configs you do not want to publish. A config whose `id` duplicates one already loaded is skipped and reported.
 - `CARDS_ANTHROPIC_API_KEY` (optional): the Anthropic API key used to ask Claude for repaired selectors. Without it, the app says it cannot make repair proposals; everything else works. The app deliberately does not read `ANTHROPIC_API_KEY`, so that the key used by the app stays separate from other tools on the same machine.
 - `CARDS_REPAIR_MODEL` (optional): the Claude model used for repair proposals. Default: `claude-opus-5-5`.
+- `https_proxy` / `HTTPS_PROXY` (optional): passed to Electron as `--proxy-server`, so the app can reach outside pages from a network that needs a proxy. `no_proxy` / `NO_PROXY` (optional) is passed as `--proxy-bypass-list`. Without them, the app uses no proxy switches.
+
+## Downloads
+
+- When pressing a card starts a download in the web app window, the app saves the file to the user's Downloads folder under its original name (adding " (1)", " (2)", ... if the name is taken), without a save dialog, and announces "「file name」をダウンロードのフォルダに保存しました。" (or that it could not be saved).
 
 ## How repair works (what is sent to Claude)
 
@@ -53,7 +58,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Config file format (short)
 
-- `id`, `name`, `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
+- `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
 - Each card: `id`, `title`, `action` (`read` one element, `list` all matching items with numbers, `click`), `selector`, optional `path` (a page on the same site), `description`, and, for `list` cards only, `container` (the selector of the element that holds the items: if it matches but no item does, the card says "0 items"; if it does not match either, the card says it cannot read. Without `container`, no items means "cannot read", because an empty list and a changed screen look the same).
 
 ## Bundled examples

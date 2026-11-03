@@ -258,7 +258,8 @@ async function readCard(card) {
   if (card.node) card.node.removeAttribute('aria-busy');
   node = refreshCard(card);
   if (!node) return;
-  if (result.ok) announce(result.action === 'list' ? `「${card.title}」から${count}件読みました。` : `「${card.title}」を読みました。`);
+  if (result.ok && result.action === 'list') announce(count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`);
+  else if (result.ok) announce(`「${card.title}」を読みました。`);
   else if (result.needLogin) announce(`「${card.title}」は、ログインが要ります。`);
   else announce(`「${card.title}」を読めませんでした。`);
   if (wasInside) enterCard(node, true);
@@ -294,7 +295,9 @@ function showClickConfirm(card, node) {
           busy = false;
           button.textContent = `「${card.title}」を押す`;
         }
-        announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}`, !r.ok);
+        // 押した結果ダウンロードが始まったときは、保存したか（できなかったか）を知らせる。
+        if (r.ok && r.download) announce(r.download.message, !r.download.ok);
+        else announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}`, !r.ok);
       },
     },
   ];
@@ -337,6 +340,8 @@ function appDeck(config, hasParent = true) {
   ];
   if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
   if (clicks === 0) texts.splice(texts.indexOf('押す所のカードでは、カード内のボタンで押します。'), 1);
+  // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
+  if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const cards = [{ kind: 'info', heading: config.name, items: sentences(texts) }];
   for (const c of config.cards) {
     cards.push({
@@ -425,6 +430,10 @@ document.addEventListener('keydown', (e) => {
   else return;
   e.preventDefault();
 });
+
+// ---- ダウンロードの知らせ ----
+// 押すカードの結果にならなかったダウンロード（押してから遅れて始まったもの）が終わったときに知らせる。
+if (window.cardsApi.onDownloadDone) window.cardsApi.onDownloadDone((r) => announce(r.message, !r.ok));
 
 // ---- はじめ ----
 (async () => {

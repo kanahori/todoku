@@ -4,6 +4,7 @@
 
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { watchDownload } = require('./download');
 
 const FIXTURES_DIR = path.join(__dirname, '..', '..', 'test', 'fixtures');
 const FIXTURE_NAME = /^[a-z0-9][a-z0-9-]*\.html$/;
@@ -139,6 +140,19 @@ function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, c
   return `(${pageAction.toString()})(${args})`;
 }
 
+// 窓のいまの URL（current）と、開きたい URL（wanted）が同じページか。
+// # から後（フラグメント）だけの違いは同じページとする。
+// ただし開きたい URL が # から後を持つとき（# で表を切り替えるページ）は、そこまで同じときだけ同じページとする。
+function isSamePage(current, wanted) {
+  if (current === wanted) return true;
+  const strip = (u) => {
+    const k = u.indexOf('#');
+    return k < 0 ? u : u.slice(0, k);
+  };
+  if (wanted.includes('#')) return false;
+  return current !== '' && strip(current) === wanted;
+}
+
 // アプリごとに窓を一つ持つ。見せておくのは、いま読むアプリの窓だけにする（ほかは隠す。閉じはしない）。
 // ウェブアプリの窓が二つ見えていると、二つ目を見せたときに NVDA がカードの画面を見失い、黙ることがあった（2026-11-03 の確かめ）。
 const windows = new Map();
@@ -166,7 +180,9 @@ async function openTarget(BrowserWindow, config, url) {
     win.on('closed', () => windows.delete(config.id));
   }
   // 同じページにいるなら読み込み直さない（共用のデモサイトに負荷をかけないため）。
-  if (win.webContents.getURL() !== url) await win.loadURL(url);
+  // ページの中の動きで # から後だけが変わったとき（気象庁の「データを表示」の後など）も、同じページとして扱う。
+  // 読み込み直すと、ページの中で出した表が消えるため。
+  if (!isSamePage(win.webContents.getURL(), url)) await win.loadURL(url);
   // カードの画面からフォーカスを奪わないように、前に出さずに見せる。
   if (!win.isVisible()) win.showInactive();
   return win;
@@ -187,7 +203,16 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   }
   const loginSelector = config.login ? config.login.selector : null;
   const container = card.action === 'list' && card.container ? card.container : null;
-  const result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container));
+  // 押すカードは、押す前からダウンロードを待ち受ける。
+  const watch = card.action === 'click' ? watchDownload() : null;
+  let result;
+  try {
+    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container));
+  } catch (e) {
+    if (watch) watch.cancel();
+    throw e;
+  }
+  if (watch && !result.found) watch.cancel();
   if (result.reason === 'login') {
     // ログインは人が手で行う。ログインの画面を開いておく。
     // 窓を前に出すのは、利用者がカードの「ログインの窓を前に出す」を押したとき（showTarget）。
@@ -195,7 +220,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     if (config.login.path) {
       try {
         const loginUrl = resolveUrl(config.url, config.login.path);
-        if (win.webContents.getURL() !== loginUrl) await win.loadURL(loginUrl);
+        if (!isSamePage(win.webContents.getURL(), loginUrl)) await win.loadURL(loginUrl);
       } catch (e) {
         return { ok: false, where: 'login.path', message: `ログインの画面を開けませんでした: ${e.message}` };
       }
@@ -207,6 +232,11 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     if (result.field === 'container') return { ok: false, where: `cards[${index}].container`, message: 'container の書き方が正しくありません' };
     const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に当たる所がありません';
     return { ok: false, where, message };
+  }
+  if (card.action === 'click') {
+    // 押した結果ダウンロードが始まったら、保存が終わるまで待ち、結果に入れる（画面がそれを知らせる）。
+    const download = await watch.wait({ startMs: options.downloadStartMs ?? 1000 });
+    return { ok: true, action: card.action, ...(download ? { download } : {}) };
   }
   return { ok: true, action: card.action, text: result.text, truncated: result.truncated, ...(result.items ? { items: result.items } : {}) };
 }
@@ -271,4 +301,4 @@ function showTarget(appId) {
   return true;
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget };
+module.exports = { resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, isSamePage };

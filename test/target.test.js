@@ -66,3 +66,19 @@ test('点検では、入れ物に当たれば項目が 0件でも当たる行と
     delete globalThis.document;
   }
 });
+
+test('# から後だけが違うときは、同じページとして読み込み直さない', () => {
+  const { isSamePage } = require('../src/main/target');
+  const base = 'https://example.com/risk/obsdl/';
+  assert.equal(isSamePage(base, base), true);
+  // ページの中の動きで # が付いた後でも、# の無い設定の URL とは同じページ。
+  assert.equal(isSamePage(`${base}#!table`, base), true);
+  assert.equal(isSamePage('https://example.com/other/', base), false);
+  assert.equal(isSamePage('https://example.com/risk/obsdl/?a=1', base), false);
+  assert.equal(isSamePage('', base), false);
+  // 設定の URL が # から後を持つとき（# で表を切り替えるページ）は、そこまで同じときだけ同じページ。
+  const forecast = 'https://example.com/forecast/#area=tokyo';
+  assert.equal(isSamePage(forecast, forecast), true);
+  assert.equal(isSamePage('https://example.com/forecast/#area=kanagawa', forecast), false);
+  assert.equal(isSamePage('https://example.com/forecast/', forecast), false);
+});

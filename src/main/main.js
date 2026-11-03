@@ -2,10 +2,15 @@
 // Electron の主の処理: 窓を作り、設定ファイルを読んで画面に渡す。
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, net } = require('electron');
+const { app, BrowserWindow, ipcMain, net, session } = require('electron');
 const { loadConfigSources, loadConfigFile } = require('./config');
 const { runCard, checkCards, showTarget } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
+const { attachDownloads } = require('./download');
+const { proxySwitches } = require('./proxy');
+
+// 環境変数にプロキシがあれば、Electron に渡す（学内のネットワークで、外のページに届くように）。窓を作る前に渡す。
+for (const [name, value] of proxySwitches()) app.commandLine.appendSwitch(name, value);
 
 const CARDS_DIR = path.join(__dirname, '..', '..', 'cards');
 // 手元の設定ファイルの置き場（公開しないもの）。場所は環境変数 CARDS_LOCAL_DIR で渡す。
@@ -16,6 +21,9 @@ const configs = new Map();
 const configPaths = new Map();
 // 最後に作った直しの案（id → 案の一覧）。画面からは「どの場所の案を採るか」だけを受け取る。
 const lastProposals = new Map();
+
+// カードの画面の窓（ダウンロードの知らせを送る先）。
+let mainWindow = null;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -30,6 +38,8 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  mainWindow = win;
+  win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
   win.removeMenu();
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 }
@@ -121,6 +131,14 @@ ipcMain.handle('target:show', (_event, appId) => {
 });
 
 app.whenReady().then(() => {
+  // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
+  // 押すカードの結果にならなかったもの（押してから遅れて始まったもの）は、終わったときに画面に知らせる。
+  attachDownloads(session.defaultSession, {
+    getDir: () => app.getPath('downloads'),
+    onDone: (result) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('download:done', result);
+    },
+  });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
