@@ -13,6 +13,7 @@ const {
   GenerateSchema, generateDeck, createGeneratedStore, failureMessage, doneMessage, exportDeck, exportedMessage,
 } = require('./generate');
 const { proxySwitches } = require('./proxy');
+const { createSettingsStore, registerSettingsHandlers, attachZoomKeys } = require('./settings');
 
 // 環境変数にプロキシがあれば、Electron に渡す（学内のネットワークで、外のページに届くように）。窓を作る前に渡す。
 for (const [name, value] of proxySwitches()) app.commandLine.appendSwitch(name, value);
@@ -65,6 +66,13 @@ const lastProposals = new Map();
 // カードの画面の窓（ダウンロードの知らせを送る先）。
 let mainWindow = null;
 
+// 表示設定と文字の大きさ（settings.js）。置き場は app.getPath('userData') の下の settings.json。
+let settingsStoreCache = null;
+function settingsStore() {
+  if (!settingsStoreCache) settingsStoreCache = createSettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+  return settingsStoreCache;
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1000,
@@ -81,6 +89,10 @@ function createWindow() {
   mainWindow = win;
   win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
   win.removeMenu();
+  // メニューを外したので、文字の大きさのキー（Ctrl か Command と、プラス・マイナス・0）は主の処理で受ける。
+  attachZoomKeys(win.webContents, settingsStore(), (message) => {
+    if (!win.isDestroyed()) win.webContents.send('settings:zoom', { message });
+  });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 }
 
@@ -302,6 +314,7 @@ ipcMain.handle('target:show', (_event, appId) => {
 });
 
 app.whenReady().then(() => {
+  registerSettingsHandlers(ipcMain, settingsStore());
   // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
   // 押すカードの結果にならなかったもの（押してから遅れて始まったもの）は、終わったときに画面に知らせる。
   attachDownloads(session.defaultSession, {

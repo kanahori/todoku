@@ -20,6 +20,13 @@ contextBridge.exposeInMainWorld('cardsApi', {
   generateDeck: (url) => ipcRenderer.invoke('generate:start', String(url)),
   deleteGenerated: (appId) => ipcRenderer.invoke('generate:delete', String(appId)),
   exportGenerated: (appId) => ipcRenderer.invoke('generate:export', String(appId)),
+  // 表示設定（読みやすさ・1列リフロー表示・配色）を読む・書く。書くのは三つだけ。
+  loadSettings: () => ipcRenderer.invoke('settings:load'),
+  saveSettings: (s) => ipcRenderer.invoke('settings:save', {
+    preset: String((s && s.preset) || ''), reflow: Boolean(s && s.reflow), scheme: String((s && s.scheme) || ''),
+  }),
+  // 文字の大きさを変えたときの知らせ（主の処理がキーで変える）。受け取るのは読ませる文だけ。
+  onZoom: (callback) => ipcRenderer.on('settings:zoom', (_event, r) => callback({ message: String((r && r.message) || '') })),
   // カードが当たらず、自動で直し始めたときの知らせ。受け取るのは { appId, cardId } だけ。
   onRepairing: (callback) => ipcRenderer.on('card:repairing', (_event, r) => callback({ appId: String((r && r.appId) || ''), cardId: String((r && r.cardId) || '') })),
   // ダウンロードが終わったときの知らせ（押すカードの結果にならなかったもの）。受け取るのは { ok, message } だけ。

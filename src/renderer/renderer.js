@@ -96,7 +96,7 @@ function popDeck() {
 
 function renderDeck({ announcePosition = true } = {}) {
   const deck = current();
-  const nodes = deck.cards.map((card, i) => renderCard(card, i));
+  const nodes = deck.cards.map((card) => renderCard(card));
   deckEl.replaceChildren(...nodes);
   selectCard(deck.index, { announcePosition });
 }
@@ -114,7 +114,9 @@ function selectCard(i, { announcePosition = true } = {}) {
   if (announcePosition) announce(`${nodes.length}件中${next + 1}件目`);
 }
 
-function renderCard(card, i) {
+function renderCard(card) {
+  // 表示設定のカードは、描くたびに今の設定から項目を作る。
+  if (card.kind === 'settings') card.items = settingsItems(card);
   const headingId = `card-h-${++idSeq}`;
   const node = el('article', {
     class: `card card-${card.kind}`,
@@ -136,7 +138,8 @@ function renderCard(card, i) {
   // マウスで押したときも、キーと同じ動きにする。
   node.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
-    current().index = i;
+    // 探した結果のカードが足し引きされるので、添字はその時の並びから取る。
+    current().index = Math.max(0, current().cards.indexOf(card));
     activateCard(card, node);
   });
   card.node = node;
@@ -144,7 +147,9 @@ function renderCard(card, i) {
 }
 
 // 項目の種類: { label, text }（見出しと内容の組・dl）・{ listItem }（読んだ1件・ul の li。NVDA が「2の4」と位置を読む）・
-// { text }（一文・p）・{ button, onPress }（ボタン）・{ input, onInput, onEnter, value }（ラベル付きの入力欄。Enter で onEnter）。並びの順のまま、続く同じ種類を一つの dl・ul にまとめる。
+// { text }（一文・p）・{ button, onPress }（ボタン）・{ input, onInput, onEnter, value, type }（ラベル付きの入力欄。Enter で onEnter）。並びの順のまま、続く同じ種類を一つの dl・ul にまとめる。
+// ボタンの pressed（aria-pressed）・expanded（aria-expanded）・setting（表示設定のどれか）、p の searchCount（探した数の一文）。
+// fold は表示設定の中の畳む項目で、hidden のときは隠し、上下矢印キーの対象からも外す。
 function renderItems(items) {
   const box = el('div', { class: 'items' });
   let group = null;
@@ -165,19 +170,30 @@ function renderItems(items) {
       const b = el('button', { type: 'button', 'data-item': '', tabindex: '-1', class: 'item-button', text: item.button });
       b.addEventListener('click', () => item.onPress(b));
       if (item.result) b.setAttribute('data-result', '');
+      if (item.pressed !== undefined) b.setAttribute('aria-pressed', String(Boolean(item.pressed)));
+      if (item.expanded !== undefined) b.setAttribute('aria-expanded', String(Boolean(item.expanded)));
+      if (item.setting) b.setAttribute('data-setting', item.setting);
+      if (item.fold) b.setAttribute('data-fold', '');
+      if (item.hidden) b.hidden = true;
       box.append(b);
     } else if (kind === 'input') {
       // 見えるラベルを label 要素で入力欄に結び付ける（読み上げは「ページのURL…、編集」のように読む）。
       const inputId = `card-input-${++idSeq}`;
       const wrap = el('div', { class: 'item-input' });
       wrap.append(el('label', { for: inputId, text: item.input }));
-      const input = el('input', { id: inputId, type: 'url', 'data-item': '', 'data-input': '', tabindex: '-1', autocomplete: 'off', spellcheck: 'false' });
+      const input = el('input', { id: inputId, type: item.type || 'url', 'data-item': '', 'data-input': '', tabindex: '-1', autocomplete: 'off', spellcheck: 'false' });
       if (item.value) input.value = item.value;
-      if (item.onInput) input.addEventListener('input', () => item.onInput(input.value));
+      // 日本語の変換の途中は渡さず、確定したときに渡す。
+      if (item.onInput) {
+        input.addEventListener('input', (e) => { if (!e.isComposing) item.onInput(input.value); });
+        input.addEventListener('compositionend', () => item.onInput(input.value));
+      }
       if (item.onEnter) {
         input.addEventListener('keydown', (e) => {
           if (e.key !== 'Enter' || e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
           e.preventDefault();
+          // 文書全体のキーの処理には渡さない（焦点を移した先で、同じ Enter がもう一度働かないように）。
+          e.stopPropagation();
           item.onEnter(input.value);
         });
       }
@@ -194,13 +210,17 @@ function renderItems(items) {
       if (item.result) p.setAttribute('data-result', '');
       if (item.loading) p.setAttribute('data-loading', '');
       if (item.describe) p.setAttribute('data-describe', '');
+      if (item.searchCount) p.setAttribute('data-search-count', '');
+      if (item.fold) p.setAttribute('data-fold', '');
+      if (item.hidden) p.hidden = true;
       box.append(p);
     }
   }
   return box;
 }
 
-function itemNodes(cardNode) { return [...cardNode.querySelectorAll('[data-item]')]; }
+// 隠した項目（畳んだ表示設定）は、上下矢印キーの対象から外す。
+function itemNodes(cardNode) { return [...cardNode.querySelectorAll('[data-item]')].filter((n) => !n.closest('[hidden]')); }
 
 // カード内へ移動する。toResult のときは、説明の項目を飛ばして、読んだ結果（か、読み込み中・読めない知らせ）の最初へ。
 function enterCard(cardNode, toResult = false) {
@@ -468,7 +488,7 @@ function ensureMaintCard(appId) {
   if (!deck || deck.appId !== appId || deck.cards.some((c) => c.kind === 'maint')) return;
   const card = maintCard(appId);
   deck.cards.push(card);
-  deckEl.append(renderCard(card, deck.cards.length - 1));
+  deckEl.append(renderCard(card));
 }
 
 async function openMaint(card) {
@@ -623,6 +643,7 @@ async function startGenerate(card) {
   top.cards.splice(k, 0, gotoCard(r.config));
   top.index = k;
   refreshTopIntro();
+  refreshSearchResults();
   pushDeck(appDeck(r.config, true), { announcePosition: false });
   announce(r.message);
 }
@@ -661,6 +682,7 @@ async function deleteGenerated(config) {
   const createAt = top.cards.findIndex((c) => c.kind === 'create');
   top.index = createAt >= 0 ? createAt : Math.min(top.index, top.cards.length - 1);
   refreshTopIntro();
+  refreshSearchResults();
   renderDeck({ announcePosition: false });
   announce(r.message);
 }
@@ -673,6 +695,254 @@ async function exportGenerated(config) {
     r = { ok: false, message: '設定ファイルを書き出せませんでした。' };
   }
   announce(r.message, !r.ok);
+}
+
+// ---- 表示設定 ----
+// 基のカード型ページの三つ（読みやすさ・1列リフロー表示・配色）。ふだんは「表示設定を開く」の1行だけを出す。
+// 変えたら、何をしたかを一文で一度だけ知らせる。設定は主の処理が userData に残し、次の起動で、カードを作る前に当てる。
+// 保存できなくても、開いている間は効く。文字の大きさは、Ctrl（macOS は Command）とプラス・マイナスで主の処理が変える。
+const SETTINGS_HEADING = '表示設定';
+const PRESET_LABELS = { standard: '標準', yuttari: 'ゆったり' };
+const SCHEME_LABELS = { standard: '標準（配色変更なし）', white: '高コントラスト（白地）', black: '高コントラスト（黒地）' };
+const DEFAULT_VIEW = { preset: 'standard', reflow: false, scheme: 'standard' };
+let view = { ...DEFAULT_VIEW };
+
+// 知らない値は標準に戻して、html の data-* に当てる（見た目は style.css が決める）。
+function applySettings(s) {
+  const x = s && typeof s === 'object' ? s : {};
+  view = {
+    preset: Object.hasOwn(PRESET_LABELS, x.preset) ? x.preset : DEFAULT_VIEW.preset,
+    reflow: typeof x.reflow === 'boolean' ? x.reflow : DEFAULT_VIEW.reflow,
+    scheme: Object.hasOwn(SCHEME_LABELS, x.scheme) ? x.scheme : DEFAULT_VIEW.scheme,
+  };
+  const root = document.documentElement;
+  root.dataset.preset = view.preset;
+  root.dataset.reflow = view.reflow ? 'on' : 'off';
+  root.dataset.scheme = view.scheme;
+}
+
+// ボタンの文字にも、いまの状態を入れる（色や配置だけで示さない）。
+function settingButton(key) {
+  const [name, value] = key.split(':');
+  if (name === 'reflow') return { text: `1列リフロー表示: ${view.reflow ? '有効' : '無効'}`, pressed: view.reflow };
+  if (name === 'preset') {
+    const on = view.preset === value;
+    return { text: `${PRESET_LABELS[value]}${on ? '（選択中）' : ''}`, pressed: on };
+  }
+  const on = view.scheme === value;
+  return { text: `${SCHEME_LABELS[value]}${on ? '：選択中' : ''}`, pressed: on };
+}
+
+function settingsItems(card) {
+  const hidden = !card.open;
+  const fold = (item) => ({ ...item, fold: true, hidden });
+  const choice = (key, onPress) => {
+    const b = settingButton(key);
+    return fold({ button: b.text, pressed: b.pressed, setting: key, onPress });
+  };
+  return [
+    { button: '表示設定を開く', expanded: Boolean(card.open), onPress: (b) => toggleSettings(card, b) },
+    fold({ text: '読みやすさ' }),
+    choice('preset:standard', () => choosePreset('standard')),
+    choice('preset:yuttari', () => choosePreset('yuttari')),
+    fold({ text: '「ゆったり」は、文字の間隔、単語の間隔、行の間隔を広げ、1列リフロー表示にします。' }),
+    fold({ text: '「1列リフロー表示」を有効にすると、項目の見出しと内容を1列に並べます。\n画面の幅が狭いときは、自動で1列になります。' }),
+    choice('reflow', toggleReflow),
+    fold({ text: '配色' }),
+    choice('scheme:standard', () => chooseScheme('standard')),
+    choice('scheme:white', () => chooseScheme('white')),
+    choice('scheme:black', () => chooseScheme('black')),
+    fold({ text: 'OSで強制配色やハイコントラストモードを使っているときは、そちらを優先します。' }),
+    fold({ text: '文字の大きさは、WindowsではCtrlキーとプラスまたはマイナス、macOSではCommandキーとプラスまたはマイナスで変えます。\nCtrlキーまたはCommandキーと0キーで、元の大きさに戻ります。' }),
+    fold({ button: '表示設定を標準に戻す', onPress: resetSettings }),
+  ];
+}
+
+// 開く・閉じる。焦点は「表示設定を開く」のボタンに置いたまま、畳む項目だけを出し入れする（状態は aria-expanded で伝わる）。
+function toggleSettings(card, button) {
+  card.open = !card.open;
+  button.setAttribute('aria-expanded', String(card.open));
+  if (!card.node) return;
+  for (const n of card.node.querySelectorAll('[data-fold]')) n.hidden = !card.open;
+}
+
+// ボタンを作り直さずに、文字と押された状態だけを書き換える（焦点のあるボタンを外さない）。
+function refreshSettingButtons() {
+  for (const b of document.querySelectorAll('[data-setting]')) {
+    const s = settingButton(b.dataset.setting);
+    b.textContent = s.text;
+    b.setAttribute('aria-pressed', String(s.pressed));
+  }
+}
+
+async function changeView(next, message) {
+  applySettings(next);
+  refreshSettingButtons();
+  announce(message);
+  try {
+    await window.cardsApi.saveSettings(view);
+  } catch (e) {
+    // 保存できなくても、開いている間は効いている。
+  }
+}
+
+// 「ゆったり」は1列リフロー表示も有効にし、「標準」は無効にする（プリセットで一度に変える）。変わったときは、そのことも同じ文で言う。
+function choosePreset(preset) {
+  const reflow = preset === 'yuttari';
+  const more = reflow === view.reflow ? '' : `1列リフロー表示を${reflow ? '有効' : '無効'}にしました。`;
+  changeView({ ...view, preset, reflow }, `読みやすさを「${PRESET_LABELS[preset]}」にしました。${more}`);
+}
+
+function toggleReflow() {
+  const reflow = !view.reflow;
+  changeView({ ...view, reflow }, `1列リフロー表示を${reflow ? '有効' : '無効'}にしました。`);
+}
+
+function chooseScheme(scheme) {
+  changeView({ ...view, scheme }, `配色を「${SCHEME_LABELS[scheme]}」にしました。`);
+}
+
+// 文字の大きさ（拡大率）は戻さないので、そのことを添える。
+function resetSettings() {
+  changeView({ ...DEFAULT_VIEW }, '表示設定を標準に戻しました。続けて文字の大きさも、必要に応じて調整してください。');
+}
+
+function settingsCard() {
+  return { kind: 'settings', heading: SETTINGS_HEADING, open: false, items: [] };
+}
+
+// ---- 探す（文字だけの関数）----
+// 全角と半角、大文字と小文字、ひらがなとカタカナを区別しない。空白で区切ると、全部の言葉を含むものだけにする。
+function normalizeForSearch(text) {
+  return String(text || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[ァ-ヶ]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// アプリごとに、題と説明に全部の言葉を含むカードを集める。当たらないアプリは入れない。
+function searchCards(configs, query) {
+  const words = normalizeForSearch(query).split(' ').filter(Boolean);
+  if (words.length === 0) return [];
+  const groups = [];
+  for (const config of configs) {
+    const matches = (config.cards || []).filter((c) => {
+      const hay = normalizeForSearch(`${c.title || ''} ${c.description || ''}`);
+      return words.every((w) => hay.includes(w));
+    });
+    if (matches.length > 0) groups.push({ config, matches });
+  }
+  return groups;
+}
+
+function searchCountText(query, total) {
+  if (normalizeForSearch(query) === '') return '探す言葉を入れると、ここに見つかった数が出ます。';
+  return total === 0 ? '見つかりませんでした。別の言い方でお試しください。' : `${total}件見つかりました。`;
+}
+
+// ---- 探す欄 ----
+// 基の探す欄の形: 打つたびに絞り込み、アプリごとのカード（見出しにアプリの名前と件数）を探す欄のカードのすぐ後に並べる。
+// 0件のアプリのカードは出さない（上下矢印キーの対象からも外れる）。見つかった数は、打ち終えて少し待ってから一度だけ知らせる。
+// 入力した後、Escキーで探す欄のカードへ戻り、下矢印キーで最初の見つかったカードへ移る。欄の中の Enterキーでも、最初の見つかったカードへ移る。
+const SEARCH_HEADING = 'カードを探す';
+const SEARCH_ANNOUNCE_MS = 400;
+const search = { query: '', total: 0, timer: null };
+
+function searchCard() {
+  return {
+    kind: 'search',
+    heading: SEARCH_HEADING,
+    items: [
+      {
+        input: '探す言葉',
+        type: 'text',
+        get value() { return search.query; },
+        onInput: (v) => onSearchInput(v),
+        onEnter: (v) => { onSearchInput(v); toFirstResult(); },
+      },
+      { text: '題と説明から、全部のアプリのカードを探します。', describe: true },
+      { text: '入力した後、Escキーでこのカードへ戻り、下矢印キーで、アプリごとの見つかったカードへ移ります。' },
+      { text: searchCountText(search.query, search.total), searchCount: true },
+    ],
+  };
+}
+
+function resultCard({ config, matches }) {
+  const items = [];
+  for (const c of matches) {
+    items.push({ button: `「${c.title}」へ移る`, onPress: () => goToFound(config.id, c.id) });
+    if (c.description) items.push({ text: endSentence(c.description) });
+  }
+  return { kind: 'results', appId: config.id, heading: `「${config.name}」で見つかったカード（${matches.length}件）`, items };
+}
+
+// はじめの束の、見つかったカードを作り直す。はじめの束が画面に出ているときは、そのカードの要素だけを入れ替える（焦点は動かさない）。
+function refreshSearchResults() {
+  const top = stack[0];
+  if (!top) return;
+  const groups = searchCards(appConfigs, search.query);
+  search.total = groups.reduce((n, g) => n + g.matches.length, 0);
+  const selected = top.cards[top.index];
+  const old = top.cards.filter((c) => c.kind === 'results');
+  top.cards = top.cards.filter((c) => c.kind !== 'results');
+  const at = top.cards.findIndex((c) => c.kind === 'search');
+  if (at < 0) return;
+  const fresh = groups.map(resultCard);
+  top.cards.splice(at + 1, 0, ...fresh);
+  const sc = top.cards[at];
+  top.index = Math.max(0, top.cards.indexOf(old.includes(selected) ? sc : selected));
+  sc.items[sc.items.length - 1] = { text: searchCountText(search.query, search.total), searchCount: true };
+  if (!(sc.node && sc.node.isConnected)) return;
+  for (const c of old) if (c.node) c.node.remove();
+  let anchor = sc.node;
+  for (const c of fresh) {
+    const n = renderCard(c);
+    anchor.after(n);
+    anchor = n;
+  }
+  const countEl = sc.node.querySelector('[data-search-count]');
+  if (countEl) countEl.textContent = searchCountText(search.query, search.total);
+}
+
+function onSearchInput(value) {
+  if (value === search.query) return;
+  search.query = value;
+  refreshSearchResults();
+  clearTimeout(search.timer);
+  if (normalizeForSearch(value) === '') return;
+  search.timer = setTimeout(() => announce(searchCountText(search.query, search.total)), SEARCH_ANNOUNCE_MS);
+}
+
+// 欄の中の Enterキー: 見つかったカードがあれば最初のカードへ移る。無ければ、見つかった数をもう一度言う。
+function toFirstResult() {
+  clearTimeout(search.timer);
+  const top = current();
+  const at = top.cards.findIndex((c) => c.kind === 'results');
+  if (normalizeForSearch(search.query) === '') {
+    announce('探す言葉を入れてください。');
+    return;
+  }
+  if (at < 0) {
+    announce(searchCountText(search.query, search.total));
+    return;
+  }
+  // 見つかった数と位置を、一つの文で言う（続けて二つ入れると、前の文が読まれないことがある）。
+  selectCard(at, { announcePosition: false });
+  announce(`${searchCountText(search.query, search.total)}${cardNodes().length}件中${at + 1}件目`);
+}
+
+// 見つかったカードへ移る: そのアプリの束を開き、そのカードを選ぶ。Escキーで、はじめの束の見つかったカードに戻る。
+function goToFound(appId, cardId) {
+  const config = appConfigs.find((c) => c.id === appId);
+  if (!config) {
+    announce('そのカードは、もうありません。', true);
+    return;
+  }
+  const deck = appDeck(config, true);
+  const index = deck.cards.findIndex((c) => c.cardId === cardId);
+  pushDeck({ ...deck, index: Math.max(0, index) });
 }
 
 // ---- 束を作る ----
@@ -701,11 +971,13 @@ function appDeck(config, hasParent = true) {
   const texts = [
     `「${config.name}」の画面を、カードで読めます（${counts || 'カード0件'}）。`,
     '上下矢印キーでカードを選びます。',
+    'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
     'スペースキーまたはEnterキーで、カード内へ移動します。',
     '読む所のカードでは、カード内へ移動するときに、ウェブアプリのその所を読みます。',
     '読む所のカードの上で、もう一度スペースキーまたはEnterキーを押すと、読み直します。',
     '押す所のカードでは、カード内のボタンで押します。',
     'カード内では、上下矢印キーで項目を一つずつ選びます。',
+    'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
   ];
   if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
@@ -761,14 +1033,20 @@ function topDeck(configs, problems) {
     items: sentences([
       topIntroText(configs.length),
       '上下矢印キーでカードを選びます。',
+      'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
       'スペースキーまたはEnterキーで、カード内へ移動します。',
       'ただし、アプリの名前のカードでは、スペースキーまたはEnterキーで、そのアプリのカードへ進みます。',
       `「${CREATE_HEADING}」のカードでは、スペースキーまたはEnterキーで、ページのURLを入れる欄へ移ります。`,
       'カード内では、上下矢印キーで項目を一つずつ選びます。',
+      'Homeキーで最初、Endキーで最後の項目へ移動します。',
       'Escキーで、カードの中からカードへ戻ります。',
+      `「${SETTINGS_HEADING}」のカードで、読みやすさ、1列リフロー表示、配色を変えられます。`,
+      `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、題と説明から探せます。`,
       ...NVDA_TEXTS,
     ]),
   }];
+  // 基のカード型ページと同じく、二枚目を表示設定にする。三枚目が探す欄で、見つかったカードはそのすぐ後に並ぶ。
+  cards.push(settingsCard(), searchCard());
   for (const config of configs) cards.push(gotoCard(config));
   cards.push(createCard());
   if (problems.length > 0) {
@@ -783,7 +1061,7 @@ function topDeck(configs, problems) {
 
 // ---- キー ----
 document.addEventListener('keydown', (e) => {
-  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
   const active = document.activeElement;
   const cardNode = active && active.closest ? active.closest('article.card') : null;
   if (!cardNode) return;
@@ -837,8 +1115,18 @@ if (window.cardsApi.onRepairing) {
   });
 }
 
+// ---- 文字の大きさの知らせ ----
+if (window.cardsApi.onZoom) window.cardsApi.onZoom((r) => { if (r.message) announce(r.message); });
+
 // ---- はじめ ----
 (async () => {
+  // カードの操作の準備より先に、保存された表示設定を当てる（読めなければ標準のまま）。
+  try {
+    if (window.cardsApi.loadSettings) applySettings(await window.cardsApi.loadSettings());
+    else applySettings(DEFAULT_VIEW);
+  } catch (e) {
+    applySettings(DEFAULT_VIEW);
+  }
   let results;
   try {
     results = await window.cardsApi.loadConfigs();

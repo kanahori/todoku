@@ -9,7 +9,7 @@ if (!process.versions.electron) {
   return;
 }
 
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 const config = {
   id: 'fake-app',
@@ -101,6 +101,12 @@ contextBridge.exposeInMainWorld('cardsApi', {
     return { ok: true, message: `「${madeDeck.name}」のカードの束を消しました。` };
   },
   publishRepair: async () => ({ ok: true, message: '「画面が変わった読む所」の直しを、設定ファイルに書きました。' }),
+  // 表示設定は偽物にせず、smoke が本物の settings.js の口（一時のフォルダの settings.json）につなぐ。
+  loadSettings: () => ipcRenderer.invoke('settings:load'),
+  saveSettings: (s) => ipcRenderer.invoke('settings:save', {
+    preset: String((s && s.preset) || ''), reflow: Boolean(s && s.reflow), scheme: String((s && s.scheme) || ''),
+  }),
+  onZoom: (callback) => ipcRenderer.on('settings:zoom', (_event, r) => callback({ message: String((r && r.message) || '') })),
 });
 
 // 試しから、出典のページを開くように頼まれた回数と appId を見るため。

@@ -79,6 +79,15 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - The first card of a generated deck has two extra buttons: "設定ファイルとして書き出す（支援者向け）" writes the deck as `todoku-<id>.json` into the Downloads folder, so a supporter can check it and distribute it as a regular config file; "このカードの束を消す" deletes the deck and its local repairs.
 - The first screen is now always shown, even when there is only one config, because it holds this entry point.
 
+## Display settings and search
+
+- The second card on the first screen is "表示設定" (display settings), the same three settings as the shared card-page guide of the course materials. Normally it shows one button, "表示設定を開く"; Enter or Space opens and closes the settings. Readability: "標準" / "ゆったり" (wider letter, word and line spacing, one column). "1列リフロー表示" on or off (item headings and contents in one column, no maximum width). Colors: "標準（配色変更なし）" / "高コントラスト（白地）" / "高コントラスト（黒地）". "表示設定を標準に戻す" resets the three.
+- Each change is announced once in one sentence, e.g. "配色を「高コントラスト（黒地）」にしました。", and the button text itself says the state ("（選択中）", "：選択中", "1列リフロー表示: 有効").
+- Text size: Ctrl (macOS: Command) with plus, minus or 0. The app handles these keys itself because the window has no menu, and announces the new size once ("文字の大きさを110%にしました。"). "表示設定を標準に戻す" does not change the text size.
+- The settings and the text size are saved in the app's user data folder (`settings.json`) and applied before the cards are built at the next start. Unknown values fall back to the standard. When the OS forces colors (Windows High Contrast), the OS colors win.
+- Contrast: text at least 7:1 and lines at least 3:1 in all three color schemes, including focused items and selected buttons. `test/settings.test.js` reads the colors from `style.css`, measures every pair, and checks the minimum written at the top of `index.html`.
+- The third card, "カードを探す", searches the titles and descriptions of the cards of all apps. Results appear right after it, one card per app, headed with the app name and the count; apps without results get no card. The total is announced once after typing stops ("3件見つかりました。", or "見つかりませんでした。別の言い方でお試しください。"). Esc in the field returns to the search card, and Down Arrow moves to the first result card (Enter in the field also jumps there). Each "「{title}」へ移る" button opens that app's deck on that card; Esc comes back to the result card. Matching ignores full/half width, upper/lower case and hiragana/katakana; spaces mean "all of these words".
+
 ## Config file format (short)
 
 - `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card; keep URLs out of it, because screen readers read them almost character by character), optional `sourceUrl` (the `http(s)://` page of the source; the app's first card gets a "出典のページを開く" button that opens it in the default browser), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
@@ -123,6 +132,7 @@ Todoku（とどく）は、視覚に障害のある方が、カードの簡単�
 - ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。Claude が、文字を全部落としたページの構造から直したセレクタの案を作り、人が案ごとに「採る／採らない」を選びます。
 - 設定ファイルの無いページでも、カードを作れます。はじめの画面の「新しいページからカードを作る」で URL（http か https）を入れると、アプリがそのページを開き、文字を全部落としたページの作りだけを Claude に送ります。Claude はカードの束の案（4〜8枚）を返し、アプリはその案をページで試して、当たらないカードや中身の空のカードを落とします。カードの題と束の名前は、アプリが手元でページの見出し・aria-label・alt・title から作り、Claude には送りません。作った束はその機械の中に残り、次の起動でも一覧に出ます。束のはじめのカードのボタンで、支援者向けに設定ファイルとして書き出したり、束を消したりできます。待つのは長くて90秒です。
 - 使う人の側でも、その場で直せます。カードが読む所・押す所を見つけられず、鍵（CARDS_ANTHROPIC_API_KEY）があるときは、いま開いているページの構造からそのカードの案だけを作り、ページで試して確からしいときだけ採ります。直しはその機械の中だけに残り、カードの中の「直す前に戻す」ボタンで戻せます。
+- はじめの画面の二枚目は「表示設定」、三枚目は「カードを探す」です。表示設定は、授業の教材のカード型ページと同じ三つ（読みやすさの「標準」「ゆったり」、1列リフロー表示、配色の「標準（配色変更なし）」「高コントラスト（白地）」「高コントラスト（黒地）」）です。変えると一文で一度だけ知らせ、次の起動でも残ります。文字の大きさは、Ctrlキー（macOSではCommandキー）とプラス・マイナス・0で変えます。「カードを探す」は、全部のアプリのカードを題と説明から探し、アプリごとに見つかったカードを並べて、見つかった数を知らせます。
 - 動かし方・設定・使った部品は、上の英語の節をご覧ください。
 - 同梱の例に、本物のつくば市公式ウェブサイト（https://www.city.tsukuba.lg.jp/ ）の設定ファイル（`cards/tsukuba-city.json`）があります。緊急情報・新着情報・お知らせ・今月のイベント情報（イベントカレンダーのページから）・大きな画像のお知らせとピックアップの全部（切り替えのために作られた写しは読みません）・くらしの情報（こんなときは）を読めます。サイト内の検索は、検索の欄が外の検索サービスの部品で、Todoku のカードはまだ文字を入れられないので、カードにしていません。はじめのカードで「出典：つくば市公式ウェブサイト。」と読み、公式サイトを開くボタン（`sourceUrl`）が付きます。アプリは市のページを自分の窓で開き、書いてあるとおりに読むだけで、ページを書き換えたり、フレームの中に入れたりはしません。`npm run real:tsukuba` で、本物のサイトで全部のカードと自動の直し（偽の Claude と、古い行を一つ含む写し `test/tsukuba-city-old-line-for-test.json` を使う）を確かめられます。サイトを3回読み込むので、手で一度ずつ動かしてください。
 - 練習のページ（みどり市・講座のページ）は作り物で、実在の自治体や人とは関係ありません。

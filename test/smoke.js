@@ -231,8 +231,20 @@ async function main() {
 
   await autoRepairChecks();
   await generateChecks();
-  await rendererFocusChecks();
-  await rendererGenerateChecks();
+  // カードの画面の試しは、表示設定の口を本物（settings.js）にして、一時のフォルダの settings.json につなぐ。
+  const { createSettingsStore, registerSettingsHandlers } = require('../src/main/settings');
+  const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-smoke-'));
+  const settingsFile = path.join(settingsDir, 'settings.json');
+  const settingsStore = createSettingsStore(settingsFile);
+  registerSettingsHandlers(require('electron').ipcMain, settingsStore);
+  try {
+    await rendererFocusChecks();
+    await rendererGenerateChecks();
+    await rendererSettingsChecks(settingsStore, settingsFile);
+    await rendererSearchChecks(settingsStore);
+  } finally {
+    fs.rmSync(settingsDir, { recursive: true, force: true });
+  }
 }
 
 // 設定ファイルの無いページから、Claude がその場でカードの束を作る一巡（Claude は偽の返事。Mac には鍵が無いので本物は呼ばない）。
@@ -367,7 +379,8 @@ async function rendererFocusChecks() {
     const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
     // 0. はじめの束（Todoku）から、試しのアプリの束へ進む（はじめの束は、アプリが一つでも出す）。
     // 束を移るときは束を丸ごと描き直すので、見張りはアプリの束へ進んでから付ける（読むカードの焦点を見る試しのため）。
-    await key('ArrowDown');
+    // 表示設定（二枚目）と探す欄（三枚目）の後の、四枚目がアプリの名前のカード。
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
     await key('Enter');
     for (let k = 0; k < 50 && (await cardCount()) < 4; k++) await wait(50);
     // 見張り: 読み込み中の項目が DOM に入った回数と、焦点のある要素（か、それを含む要素）を DOM から外した回数を数える。
@@ -610,7 +623,7 @@ async function rendererGenerateChecks() {
 
     const top = await headings();
     check('はじめの束に「新しいページからカードを作る」のカードがある（アプリが一つでも、はじめの束を出す）',
-      JSON.stringify(top) === JSON.stringify(['Todoku', '試しのアプリ（作り物）', '新しいページからカードを作る']), top);
+      JSON.stringify(top) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る']), top);
 
     await key('End');
     await key('Enter');
@@ -630,7 +643,7 @@ async function rendererGenerateChecks() {
     await wait(400);
     const failSaid = await alertSaid();
     const afterFail = await active();
-    const failItems = await js("[...document.querySelectorAll('#deck > article.card')[2].querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + (n.value || n.textContent))");
+    const failItems = await js("[...document.querySelectorAll('#deck > article.card')[4].querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + (n.value || n.textContent))");
     check('作れなかったときは、理由を一文で知らせ、理由の項目に焦点を移し、入れた URL を残した入力欄をもう一度出す',
       failSaid === 'ページを開けなかったので、カードを作れませんでした。' && afterFail.text === failSaid
         && failItems.includes('INPUT:https://example.com/fail'), { failSaid, afterFail, failItems });
@@ -638,7 +651,7 @@ async function rendererGenerateChecks() {
     // Enter でなく、作り始めるボタンでも作れる。
     await key('End');
     const button = await active();
-    await js("(() => { const i = document.querySelector('[data-input]'); i.value = 'https://example.com/town'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    await js("(() => { const i = document.activeElement.closest('article.card').querySelector('[data-input]'); i.value = 'https://example.com/town'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
     await js('document.activeElement.click()');
     await wait(150);
     const making = await active();
@@ -670,7 +683,7 @@ async function rendererGenerateChecks() {
     const back = await active();
     const topAfter = await headings();
     check('Esc ではじめの束へ戻ると、作った束の行き先のカードが足されていて、そこに焦点がある',
-      back.heading === '作り物の町のページ' && JSON.stringify(topAfter) === JSON.stringify(['Todoku', '試しのアプリ（作り物）', '作り物の町のページ', '新しいページからカードを作る']), { back, topAfter });
+      back.heading === '作り物の町のページ' && JSON.stringify(topAfter) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '作り物の町のページ', '新しいページからカードを作る']), { back, topAfter });
 
     await key('Enter');
     await key('Enter');
@@ -682,10 +695,292 @@ async function rendererGenerateChecks() {
     const topAfterDel = await headings();
     check('消すボタンで、束を消し、はじめの束の作るカードへ戻り、「「作り物の町のページ」のカードの束を消しました。」と知らせる',
       delSaid === '「作り物の町のページ」のカードの束を消しました。' && afterDel.heading === '新しいページからカードを作る'
-        && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '試しのアプリ（作り物）', '新しいページからカードを作る'])
+        && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
         && JSON.stringify(await js('window.fakeLog.deleted()')) === '["page-test"]', { delSaid, afterDel, topAfterDel });
   } finally {
     win.destroy();
+  }
+}
+
+// カードの画面を、偽物の cardsApi（test/renderer-preload.js）と本物の表示設定の口で開く。読み上げの操作（キー）で動かすための道具を返す。
+async function openRendererWindow(settingsStore) {
+  const { attachZoomKeys } = require('../src/main/settings');
+  const win = new BrowserWindow({
+    show: false,
+    // 隠した窓でもタイマーを間引かせない（知らせの欄に入る順と時を測るため）。
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  if (settingsStore) {
+    attachZoomKeys(win.webContents, settingsStore, (message) => { if (!win.isDestroyed()) win.webContents.send('settings:zoom', { message }); });
+  }
+  await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
+  // 隠した窓でも、中身に焦点を渡す（:focus の見た目を測るため）。
+  win.webContents.focus();
+  const js = (code) => win.webContents.executeJavaScript(code);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+  const t = {
+    win,
+    js,
+    wait,
+    key: (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`),
+    headings: () => js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)"),
+    status: () => js("document.getElementById('status').textContent"),
+    active: () => js(`(() => {
+      const a = document.activeElement;
+      const card = a && a.closest ? a.closest('article.card') : null;
+      return { tag: a.tagName, text: a.textContent, value: a.value === undefined ? null : a.value,
+        label: a.labels && a.labels[0] ? a.labels[0].textContent : null, connected: a.isConnected,
+        pressed: a.getAttribute('aria-pressed'), expanded: a.getAttribute('aria-expanded'),
+        heading: card ? card.querySelector('h2').textContent : null };
+    })()`),
+    // 知らせの欄に入った空でない文を、順に控える（一度だけ知らせたかを数えるため）。
+    // 前の知らせ（50ミリ秒遅れて入る）が済むのを待ってから数え始める。
+    watchSaid: async () => { await wait(150); return js(`(() => {
+      window.__said = [];
+      const s = document.getElementById('status');
+      if (!window.__saidObserver) {
+        window.__saidObserver = new MutationObserver(() => { if (s.textContent) window.__said.push(s.textContent); });
+        window.__saidObserver.observe(s, { childList: true, characterData: true, subtree: true });
+      }
+      return true;
+    })()`); },
+    said: () => js('window.__said.slice()'),
+    dataset: () => js('({ ...document.documentElement.dataset })'),
+    type: (v) => js(`(() => { const a = document.activeElement; a.value = ${JSON.stringify(v)}; a.dispatchEvent(new Event('input', { bubbles: true })); return a.tagName; })()`),
+  };
+  return t;
+}
+
+// 表示設定: 読み上げの操作だけで開き、変え、変えたら一度だけ知らせ、次に開いた窓（起動し直し）でも残る。
+async function rendererSettingsChecks(settingsStore, settingsFile) {
+  let t = await openRendererWindow(settingsStore);
+  try {
+    const visibleItems = () => t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].filter((n) => !n.closest('[hidden]')).length");
+    await t.key('ArrowDown');
+    const card = await t.active();
+    await t.key('Enter');
+    const toggle = await t.active();
+    const shown = await visibleItems();
+    await t.key('ArrowDown');
+    const still = await t.active();
+    check('表示設定: 二枚目のカードで、中はふだん「表示設定を開く」の1行だけ（畳んだ項目は下矢印キーでも選ばれない）',
+      card.tag === 'ARTICLE' && card.heading === '表示設定' && toggle.tag === 'BUTTON' && toggle.text === '表示設定を開く'
+        && toggle.expanded === 'false' && shown === 1 && still.text === '表示設定を開く', { card, toggle, shown, still });
+
+    await t.js('document.activeElement.click()');
+    const opened = await t.active();
+    const labels = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].filter((n) => !n.closest('[hidden]')).map((n) => n.textContent)");
+    check('表示設定: 開くと aria-expanded が true になり、読みやすさ・1列リフロー表示・配色・標準に戻すが並ぶ',
+      opened.expanded === 'true' && opened.text === '表示設定を開く'
+        && ['標準（選択中）', 'ゆったり', '1列リフロー表示: 無効', '標準（配色変更なし）：選択中', '高コントラスト（白地）', '高コントラスト（黒地）', '表示設定を標準に戻す']
+          .every((x) => labels.includes(x)), labels);
+
+    // ゆったり
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    const standard = await t.active();
+    await t.key('ArrowDown');
+    await t.watchSaid();
+    await t.js('document.activeElement.click()');
+    await t.wait(250);
+    const yuttari = await t.active();
+    const saidYuttari = await t.said();
+    const dsYuttari = await t.dataset();
+    const spacing = await t.js("getComputedStyle(document.body).letterSpacing");
+    check('表示設定: 「ゆったり」を押すと、「読みやすさを「ゆったり」にしました。1列リフロー表示を有効にしました。」と一度だけ知らせ、ボタンは「ゆったり（選択中）」で焦点はそのまま',
+      standard.text === '標準（選択中）' && standard.pressed === 'true'
+        && JSON.stringify(saidYuttari) === JSON.stringify(['読みやすさを「ゆったり」にしました。1列リフロー表示を有効にしました。'])
+        && yuttari.connected && yuttari.text === 'ゆったり（選択中）' && yuttari.pressed === 'true'
+        && dsYuttari.preset === 'yuttari' && dsYuttari.reflow === 'on' && spacing !== 'normal' && spacing !== '0px',
+      { standard, saidYuttari, yuttari, dsYuttari, spacing });
+
+    // 黒地
+    for (let k = 0; k < 15; k++) {
+      if ((await t.active()).text.startsWith('高コントラスト（黒地）')) break;
+      await t.key('ArrowDown');
+    }
+    await t.watchSaid();
+    await t.js('document.activeElement.click()');
+    await t.wait(250);
+    const black = await t.active();
+    const saidBlack = await t.said();
+    const blackColors = await t.js(`(() => {
+      const a = document.activeElement;
+      return { page: getComputedStyle(document.documentElement).backgroundColor, button: getComputedStyle(a).backgroundColor, buttonText: getComputedStyle(a).color };
+    })()`);
+    await t.key('ArrowDown');
+    const note = await t.js("(() => { const a = document.activeElement; return { text: a.textContent, bg: getComputedStyle(a).backgroundColor, color: getComputedStyle(a).color }; })()");
+    check('表示設定: 「高コントラスト（黒地）」を押すと「配色を「高コントラスト（黒地）」にしました。」と一度だけ知らせ、地は黒・選ばれているボタンは黄色に黒い文字',
+      JSON.stringify(saidBlack) === JSON.stringify(['配色を「高コントラスト（黒地）」にしました。'])
+        && black.text === '高コントラスト（黒地）：選択中' && black.pressed === 'true' && (await t.dataset()).scheme === 'black'
+        && blackColors.page === 'rgb(0, 0, 0)' && blackColors.button === 'rgb(255, 255, 0)' && blackColors.buttonText === 'rgb(0, 0, 0)',
+      { saidBlack, black, blackColors });
+    check('表示設定: 黒地でフォーカス中の注釈は、黄色の背景に黒い文字（明るい灰色のまま載せない）',
+      note.text.startsWith('OSで強制配色') && note.bg === 'rgb(255, 255, 0)' && note.color === 'rgb(0, 0, 0)', note);
+
+    await t.wait(200);
+    const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    check('表示設定: userData の settings.json に、読みやすさ・1列リフロー表示・配色を書いた',
+      saved.preset === 'yuttari' && saved.reflow === true && saved.scheme === 'black', saved);
+
+    // 文字の大きさ: Ctrl（macOS は Command）とプラスで拡大し、一度だけ知らせる。
+    await t.watchSaid();
+    t.win.webContents.sendInputEvent({ type: 'keyDown', keyCode: '=', modifiers: [process.platform === 'darwin' ? 'meta' : 'control'] });
+    await t.wait(400);
+    const zoomSaid = await t.said();
+    check('文字の大きさ: Ctrl（macOS は Command）とプラスで 110% にし、「文字の大きさを110%にしました。」と一度だけ知らせる',
+      t.win.webContents.getZoomFactor() === 1.1 && JSON.stringify(zoomSaid) === JSON.stringify(['文字の大きさを110%にしました。']),
+      { zoom: t.win.webContents.getZoomFactor(), zoomSaid });
+
+    // 起動し直し: 窓を閉じて、同じ置き場で開き直す。
+    t.win.destroy();
+    t = await openRendererWindow(settingsStore);
+    const dsAgain = await t.dataset();
+    await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.js('document.activeElement.click()');
+    const labelsAgain = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('button')].map((b) => b.textContent + ':' + b.getAttribute('aria-pressed'))");
+    await t.wait(100);
+    check('表示設定: 起動し直しても、ゆったり・1列リフロー表示・黒地が残り、ボタンの文字と押された状態も合う',
+      dsAgain.preset === 'yuttari' && dsAgain.reflow === 'on' && dsAgain.scheme === 'black'
+        && labelsAgain.includes('ゆったり（選択中）:true') && labelsAgain.includes('1列リフロー表示: 有効:true')
+        && labelsAgain.includes('高コントラスト（黒地）：選択中:true') && labelsAgain.includes('標準（配色変更なし）:false'),
+      { dsAgain, labelsAgain });
+    check('文字の大きさ: 起動し直しても 110% が残る', t.win.webContents.getZoomFactor() === 1.1, t.win.webContents.getZoomFactor());
+
+    // 標準に戻す（カードの中の最後の項目）。
+    await t.key('End');
+    const reset = await t.active();
+    await t.watchSaid();
+    await t.js('document.activeElement.click()');
+    await t.wait(250);
+    const saidReset = await t.said();
+    const dsReset = await t.dataset();
+    const savedReset = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    check('表示設定: 「表示設定を標準に戻す」で三つとも標準に戻し、「表示設定を標準に戻しました。続けて文字の大きさも、必要に応じて調整してください。」と一度だけ知らせる（文字の大きさは戻さない）',
+      reset.text === '表示設定を標準に戻す'
+        && JSON.stringify(saidReset) === JSON.stringify(['表示設定を標準に戻しました。続けて文字の大きさも、必要に応じて調整してください。'])
+        && dsReset.preset === 'standard' && dsReset.reflow === 'off' && dsReset.scheme === 'standard'
+        && savedReset.preset === 'standard' && savedReset.reflow === false && savedReset.scheme === 'standard' && savedReset.zoom === 1.1,
+      { reset, saidReset, dsReset, savedReset });
+
+    // 閉じる: Home で「表示設定を開く」へ戻り、押すと畳む。Esc でカードへ。
+    await t.key('Home');
+    await t.js('document.activeElement.click()');
+    const closed = await t.active();
+    const shownClosed = await visibleItems();
+    await t.key('Escape');
+    const back = await t.active();
+    check('表示設定: もう一度押すと畳み（aria-expanded が false・中は1行）、Esc でカードへ戻る',
+      closed.expanded === 'false' && shownClosed === 1 && back.tag === 'ARTICLE' && back.heading === '表示設定', { closed, shownClosed, back });
+  } finally {
+    t.win.destroy();
+  }
+}
+
+// 探す欄: 題と説明から全部の束のカードを探し、当たった数を知らせ、見つかったカードへ移れる。0件も知らせる。キーだけで入り・出られる。
+async function rendererSearchChecks(settingsStore) {
+  const t = await openRendererWindow(settingsStore);
+  try {
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    const card = await t.active();
+    const described = await t.js("(() => { const c = document.activeElement; const id = c.getAttribute('aria-describedby'); return id ? document.getElementById(id).textContent : null; })()");
+    await t.key('Enter');
+    const input = await t.active();
+    check('探す欄: 三枚目のカード「カードを探す」で、Enter でラベル「探す言葉」の欄へ移る（カードを選ぶと何を探すかも読む）',
+      card.heading === 'カードを探す' && described === '題と説明から、全部のアプリのカードを探します。'
+        && input.tag === 'INPUT' && input.label === '探す言葉', { card, described, input });
+
+    // 打つたびに絞り込む。続けて打っても、数は打ち終えてから一度だけ知らせる。
+    await t.watchSaid();
+    await t.type('すぐ');
+    await t.wait(100);
+    await t.type('すぐ返る');
+    await t.wait(700);
+    const said = await t.said();
+    const heads = await t.headings();
+    const stay = await t.active();
+    const countText = await t.js("document.querySelector('[data-search-count]').textContent");
+    check('探す欄: 「すぐ返る」で「2件見つかりました。」と一度だけ知らせ、探す欄のすぐ後に、アプリの名前と件数の見出しのカードが出る',
+      JSON.stringify(said) === JSON.stringify(['2件見つかりました。']) && countText === '2件見つかりました。'
+        && JSON.stringify(heads) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '「試しのアプリ（作り物）」で見つかったカード（2件）', '試しのアプリ（作り物）', '新しいページからカードを作る']),
+      { said, heads, countText });
+    check('探す欄: 打っている間、焦点は欄から動かない', stay.tag === 'INPUT' && stay.connected && stay.value === 'すぐ返る', stay);
+
+    // 出る: Esc で探す欄のカードへ戻り、下矢印キーで見つかったカードへ。
+    await t.key('Escape');
+    const out = await t.active();
+    await t.key('ArrowDown');
+    const result = await t.active();
+    await t.wait(100);
+    const pos = await t.status();
+    check('探す欄: Esc で「カードを探す」のカードへ戻り、下矢印キーで見つかったカードへ移る（「6件中4件目」）',
+      out.tag === 'ARTICLE' && out.heading === 'カードを探す' && result.tag === 'ARTICLE'
+        && result.heading === '「試しのアプリ（作り物）」で見つかったカード（2件）' && pos === '6件中4件目', { out, result, pos });
+
+    // 移る: 見つかったカードの中のボタンで、そのアプリの束のそのカードへ。
+    await t.key('Enter');
+    const first = await t.active();
+    await t.key('ArrowDown');
+    const second = await t.active();
+    await t.js('document.activeElement.click()');
+    await t.wait(150);
+    const moved = await t.active();
+    const movedPos = await t.status();
+    check('探す欄: 見つかったカードの中は「「〇〇」へ移る」のボタンで、押すとそのアプリの束のそのカードへ移り、位置を知らせる',
+      first.text === '「すぐ返る読む所」へ移る' && second.text === '「すぐ返る一覧」へ移る'
+        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '7件中3件目', { first, second, moved, movedPos });
+    await t.key('Escape');
+    await t.wait(100);
+    const backTop = await t.active();
+    check('探す欄: 移った先で Esc を押すと、はじめの束の見つかったカードへ戻る（探した結果は残る）',
+      backTop.tag === 'ARTICLE' && backTop.heading === '「試しのアプリ（作り物）」で見つかったカード（2件）', backTop);
+
+    // 0件
+    await t.key('ArrowUp');
+    await t.key('Enter');
+    const again = await t.active();
+    await t.watchSaid();
+    await t.type('どこにも無い言葉');
+    await t.wait(700);
+    const saidNone = await t.said();
+    const headsNone = await t.headings();
+    const countNone = await t.js("document.querySelector('[data-search-count]').textContent");
+    check('探す欄: 当たらないときは「見つかりませんでした。別の言い方でお試しください。」と知らせ、見つかったカードは出さない',
+      again.tag === 'INPUT' && again.value === 'すぐ返る'
+        && JSON.stringify(saidNone) === JSON.stringify(['見つかりませんでした。別の言い方でお試しください。'])
+        && countNone === '見つかりませんでした。別の言い方でお試しください。'
+        && JSON.stringify(headsNone) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る']),
+      { again, saidNone, headsNone, countNone });
+
+    // 欄の中の Enter で、最初の見つかったカードへ。
+    await t.type('一覧');
+    await t.watchSaid();
+    await t.key('Enter');
+    await t.wait(150);
+    const jumped = await t.active();
+    const saidJump = await t.said();
+    check('探す欄: 欄の中の Enter で、最初の見つかったカードへ移り、「1件見つかりました。6件中4件目」と知らせる',
+      jumped.tag === 'ARTICLE' && jumped.heading === '「試しのアプリ（作り物）」で見つかったカード（1件）'
+        && JSON.stringify(saidJump) === JSON.stringify(['1件見つかりました。6件中4件目']), { jumped, saidJump });
+
+    // 消す: 欄を空にすると、見つかったカードは消え、数の文は始めの案内に戻る。
+    await t.key('ArrowUp');
+    await t.key('Enter');
+    await t.type('');
+    await t.wait(100);
+    const headsEmpty = await t.headings();
+    const countEmpty = await t.js("document.querySelector('[data-search-count]').textContent");
+    await t.key('Escape');
+    const outEmpty = await t.active();
+    check('探す欄: 欄を空にすると見つかったカードが消え、Esc でカードへ戻れる',
+      JSON.stringify(headsEmpty) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
+        && countEmpty === '探す言葉を入れると、ここに見つかった数が出ます。' && outEmpty.tag === 'ARTICLE' && outEmpty.heading === 'カードを探す',
+      { headsEmpty, countEmpty, outEmpty });
+  } finally {
+    t.win.destroy();
   }
 }
 

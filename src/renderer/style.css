@@ -1,5 +1,7 @@
 /* カードの画面の見た目。基のカード型ページの標準の配色と寸法に合わせる。
-   色の対比は index.html の頭のコメントを参照。高コントラストの配色と「ゆったり」は、表示設定の段で足す。 */
+   色の対比は index.html の頭のコメントを参照。三つの配色の色は、下の三つの塊だけに書く（test/settings.test.js が全部の組み合わせを測る）。
+   --ji 地・--card カードの面・--moji 文字・--chushaku 注釈・--kyocho 強調とフォーカスの枠・--keisen 罫線・--rinkaku カードの輪郭・
+   --focus-ji と --focus-moji フォーカス中の項目の背景と文字・--sel-ji と --sel-moji 選ばれているボタンの面と文字。 */
 :root {
   --ji: #f8fafc;
   --card: #ffffff;
@@ -7,7 +9,11 @@
   --chushaku: #434d5b;
   --kyocho: #1e40af;
   --keisen: #78818f;
+  --rinkaku: #434d5b;
   --focus-ji: #e8eefc;
+  --focus-moji: #1f2933;
+  --sel-ji: #1e40af;
+  --sel-moji: #ffffff;
   color: var(--moji);
   background: var(--ji);
   font-family: "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", sans-serif;
@@ -15,7 +21,40 @@
   line-height: 1.7;
 }
 
+/* 高コントラスト（白地）: 黒い文字に白い地。フォーカス中の項目は黄色の背景に黒い文字。 */
+html[data-scheme="white"] {
+  --ji: #ffffff;
+  --card: #ffffff;
+  --moji: #000;
+  --chushaku: #333;
+  --kyocho: #0000c4;
+  --keisen: #000;
+  --rinkaku: #000;
+  --focus-ji: #ffff00;
+  --focus-moji: #000;
+  --sel-ji: #0000c4;
+  --sel-moji: #ffffff;
+}
+
+/* 高コントラスト（黒地）: 白い文字に黒い地。フォーカスと選択の状態に黄色を使い、黄色の上の文字は全部黒にする
+   （注釈を明るい灰色のまま黄色に載せると見えなくなる、と基のページで踏んだ所）。 */
+html[data-scheme="black"] {
+  --ji: #000;
+  --card: #000;
+  --moji: #ffffff;
+  --chushaku: #dddddd;
+  --kyocho: #ffff00;
+  --keisen: #ffffff;
+  --rinkaku: #ffffff;
+  --focus-ji: #ffff00;
+  --focus-moji: #000;
+  --sel-ji: #ffff00;
+  --sel-moji: #000;
+}
+
 body { margin: 0; }
+
+[hidden] { display: none !important; }
 
 main {
   max-width: 760px;
@@ -37,7 +76,7 @@ h1 {
 /* カード: 白い面に、注釈の色の 1px の輪郭、角 10px。 */
 .card {
   background: var(--card);
-  border: 1px solid var(--chushaku);
+  border: 1px solid var(--rinkaku);
   border-radius: 10px;
   padding: 1rem 1.2rem;
 }
@@ -73,6 +112,18 @@ h1 {
   .items dd { margin-bottom: 0.5rem; }
 }
 
+/* 1列リフロー表示: 項目の見出しと内容を1列に並べ、ページの最大幅の制限も外す（「ゆったり」でも有効になる）。 */
+html[data-reflow="on"] main { max-width: none; }
+html[data-reflow="on"] .items dl { grid-template-columns: 1fr; }
+html[data-reflow="on"] .items dd { margin-bottom: 0.5rem; }
+
+/* ゆったり: 文字の間隔・単語の間隔・行の間隔を広げ、段落の間もあける。 */
+html[data-preset="yuttari"] { line-height: 2; }
+html[data-preset="yuttari"] body { letter-spacing: 0.12em; word-spacing: 0.16em; }
+html[data-preset="yuttari"] .item-text,
+html[data-preset="yuttari"] .items li,
+html[data-preset="yuttari"] .items dd { margin-bottom: 1em; }
+
 /* 入力欄: ラベルを上に置き、罫線の色の 2px の枠（線の対比は index.html の頭のコメントの罫線と同じ）。 */
 .item-input { margin: 0.5rem 0; }
 .item-input label { display: block; font-weight: bold; }
@@ -100,6 +151,13 @@ h1 {
   cursor: pointer;
 }
 
+/* 選ばれているボタン: 強調の色の面に、白い文字（黒地の配色では黄色の面に黒い文字）。状態はボタンの文字でも言う。 */
+.item-button[aria-pressed="true"] {
+  color: var(--sel-moji);
+  background: var(--sel-ji);
+  border-color: var(--sel-ji);
+}
+
 /* フォーカス: 強調の色の 4px の線を 3px 離す。中の項目は背景も変える。 */
 .card:focus,
 .item-button:focus {
@@ -110,14 +168,20 @@ h1 {
   outline: 4px solid var(--kyocho);
   outline-offset: 3px;
   background: var(--focus-ji);
-  color: var(--moji);
+  color: var(--focus-moji);
   border-radius: 4px;
+}
+/* 選ばれているボタンは、フォーカス中も選ばれている色のまま（枠で示す）。 */
+.item-button[aria-pressed="true"]:focus {
+  color: var(--sel-moji);
+  background: var(--sel-ji);
 }
 
 /* OS の強制配色（ハイコントラスト）のときは、そちらを優先し、線は OS の文字の色で描く。 */
 @media (forced-colors: active) {
-  .card { border-color: CanvasText; }
+  .card, .item-button, .item-input input { border-color: CanvasText; }
   .card:focus, [data-item]:focus, .item-button:focus { outline-color: Highlight; }
+  .item-button[aria-pressed="true"], .item-button[aria-pressed="true"]:focus { background: Highlight; color: HighlightText; border-color: Highlight; }
 }
 
 .visually-hidden {

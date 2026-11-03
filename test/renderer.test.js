@@ -88,3 +88,93 @@ test('「直す前に戻す」の後は、焦点をカードの中の最初の�
   const body = source.slice(source.indexOf('async function undoRepair('), source.indexOf('function pushDeck('));
   assert.match(body, /refreshCard\(card, \{ focusFirst: true \}\)/);
 });
+
+// ---- 探す欄（文字だけの関数）----
+function loadSearchFunctions() {
+  const start = source.indexOf('// ---- 探す（文字だけの関数）----');
+  const end = source.indexOf('// ---- 探す欄 ----');
+  assert.ok(start >= 0 && end > start);
+  // eslint-disable-next-line no-new-func
+  return new Function(`${source.slice(start, end)}; return { normalizeForSearch, searchCards, searchCountText };`)();
+}
+
+const searchConfigs = [
+  { id: 'a', name: '作り物の学習サイト', cards: [
+    { id: 'a1', title: '次の締め切り', description: '課題の締め切りを読みます' },
+    { id: 'a2', title: 'お知らせ', description: '先生からのお知らせ' },
+    { id: 'a3', title: 'ファイルをダウンロード' },
+  ] },
+  { id: 'b', name: '作り物の町', cards: [
+    { id: 'b1', title: 'ごみの日', description: 'ゴミの収集日の表' },
+    { id: 'b2', title: 'お知らせ 1' },
+  ] },
+  { id: 'c', name: '当たらないアプリ', cards: [{ id: 'c1', title: '天気' }] },
+];
+
+test('探す: 題と説明から探し、当たらないアプリは入れない', () => {
+  const { searchCards } = loadSearchFunctions();
+  const r = searchCards(searchConfigs, 'お知らせ');
+  assert.deepEqual(r.map((g) => [g.config.id, g.matches.map((c) => c.id)]), [['a', ['a2']], ['b', ['b2']]]);
+  // 説明だけに当たる言葉でも見つかる。
+  assert.deepEqual(searchCards(searchConfigs, '課題').map((g) => g.matches.map((c) => c.id)), [['a1']]);
+  assert.deepEqual(searchCards(searchConfigs, '見つからない言葉'), []);
+  assert.deepEqual(searchCards(searchConfigs, '   '), []);
+});
+
+test('探す: 全角と半角、大文字と小文字、ひらがなとカタカナを区別せず、空白で区切ると全部を含むものだけ', () => {
+  const { searchCards, normalizeForSearch } = loadSearchFunctions();
+  assert.equal(normalizeForSearch('ＡＢＣ　ゴミ'), 'abc ごみ');
+  // 「ごみ」で「ゴミ」（説明）と「ごみ」（題）の両方に当たる。カタカナの「ダウンロード」もひらがなで当たる。
+  assert.deepEqual(searchCards(searchConfigs, 'ゴミ').map((g) => g.matches.map((c) => c.id)), [['b1']]);
+  assert.deepEqual(searchCards(searchConfigs, 'だうんろーど').map((g) => g.matches.map((c) => c.id)), [['a3']]);
+  assert.deepEqual(searchCards(searchConfigs, 'お知らせ　１').map((g) => g.matches.map((c) => c.id)), [['b2']]);
+  assert.deepEqual(searchCards(searchConfigs, '締め切り 天気'), []);
+});
+
+test('探す: 見つかった数の文（0件も黙らない）', () => {
+  const { searchCountText } = loadSearchFunctions();
+  assert.equal(searchCountText('お知らせ', 3), '3件見つかりました。');
+  assert.equal(searchCountText('お知らせ', 1), '1件見つかりました。');
+  assert.equal(searchCountText('無い言葉', 0), '見つかりませんでした。別の言い方でお試しください。');
+  assert.equal(searchCountText('  ', 0), '探す言葉を入れると、ここに見つかった数が出ます。');
+});
+
+// ---- 表示設定（DOM の代わりに data-* を受ける入れ物を渡す）----
+function loadSettingFunctions() {
+  const start = source.indexOf('const SETTINGS_HEADING');
+  const end = source.indexOf('function settingsItems(');
+  assert.ok(start >= 0 && end > start);
+  const fakeDocument = { documentElement: { dataset: {} } };
+  // eslint-disable-next-line no-new-func
+  const f = new Function('document', `${source.slice(start, end)}; return { applySettings, settingButton, view: () => view };`)(fakeDocument);
+  return { ...f, dataset: fakeDocument.documentElement.dataset };
+}
+
+test('表示設定: 知らない値は標準に戻し、html の data-* に当てる', () => {
+  const { applySettings, view, dataset } = loadSettingFunctions();
+  applySettings({ preset: 'yuttari', reflow: true, scheme: 'black' });
+  assert.deepEqual(view(), { preset: 'yuttari', reflow: true, scheme: 'black' });
+  assert.deepEqual({ ...dataset }, { preset: 'yuttari', reflow: 'on', scheme: 'black' });
+  applySettings({ preset: 'big', reflow: 'yes', scheme: 'pink' });
+  assert.deepEqual({ ...dataset }, { preset: 'standard', reflow: 'off', scheme: 'standard' });
+});
+
+test('表示設定: ボタンの文字にいまの状態を入れる（「（選択中）」「：選択中」「: 有効」）', () => {
+  const { applySettings, settingButton } = loadSettingFunctions();
+  applySettings({ preset: 'standard', reflow: false, scheme: 'white' });
+  assert.deepEqual(settingButton('preset:standard'), { text: '標準（選択中）', pressed: true });
+  assert.deepEqual(settingButton('preset:yuttari'), { text: 'ゆったり', pressed: false });
+  assert.deepEqual(settingButton('reflow'), { text: '1列リフロー表示: 無効', pressed: false });
+  assert.deepEqual(settingButton('scheme:standard'), { text: '標準（配色変更なし）', pressed: false });
+  assert.deepEqual(settingButton('scheme:white'), { text: '高コントラスト（白地）：選択中', pressed: true });
+  applySettings({ preset: 'yuttari', reflow: true, scheme: 'black' });
+  assert.deepEqual(settingButton('reflow'), { text: '1列リフロー表示: 有効', pressed: true });
+  assert.deepEqual(settingButton('scheme:black'), { text: '高コントラスト（黒地）：選択中', pressed: true });
+});
+
+test('表示設定: 変えたときの知らせは「何をしたか」を一文で（名前は「」で囲む）', () => {
+  assert.match(source, /`読みやすさを「\$\{PRESET_LABELS\[preset\]\}」にしました。\$\{more\}`/);
+  assert.match(source, /`1列リフロー表示を\$\{reflow \? '有効' : '無効'\}にしました。`/);
+  assert.match(source, /`配色を「\$\{SCHEME_LABELS\[scheme\]\}」にしました。`/);
+  assert.match(source, /'表示設定を標準に戻しました。続けて文字の大きさも、必要に応じて調整してください。'/);
+});
