@@ -301,6 +301,42 @@ test('束の名前はページの title（長ければ切る）。無ければ�
   assert.equal(deckName('', 'fixture:city-top.html'), '新しいページ');
 });
 
+test('書き出し（TODOKU_DUMP_DIR）: 送った構造・Claude の返事・守りの後の束と作らなかった理由を別々に書き、題（ページの文字）は三つ目にだけ入る', async () => {
+  const { looksTextFree } = require('../src/main/structure');
+  const dumpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dump-test-'));
+  const before = process.env.TODOKU_DUMP_DIR;
+  process.env.TODOKU_DUMP_DIR = dumpDir;
+  const { store, dir } = tmpStore();
+  try {
+    const probes = [
+      { count: 3, hasText: true, containerOk: true, title: '町のお知らせ' },
+      { count: 4, hasText: true, containerOk: false, title: 'くらしのメニュー' },
+      { count: 1, hasText: true, containerOk: false, title: '' },
+      { count: 4, hasText: true, containerOk: false, title: 'くらし' },
+    ];
+    const { BrowserWindow } = fakeBrowserWindow(pageOf({ probes }));
+    const r = await generateDeck({ BrowserWindow, url: 'https://example.com/', store, settle: SETTLE, callModel: async () => ANSWER });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    const id = r.config.id;
+    const a = fs.readFileSync(path.join(dumpDir, `${id}-a-structure.txt`), 'utf8');
+    const b = fs.readFileSync(path.join(dumpDir, `${id}-b-proposals.json`), 'utf8');
+    const c = JSON.parse(fs.readFileSync(path.join(dumpDir, `${id}-c-deck.json`), 'utf8'));
+    assert.equal(a, SKELETON);
+    assert.equal(looksTextFree(a), true);
+    assert.deepEqual(JSON.parse(b), ANSWER);
+    for (const t of ['町のお知らせ', 'くらしのメニュー']) {
+      assert.ok(!a.includes(t) && !b.includes(t), `${t} は (a)(b) に入らない`);
+    }
+    assert.deepEqual(c.cards.map((x) => x.title), ['町のお知らせ', 'くらしのメニュー']);
+    assert.deepEqual(c.rejects.map((x) => [x.selector, x.reason]), [['main', 'no-title'], ['nav.menu a', 'not-confident']]);
+  } finally {
+    if (before === undefined) delete process.env.TODOKU_DUMP_DIR;
+    else process.env.TODOKU_DUMP_DIR = before;
+    fs.rmSync(dumpDir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('作る: 構造だけを送り、試して残ったカードを新しい束として保存する（文字・URL・題は送らない）', async () => {
   const { store, dir } = tmpStore();
   try {

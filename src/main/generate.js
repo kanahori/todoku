@@ -787,30 +787,32 @@ function clickTitle(title) {
 // 試した結果から、残すカードを選び、題と id を付ける。
 // 落とすもの: 当たらない・中身が空（read は文字あり・list は1件以上・click は当たる数ちょうど1 でないもの）・同じ所の重なり・
 // 中身が題と同じか、一語だけの読む・一覧のカード（読んでも題をくり返すか、一語だけのため）。
-function pickCards(candidates, probes) {
+// rejects（任意の配列）を渡すと、作らなかった案と、その理由（短い英数字の印）を入れる（TODOKU_DUMP_DIR の書き出しのため）。
+function pickCards(candidates, probes, rejects = null) {
   const cards = [];
   const seen = new Set();
   const titles = new Set();
   let tocTaken = false;
   candidates.forEach((c, k) => {
-    if (cards.length >= MAX_CARDS) return;
     const probe = probes[k];
-    if (!isConfident(c.action, probe)) return;
+    const drop = (reason) => { if (rejects) rejects.push({ index: k, action: c.action, selector: c.selector, reason, title: cleanTitle(probe && probe.title) }); };
+    if (cards.length >= MAX_CARDS) return drop('max-cards');
+    if (!isConfident(c.action, probe)) return drop('not-confident');
     const key = `${c.action} ${c.selector}`;
-    if (seen.has(key)) return;
+    if (seen.has(key)) return drop('duplicate');
     seen.add(key);
     let title = cleanTitle(probe.title);
     const body = cleanTitle(probe.body, 200);
-    if (c.action !== 'click' && ((title && body === title) || isOneWord(body))) return;
+    if (c.action !== 'click' && ((title && body === title) || isOneWord(body))) return drop('one-word-body');
     // 中身が見出し一行だけのカードと、題とほぼ同じ一行だけのカードは作らない（バスのページと気象庁の一枚目がこの形だった）。
-    if (c.action !== 'click' && (probe.headingOnly || nearlySame(body, title))) return;
+    if (c.action !== 'click' && (probe.headingOnly || nearlySame(body, title))) return drop('heading-only');
     // 押すカードは、押す所の名前が分からなければ作らない。
-    if (c.action === 'click' && !title) return;
+    if (c.action === 'click' && !title) return drop('click-without-name');
     // パンくずと、題が「現在のページ」のカードは作らない。
-    if (probe.crumb || /^現在(の)?(ページ|位置|地)$/.test(title)) return;
+    if (probe.crumb || /^現在(の)?(ページ|位置|地)$/.test(title)) return drop('breadcrumb');
     // 目次は「目次を読む」の一枚にまとめる（二つ目からは作らない）。
     if (probe.toc || /^目次/.test(title)) {
-      if (tocTaken) return;
+      if (tocTaken) return drop('second-toc');
       tocTaken = true;
       title = '目次を読む';
     }
@@ -820,7 +822,7 @@ function pickCards(candidates, probes) {
     if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
     // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
     // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。
-    if (!title) return;
+    if (!title) return drop('no-title');
     // 題が重なったら、番号を付ける前に、場所の中の見出し・直前の見出し・中の短い文字から、まだ使っていない題を探す。
     let unique = title;
     if (titles.has(unique)) {
@@ -880,6 +882,26 @@ function deckName(title, url) {
 }
 
 // 中の一巡。signal が止められたら（時間切れ）、それ以上進めず、残さない。
+// 開発者が、本物の Claude の案と手元の守りの結果を見比べるための書き出し（環境変数 TODOKU_DUMP_DIR があるときだけ）。
+// (a) <id>-a-structure.txt: Claude に送った構造（文字なし） (b) <id>-b-proposals.json: Claude の返事そのまま
+// (c) <id>-c-deck.json: 手元の守りの後の束（題も含む）と、作らなかったカードと理由。ページの文字（題）は (c) にだけ入る。
+// 受け渡しのフォルダに置いてよいのは (a)(b) だけ。
+function dumpDir() {
+  const dir = process.env.TODOKU_DUMP_DIR;
+  return typeof dir === 'string' && dir.trim() !== '' ? dir : null;
+}
+
+function dumpFile(id, name, content) {
+  const dir = dumpDir();
+  if (!dir) return;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${id}-${name}`), typeof content === 'string' ? content : `${JSON.stringify(content, null, 2)}\n`);
+  } catch (e) {
+    // 書き出せなくても、束を作るのは続ける
+  }
+}
+
 async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, settle, now }) {
   const temp = { id, name: '新しいページ', url, cards: [] };
   let win;
@@ -897,6 +919,7 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const user = buildGenerateRequest(limited.text, { truncated: truncated || limited.cut });
   // 送る文の全体に日本語の文字があれば送らない（構造の確かめに加えて、送る文そのものも確かめる）。
   if (!looksTextFree(user)) return fail('text-in-structure');
+  dumpFile(id, 'a-structure.txt', limited.text);
   let answer;
   try {
     answer = await callModel({ system: SYSTEM_PROMPT, user, signal });
@@ -904,10 +927,12 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
     return fail(signal.aborted ? 'timeout' : 'model-error', e.message);
   }
   if (signal.aborted) return fail('timeout');
+  dumpFile(id, 'b-proposals.json', answer);
   const candidates = normalizeCandidates(answer);
   // Claude の案が一枚も無くても、手元で必ず作る表と本文の節のカードがあれば束にする（最後に一枚も無ければ作らない）。
   const probes = candidates.length > 0 ? await win.webContents.executeJavaScript(buildInspectScript(candidates)) : [];
-  const picked = pickCards(candidates, probes);
+  const rejects = [];
+  const picked = pickCards(candidates, probes, rejects);
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
   const taken = picked.filter((c) => c.action !== 'click').map((c) => [c.selector, c.action]);
   const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
@@ -915,6 +940,15 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const kept = picked.filter((c) => !(c.action === 'read' && whole.has(c.selector)));
   const withMain = addMainListCards(kept, extras && extras.mainLists);
   const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
+  dumpFile(id, 'c-deck.json', {
+    url,
+    cards,
+    picked: picked.map((c) => c.selector),
+    rejects,
+    whole: [...whole],
+    mainLists: extras && Array.isArray(extras.mainLists) ? extras.mainLists : [],
+    sections: extras && Array.isArray(extras.sections) ? extras.sections : [],
+  });
   if (cards.length === 0) return fail('no-cards');
   // 行き先が変わった（転送された）ときは、行き着いたページの URL を残す（http:// と https:// のときだけ）。
   const landed = externalUrl(win.webContents.getURL());
