@@ -81,8 +81,9 @@ function renderCard(card, i) {
     tabindex: '-1',
   });
   node.append(el('h2', { id: headingId, text: card.heading }));
-  if (card.note) node.append(el('p', { class: 'card-note', text: card.note }));
-  node.append(renderItems(card.items || []));
+  // 説明（設定ファイルの description）は、見出しの次の項目にして、矢印で選べるようにする（カードの外に情報を作らない）。
+  const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
+  node.append(renderItems(items));
   // マウスで押したときも、キーと同じ動きにする。
   node.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
@@ -93,37 +94,56 @@ function renderCard(card, i) {
   return node;
 }
 
+// 項目の種類: { label, text }（見出しと内容の組・dl）・{ listItem }（読んだ1件・ul の li。NVDA が「2の4」と位置を読む）・
+// { text }（一文・p）・{ button, onPress }（ボタン）。並びの順のまま、続く同じ種類を一つの dl・ul にまとめる。
 function renderItems(items) {
   const box = el('div', { class: 'items' });
-  const dl = el('dl');
-  let useDl = false;
+  let group = null;
+  let groupKind = null;
   for (const item of items) {
-    if (item.button) {
+    const kind = item.button ? 'button' : item.label ? 'dl' : item.listItem !== undefined ? 'ul' : 'p';
+    if (kind === 'dl' || kind === 'ul') {
+      if (groupKind !== kind) {
+        group = el(kind);
+        groupKind = kind;
+        box.append(group);
+      }
+    } else {
+      group = null;
+      groupKind = null;
+    }
+    if (kind === 'button') {
       const b = el('button', { type: 'button', 'data-item': '', tabindex: '-1', class: 'item-button', text: item.button });
       b.addEventListener('click', () => item.onPress(b));
+      if (item.result) b.setAttribute('data-result', '');
       box.append(b);
-    } else if (item.label) {
-      useDl = true;
-      dl.append(el('dt', { 'data-item': '', tabindex: '-1', text: item.label }));
+    } else if (kind === 'dl') {
+      group.append(el('dt', { 'data-item': '', tabindex: '-1', text: item.label }));
       // 内容の側は、見出しを繰り返さない。
-      dl.append(el('dd', { 'data-item': '', tabindex: '-1', text: item.text }));
+      group.append(el('dd', { 'data-item': '', tabindex: '-1', text: item.text }));
+    } else if (kind === 'ul') {
+      group.append(el('li', { 'data-item': '', 'data-result': '', tabindex: '-1', text: item.listItem }));
     } else {
-      box.append(el('p', { 'data-item': '', tabindex: '-1', class: 'item-text', text: item.text }));
+      const p = el('p', { 'data-item': '', tabindex: '-1', class: item.note ? 'item-text card-note' : 'item-text', text: item.text });
+      if (item.result) p.setAttribute('data-result', '');
+      if (item.loading) p.setAttribute('data-loading', '');
+      box.append(p);
     }
   }
-  if (useDl) box.prepend(dl);
   return box;
 }
 
 function itemNodes(cardNode) { return [...cardNode.querySelectorAll('[data-item]')]; }
 
-function enterCard(cardNode) {
+// カード内へ移動する。toResult のときは、説明の項目を飛ばして、読んだ結果（か、読み込み中・読めない知らせ）の最初へ。
+function enterCard(cardNode, toResult = false) {
   const items = itemNodes(cardNode);
   if (items.length === 0) {
     announce('このカードの中には、読む項目がありません。');
     return;
   }
-  items[0].focus();
+  const first = toResult ? cardNode.querySelector('[data-result]') : null;
+  (first || items[0]).focus();
 }
 
 // カードの上の Enter・スペース・クリック。
@@ -133,7 +153,7 @@ async function activateCard(card, node) {
     return;
   }
   if (card.kind === 'read') {
-    await readCard(card, node);
+    await readCard(card);
     return;
   }
   if (card.kind === 'click') {
@@ -144,48 +164,108 @@ async function activateCard(card, node) {
 }
 
 // ---- 読む先のカード ----
-async function readCard(card, node) {
+// カードを描き直す。いまの束にそのカードがあるときだけ、置き換えて選んだままにする。
+// 描き直したカードの要素を返す（別の束へ移っていたら null）。
+function refreshCard(card) {
+  const deck = current();
+  const index = deck.cards.indexOf(card);
+  if (index < 0 || !card.node || !card.node.isConnected) return null;
+  const old = card.node;
+  const hadFocus = old.contains(document.activeElement);
+  const fresh = renderCard(card, index);
+  old.replaceWith(fresh);
+  if (hadFocus || deck.index === index) {
+    cardNodes().forEach((n, k) => { n.tabIndex = k === deck.index ? 0 : -1; });
+  }
+  return fresh;
+}
+
+const PROGRESS_EVERY_MS = 5000; // 進み具合を知らせる間隔（5秒に一度）
+
+async function readCard(card) {
   busy = true;
-  node.setAttribute('aria-busy', 'true');
-  announce(`${card.title}を読んでいます。`);
+  const started = Date.now();
+  card.heading = `${card.title}（読んでいます）`;
+  card.items = [{ text: '読んでいます。\n終わると、ここに読んだ1件ずつが出ます。', result: true, loading: true }];
+  let node = refreshCard(card);
+  if (node) {
+    node.setAttribute('aria-busy', 'true');
+    enterCard(node, true);
+  }
+  announce(`「${card.title}」を読んでいます。`);
+  // 5秒に一度だけ、たった秒を知らせる。見える項目の文も書き換える。
+  const timer = setInterval(() => {
+    const sec = Math.round((Date.now() - started) / 1000);
+    const item = card.node && card.node.isConnected ? card.node.querySelector('[data-loading]') : null;
+    if (item) item.textContent = `読んでいます。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`;
+    announce(`${sec}秒たちました。`);
+  }, PROGRESS_EVERY_MS);
   let result;
   try {
     result = await window.cardsApi.runCard(card.appId, card.cardId);
   } catch (e) {
     result = { ok: false, message: e.message };
   } finally {
+    clearInterval(timer);
     busy = false;
-    node.removeAttribute('aria-busy');
   }
+  let count = 0;
   if (result.ok) {
     const texts = Array.isArray(result.items) ? result.items : String(result.text || '').split('\n').filter((t) => t.trim() !== '');
-    card.items = texts.map((t) => ({ text: t }));
-    card.heading = result.action === 'list' ? `${card.title}（${texts.length}件）` : card.title;
+    count = texts.length;
+    if (result.action === 'list') {
+      // 読んだ1件ずつを ul の li にする（NVDA が「2の4」と位置を読む）。
+      card.items = texts.map((t) => ({ listItem: t }));
+      card.heading = `${card.title}（${count}件）`;
+    } else {
+      card.items = texts.map((t) => ({ text: t, result: true }));
+      card.heading = card.title;
+    }
     if (result.truncated) card.items.push({ text: '長いので、ここまでで切りました。' });
   } else if (result.needLogin) {
     card.heading = `${card.title}（ログインが要ります）`;
-    card.items = [{ text: result.message }];
+    card.items = [
+      {
+        button: 'ログインの窓を前に出す',
+        result: true,
+        onPress: async () => {
+          const r = await window.cardsApi.showTarget(card.appId);
+          if (!r.ok) announce(r.message, true);
+        },
+      },
+      { text: 'ログインが済んだら、Enterキーでもう一度読みます。' },
+    ];
   } else {
     card.heading = `${card.title}（読めません）`;
-    card.items = [{ text: `画面が変わったため読めません。${result.message}` }];
+    card.items = [{ text: unreadableText(card, result), result: true }];
   }
-  const fresh = renderCard(card, current().index);
-  node.replaceWith(fresh);
-  selectCard(current().index, { announcePosition: false });
-  if (result.ok) announce(result.action === 'list' ? `${card.items.length}件読みました。` : '読みました。');
-  enterCard(fresh);
+  // 読み込み中に Esc で別の所へ移っていたら、結果はカードに入れておくだけにする。
+  const wasInside = card.node && card.node.isConnected && card.node.contains(document.activeElement);
+  node = refreshCard(card);
+  if (!node) return;
+  if (result.ok) announce(result.action === 'list' ? `「${card.title}」から${count}件読みました。` : `「${card.title}」を読みました。`);
+  if (wasInside) enterCard(node, true);
+}
+
+// 読めなかったときの文。理由ごとに分け、黙らない。
+function unreadableText(card, result) {
+  const message = String(result.message || '');
+  if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。';
+  if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
+  if (card.action === 'list') return '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。';
+  return '画面が変わったため、読む所が見つかりませんでした。';
 }
 
 // ---- 押すカード（押す前に確かめる二段）----
 function showClickConfirm(card, node) {
   card.items = [
-    { text: `「${card.title}」を押します。` },
+    { text: `「${card.title}」を押します。`, result: true },
     {
-      button: '押す',
+      button: `「${card.title}」を押す`,
       onPress: async () => {
         if (busy) return;
         busy = true;
-        announce(`${card.title}を押しています。`);
+        announce(`「${card.title}」を押しています。`);
         let r;
         try {
           r = await window.cardsApi.runCard(card.appId, card.cardId);
@@ -194,33 +274,36 @@ function showClickConfirm(card, node) {
         } finally {
           busy = false;
         }
-        announce(r.ok ? `${card.title}を押しました。` : `押せませんでした。${r.message}`, !r.ok);
+        announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}`, !r.ok);
       },
     },
   ];
-  const fresh = renderCard(card, current().index);
-  node.replaceWith(fresh);
-  selectCard(current().index, { announcePosition: false });
-  enterCard(fresh);
+  const fresh = refreshCard(card);
+  if (fresh) enterCard(fresh, true);
 }
 
 // ---- 束を作る ----
-const KEYS_TEXT = '上下の矢印でカードを移ります。\nEnter で、カードの先へ進むか、カードの中を読みます。\nカードの中では、上下の矢印で一つずつ読みます。\nEsc で一つ戻ります。';
-const NVDA_TEXT = 'NVDA では、NVDA キーとスペースでフォーカスモードに替えると、矢印でカードを移れます。\n替えなくても、H で見出しを順に読めます。';
+// はじめのカードのキーの説明。基の書き方（キーには「キー」を付け、カードは「選ぶ」、中は「カード内へ移動する」・一文ごとに改行）。
+// Enter の意味は束ごとに違うので、それぞれの束のはじめのカードで言う。
+const APP_NAME = 'Todoku';
+const NVDA_TEXT = 'NVDA キーとスペースキーでフォーカスモードに替えると、上下矢印キーでカードを選べます。\n替えなくても、H キーで見出しを順に読めます。';
 
 function appDeck(config) {
   const cards = [{
     kind: 'info',
     heading: config.name,
     items: [
-      { label: '読む先', text: `${config.cards.length}件あります。` },
-      { label: '動かし方', text: KEYS_TEXT },
-      { label: '戻る', text: 'カードの上で Esc を押すと、どこを読みますかに戻ります。' },
+      { text: `「${config.name}」を、カードで読めます（読む先 ${config.cards.length}件）。` },
+      { label: '上下矢印キー', text: 'カードを選びます。' },
+      { label: 'スペースキーまたはEnterキー', text: 'そのカードの所を読みに行き、カード内へ移動します。\nもう一度押すと、読み直します。' },
+      { label: 'カードの中の上下矢印キー', text: '読んだものを1件ずつ読みます。' },
+      { label: 'Escキー', text: 'カードの中からカードへ戻ります。\nカードの上で押すと、「' + APP_NAME + '」に戻ります。' },
     ],
   }];
   for (const c of config.cards) {
     cards.push({
       kind: c.action === 'click' ? 'click' : 'read',
+      action: c.action,
       appId: config.id,
       cardId: c.id,
       title: c.title,
@@ -235,10 +318,12 @@ function appDeck(config) {
 function topDeck(configs, problems) {
   const cards = [{
     kind: 'info',
-    heading: 'どこを読みますか',
+    heading: APP_NAME,
     items: [
-      { label: 'アプリ', text: `${configs.length}件あります。` },
-      { label: '動かし方', text: KEYS_TEXT },
+      { text: `ウェブアプリの画面を、カードで読めます（アプリ ${configs.length}件）。` },
+      { label: '上下矢印キー', text: 'アプリのカードを選びます。' },
+      { label: 'スペースキーまたはEnterキー', text: 'そのアプリを開きます。\nはじめのカードでは、カード内へ移動します。' },
+      { label: 'Escキー', text: 'カードの中からカードへ戻ります。' },
       { label: 'NVDA', text: NVDA_TEXT },
     ],
   }];
@@ -256,7 +341,7 @@ function topDeck(configs, problems) {
       items: problems.map((p) => ({ text: p })),
     });
   }
-  return { name: 'どこを読みますか', cards };
+  return { name: APP_NAME, cards };
 }
 
 // ---- キー ----

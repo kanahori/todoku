@@ -4,7 +4,7 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net } = require('electron');
 const { loadConfigSources, loadConfigFile } = require('./config');
-const { runCard, checkCards } = require('./target');
+const { runCard, checkCards, showTarget } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 
 const CARDS_DIR = path.join(__dirname, '..', '..', 'cards');
@@ -112,6 +112,12 @@ ipcMain.handle('card:run', async (_event, appId, cardId) => {
   } catch (e) {
     return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
   }
+});
+
+// ウェブアプリの窓を前に出す（ログインのため）。
+ipcMain.handle('target:show', (_event, appId) => {
+  if (!configs.get(appId)) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
+  return showTarget(appId) ? { ok: true } : { ok: false, message: 'ウェブアプリの窓が、まだ開いていません。カードを Enterキーで読んでください。' };
 });
 
 app.whenReady().then(() => {

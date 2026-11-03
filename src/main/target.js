@@ -167,7 +167,9 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const loginSelector = config.login ? config.login.selector : null;
   const result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs));
   if (result.reason === 'login') {
-    // ログインは人が手で行う。ログインの画面を開き、ウェブアプリの窓を前に出す。
+    // ログインは人が手で行う。ログインの画面を開いておく。
+    // 窓を前に出すのは、利用者がカードの「ログインの窓を前に出す」を押したとき（showTarget）。
+    // ここで勝手に前に出すと、カードの画面の知らせを聞く前に焦点が移ってしまうため。
     if (config.login.path) {
       try {
         const loginUrl = resolveUrl(config.url, config.login.path);
@@ -176,8 +178,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
         return { ok: false, where: 'login.path', message: `ログインの画面を開けませんでした: ${e.message}` };
       }
     }
-    win.show();
-    win.focus();
+    if (!win.isVisible()) win.showInactive();
     return { ok: false, needLogin: true, message: 'ログインが要ります。ウェブアプリの窓でログインしてから、もう一度カードを押してください' };
   }
   if (!result.found) {
@@ -229,4 +230,13 @@ async function checkCards(BrowserWindow, config, options = {}) {
   return problems;
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, runCard, checkCards, openTarget };
+// ウェブアプリの窓を前に出して、焦点を移す（ログインのため）。窓がまだ無ければ false。
+function showTarget(appId) {
+  const win = windows.get(appId);
+  if (!win || win.isDestroyed()) return false;
+  win.show();
+  win.focus();
+  return true;
+}
+
+module.exports = { resolveUrl, buildScript, pageAction, runCard, checkCards, openTarget, showTarget };
