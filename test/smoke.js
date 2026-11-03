@@ -177,6 +177,10 @@ async function main() {
   const cal = await runCard(BrowserWindow, calConfig, 'events');
   check('日付: 日の欄の id や datetime から月を足して「11月6日 金曜」と読み、月の分からない行は書いてあるまま読む',
     cal.ok && JSON.stringify(cal.items) === JSON.stringify(['11月6日 金曜 町民まつり', '11月7日 土曜 図書館のおはなし会', '8 日曜 月の書いていない行']), cal.items);
+  const multiConfig = { ...calConfig, cards: [{ id: 'multi', title: 'イベント', action: 'list', selector: '#multi tr.row .ev', dateSelector: 'td.date', tagSelector: '.tag' }] };
+  const multi = await runCard(BrowserWindow, multiConfig, 'multi');
+  check('日付: 一日に催しが二つある行も一件ずつ、行の日付と曜日を頭に付けて読み、分類の言葉は題の後ろに括弧で読む',
+    multi.ok && JSON.stringify(multi.items) === JSON.stringify(['11月9日 月曜 町民まつりの準備会（催し）', '11月9日 月曜 からだの相談会（健康、福祉）']), multi.items);
   const laterConfig = { ...calConfig, cards: [{ id: 'later', title: 'イベント', action: 'list', selector: '#later tr.row', dateSelector: 'td.date' }] };
   closeTarget('calendar');
   const later = await runCard(BrowserWindow, laterConfig, 'later');

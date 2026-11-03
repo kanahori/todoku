@@ -57,6 +57,10 @@ app.whenReady().then(async () => {
       // 頭の12字の形だけを書き出す（数字・月・日・読点・空白のほかは「字」にする）。
       const head = r.items[0] ? r.items[0].slice(0, 12).replace(/[^\d月日、 ]/g, '字') : '';
       console.log(`  ${card.id}: 月日で始まる項目 ${dated}件／${n}件・1件目の頭の形「${head}」`);
+      if (card.tagSelector) {
+        const tagged = r.items.filter((t) => /（[^（）]+）$/.test(t)).length;
+        console.log(`  ${card.id}: 分類を後ろの括弧で読む項目 ${tagged}件／${n}件`);
+      }
       check(`${card.id}: どの項目も月日（「11月6日」の形）で始まる`, dated === n);
     }
   }

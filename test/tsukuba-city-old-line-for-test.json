@@ -33,10 +33,11 @@
       "title": "イベント情報を読む（今月）",
       "action": "list",
       "path": "/calendar.html?eventTypeNo=1&type-display=0&area-display=0",
-      "selector": "#calListTable tr.calListRow:has(.calPageLink)",
+      "selector": "#calListTable tr.calListRow .calPageLink",
       "container": "#calListTable",
       "dateSelector": "td.date",
-      "description": "イベントカレンダーの今月の一覧を開き、催しのある日ごとに、日付と催しの題を読みます。無いときは、0件と読みます"
+      "tagSelector": ".event_icon",
+      "description": "イベントカレンダーの今月の一覧を開き、催しを一件ずつ、日付と曜日、催しの題、分類（括弧の中）の順に読みます。無いときは、0件と読みます"
     },
     {
       "id": "carousel",

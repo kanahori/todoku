@@ -32,9 +32,13 @@ function resolveUrl(url, cardPath) {
 // その要素を「11月6日」と読む。つくば市のイベントカレンダーの一覧は、日の欄が「6」だけで、月がどこにも読めなかった
 // （「6 金曜」と読んだ。2026-11-04 の Windows の確かめ）。月は日の欄の id（calendar_list_2026_11_6）にだけ書いてある。
 // 入れ物に当たって項目が 0件なら「0件」（found: true・items: []）、入れ物にも当たらなければ「当たらない」と返す。
+// dateSelector の要素が項目の中に無ければ、項目を囲む要素（3段上まで）の中の、項目より前にあるものを使い、項目の頭に「11月6日 金曜」と付ける
+// （一日に催しが幾つもある行で、催しを一件ずつ読むため）。
+// tagSelector（list のカードだけ・任意）は、項目の中の分類の言葉の要素の selector。題の前でなく、後ろに括弧で読む（「…を開催します！（催し、健康）」）。
+// つくば市のイベントカレンダーで、分類の言葉が題の前に続いて聞き分けにくかった（2026-11-04 の Windows の確かめ）。
 // until（read のカードだけ・任意）は、節の終わりの selector。当たった要素から、後に続く兄弟の要素を、until に当たる要素の手前まで読む
 // （見出しから次の同じ段の見出しの手前までの節。作った束の、本文の節を読むカード）。
-async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until) {
+async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until, tagSelector) {
   // 読む文を、行の並びとして取り出す。画面読み上げが読む文に近づける。
   // - 中の文字に加えて、画像の説明（alt）と aria-label も読む。aria-hidden="true" の中と script・style は読まない。
   //   当たった要素そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
@@ -95,21 +99,43 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
   // scope が 'item' なら当たった要素の全体で、'line'（ふだん）なら行ごとに、画像の説明の重なりを外す。
   // 日付の要素の datetime か id から「11月6日」を作る。読めなければ null（そのときは書いてあるまま読む）。
   // その要素に無ければ、中の datetime を持つ要素（time など）を見る。
-  const dateLabel = (el) => {
+  // withWeekday のときは「11月6日 金曜」と曜日も付ける（項目の外の日付を、項目の頭に付けるとき）。
+  const dateLabel = (el, withWeekday = false) => {
     const inner = el.querySelector('[datetime]');
     const src = `${el.getAttribute('datetime') || ''} ${el.id || ''} ${inner ? inner.getAttribute('datetime') : ''}`;
     const m = /(\d{4})[-_/](\d{1,2})[-_/](\d{1,2})(?!\d)/.exec(src);
     if (!m) return null;
     const month = Number(m[2]);
     const day = Number(m[3]);
-    return month >= 1 && month <= 12 && day >= 1 && day <= 31 ? `${month}月${day}日` : null;
+    if (!(month >= 1 && month <= 12 && day >= 1 && day <= 31)) return null;
+    if (!withWeekday) return `${month}月${day}日`;
+    const w = new Date(Number(m[1]), month - 1, day).getDay();
+    return `${month}月${day}日 ${'日月火水木金土'[w]}曜`;
   };
-  // replace は { node, text }。その要素を、中の文字の代わりに text として読む（日付の要素）。
+  // 項目の日付の要素。項目の中に無ければ、項目を囲む行（tr か li。3段上まで）の中の、項目より前にあるもの。
+  // 行より外は探さない（ほかの行や表の日付を、取り違えないため）。
+  const dateOf = (it) => {
+    let a = it;
+    for (let depth = 0; a && depth <= 3; depth++, a = a.parentElement) {
+      let d = null;
+      try {
+        d = a.querySelector(dateSelector);
+      } catch (e) {
+        return { invalid: true };
+      }
+      if (d && (a === it || it.contains(d) || (d.compareDocumentPosition(it) & Node.DOCUMENT_POSITION_FOLLOWING))) {
+        return { el: d, inside: it.contains(d) };
+      }
+      if (a.tagName === 'TR' || a.tagName === 'LI') break;
+    }
+    return {};
+  };
+  // replace は Map（要素 → 文字）。その要素を、中の文字の代わりにその文字として読む（日付の要素）。空の文字なら読まない（分類の言葉）。
   const textLines = (root, visibleOnly = false, scope = 'line', replace = null) => {
     let out = '';
     const walk = (node, isRoot, keepNewlines, shown) => {
-      if (replace && node === replace.node) {
-        out += ` ${replace.text} `;
+      if (replace && replace.has(node)) {
+        out += ` ${replace.get(node)} `;
         return;
       }
       if (node.nodeType === 3) {
@@ -195,12 +221,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       // つくば市のイベントカレンダーは、読み込んだ直後は日の欄の無い仮の行が5件あり、0.6秒ほど後に日付つきの10件に描き直す
       // （2026-11-04 に Mac で測った。仮の行を読んで「（5件）」「6 金曜」になっていた）。
       const dateReady = () => items.some((it) => {
-        try {
-          const d = it.querySelector(dateSelector);
-          return Boolean(d && dateLabel(d));
-        } catch (e) {
-          return true;
-        }
+        const d = dateOf(it);
+        return Boolean(d.invalid || (d.el && dateLabel(d.el)));
       });
       if (items.length > 0 && dateSelector && !dateReady() && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 250));
@@ -208,18 +230,30 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       }
       if (items.length > 0) {
         const texts = items.map((it) => {
-          let replace = null;
+          const replace = new Map();
+          let head = '';
           if (dateSelector) {
-            let dateEl = null;
-            try {
-              dateEl = it.querySelector(dateSelector);
-            } catch (e) {
-              dateEl = null;
-            }
-            const label = dateEl ? dateLabel(dateEl) : null;
-            if (label) replace = { node: dateEl, text: label };
+            const d = dateOf(it);
+            const label = d.el ? dateLabel(d.el, !d.inside) : null;
+            if (label && d.inside) replace.set(d.el, label);
+            else if (label) head = `${label} `;
           }
-          return oneLine(textLines(it, false, 'item', replace));
+          const tags = [];
+          if (tagSelector) {
+            let found = [];
+            try {
+              found = [...it.querySelectorAll(tagSelector)];
+            } catch (e) {
+              found = [];
+            }
+            for (const t of found) {
+              const word = (t.textContent || '').replace(/\s+/g, ' ').trim();
+              if (word && !tags.includes(word)) tags.push(word);
+              replace.set(t, '');
+            }
+          }
+          const body = oneLine(textLines(it, false, 'item', replace));
+          return `${head}${body}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
         });
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
@@ -289,8 +323,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
 }
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
-function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null, until = null) {
-  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until].map((v) => JSON.stringify(v)).join(', ');
+function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null, until = null, tagSelector = null) {
+  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until, tagSelector].map((v) => JSON.stringify(v)).join(', ');
   return `(${pageAction.toString()})(${args})`;
 }
 
@@ -412,12 +446,13 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const container = card.action === 'list' && card.container ? card.container : null;
   const dateSelector = card.action === 'list' && card.dateSelector ? card.dateSelector : null;
   const until = card.action === 'read' && card.until ? card.until : null;
+  const tagSelector = card.action === 'list' && card.tagSelector ? card.tagSelector : null;
   // 押すカードは、押す前からダウンロードを待ち受ける。
   // 保存の名前の型（saveAs）があれば、始まったダウンロードをその名前で保存する。
   const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
-    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until));
+    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector));
   } catch (e) {
     if (watch) watch.cancel();
     throw e;

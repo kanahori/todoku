@@ -106,6 +106,16 @@ test('dateSelector は list のカードにだけ、空でない文字列で書�
   assert.match(errors[0].message, /list/);
 });
 
+test('tagSelector は list のカードにだけ、空でない文字列で書ける', () => {
+  const c = good();
+  c.cards = [
+    { id: 'a', title: 'A', action: 'list', selector: '.ev', tagSelector: '.tag' },
+    { id: 'b', title: 'B', action: 'read', selector: 'main', tagSelector: '.tag' },
+    { id: 'c', title: 'C', action: 'list', selector: '.ev', tagSelector: '' },
+  ];
+  assert.deepEqual(validateConfig(c).map((e) => e.where), ['cards[1].tagSelector', 'cards[2].tagSelector']);
+});
+
 test('until は read のカードにだけ、空でない文字列で書ける', () => {
   const c = good();
   c.cards = [
