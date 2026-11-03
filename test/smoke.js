@@ -520,7 +520,8 @@ async function autoRepairChecks() {
 async function rendererFocusChecks() {
   const win = new BrowserWindow({
     show: false,
-    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+    // 隠した窓でもタイマーを間引かせない（知らせの欄に 50ミリ秒遅れて入る文を、決まった待ちで読むため）。
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
   });
   try {
     await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
@@ -755,7 +756,8 @@ async function rendererFocusChecks() {
 async function rendererGenerateChecks() {
   const win = new BrowserWindow({
     show: false,
-    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+    // 隠した窓でもタイマーを間引かせない（知らせの欄に 50ミリ秒遅れて入る文を、決まった待ちで読むため）。
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
   });
   try {
     await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
