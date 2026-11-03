@@ -574,6 +574,28 @@ async function generateChecks() {
     }
     if (second.ok) store.remove(second.config.id);
 
+    // 本文の大半が最初の h2 より前の h3 の節にあり、本文を同じ class の div で書くページ（市の案内のページの作り）。
+    // 節は h2 と h3 の両方で区切る。Claude の読むカードが幾つもの要素に当たっても、重なりは読む最初の一つで見る。丸ごとのカードも節に分ける。
+    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '借りられる場所', 'お知らせ', 'お問い合わせ'];
+    const multi = await generateDeck({
+      BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('main', 'read', '.wysiwyg')] }), store, allowFixtures: true,
+    });
+    check('カードを作る: h3 の節も節のカードにし（h2 の前にあるもの）、幾つもの要素に当たる読むカードは最初の一つ（頭の目次）だけと重なりを見る。お問い合わせは束の後ろ',
+      multi.ok && JSON.stringify(multi.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections), multi.ok ? multi.config.cards.map((c) => c.title) : multi);
+    if (multi.ok) store.remove(multi.config.id);
+    const whole2 = await generateDeck({
+      BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('main', 'read', '#contents')] }), store, allowFixtures: true,
+    });
+    check('カードを作る: 本文を丸ごと読むカード（h1 の題になるもの）は、h2・h3 の節のカードに分け、頭の目次は読まない',
+      whole2.ok && whole2.split === 1 && JSON.stringify(whole2.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections.slice(1)),
+      whole2.ok ? whole2.config.cards.map((c) => c.title) : whole2);
+    if (whole2.ok) {
+      const about3 = await runCard(BrowserWindow, whole2.config, whole2.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: h3 の節は、次の h3 の手前までを読み、「目次に戻る」を読まない',
+        about3.ok && about3.text === 'あおチャリとは\nあおチャリは、町の中のどの貸し場所でも借りて返せる自転車です。電動の自転車なので、坂の多い道も楽に走れます。', about3.text);
+      store.remove(whole2.config.id);
+    }
+
     // main も見出しも無く、表を名前の列と値の列の二つに分けて描くページ（気象台の警報のページの作り）。
     // body を本文の区画とみて、最初の表と行の一番多い表を、二つの表の行をつないで読むカード（joinWith）にし、role の無い div の並びも表の切り替えとみる。
     const wide = await generateDeck({

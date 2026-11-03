@@ -26,7 +26,7 @@ const MAX_STRUCTURE_CHARS = 120 * 1000;
 // 作るカードの数の上限と、Claude の案を試す数の上限。
 const MAX_CARDS = 8;
 // 本文の節を読むカードの数の上限と、節にする文字の数の下限。
-const MAX_SECTIONS = 6;
+const MAX_SECTIONS = 10;
 const SECTION_MIN_CHARS = 40;
 // Claude の案に無くても必ず作る、本文の表・一覧の数の上限。
 const MAX_MUST_LISTS = 2;
@@ -449,23 +449,26 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     const sel = parts.join(' > ');
     return document.querySelector(sel) === el ? sel : null;
   };
-  // 見出しの段（h2。無ければ h3・h4）。
-  let level = 0;
-  for (const l of [2, 3, 4]) {
-    if ([...main.querySelectorAll(`h${l}`)].some((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h))) {
-      level = l;
-      break;
-    }
-  }
-  const sectionHeads = level ? [...main.querySelectorAll(`h${level}`)].filter((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h)) : [];
+  // 節の見出し: 本文の区画にある h2・h3・h4 のうち、上の二つの段（h2 と h3 など）。どちらの段の見出しも、そこで節を区切る。
+  // 上の段（h2）だけで区切ると、つくば市の自転車のページのように、本文の大半が最初の h2 より前の h3 の節にあるページで、節にならなかった
+  // （h2 は3つで、その節は40字と9字。2026-11-04 に Mac で一度開いて測った）。
+  const usable = (h) => !hidden(h) && !h.closest('nav, aside') && textOf(h);
+  const present = [2, 3, 4].filter((l) => [...main.querySelectorAll(`h${l}`)].some(usable));
+  const levels = present.slice(0, 2);
+  const level = levels.length > 0 ? levels[levels.length - 1] : 0;
+  const headSel = levels.map((l) => `h${l}`).join(', ');
+  const sectionHeads = level ? [...main.querySelectorAll(headSel)].filter(usable) : [];
   // 本文を丸ごと読むカード（Claude の案で、節の見出しを二つ以上含む読むカード）は、節のカードに分ける。
   // 自転車のページで、本文を丸ごと読むカードがあり、重なりの判断で節のカードが全部はじかれた（2026-11-04 の Windows の確かめ）。
+  // 読むカードが読むのは、当たる要素の最初の一つだけなので、重なりの判断もその一つで見る（一覧のカードは全部）。
   const takenEls = [];
   const whole = [];
-  for (const s of taken) {
+  for (const t of taken) {
+    const s = Array.isArray(t) ? t[0] : t;
+    const firstOnly = Array.isArray(t) && t[1] === 'read';
     let els = [];
     try {
-      els = [...document.querySelectorAll(s)];
+      els = firstOnly ? [document.querySelector(s)].filter(Boolean) : [...document.querySelectorAll(s)];
     } catch (e) {
       // 書き方の誤りのある selector は、もう落としてある
     }
@@ -554,7 +557,7 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
   const out = [];
-  for (const h of main.querySelectorAll(`h${level}`)) {
+  for (const h of sectionHeads) {
     if (out.length >= maxSections) break;
     if (hidden(h) || h.closest('nav, aside')) continue;
     const title = textOf(h);
@@ -820,7 +823,7 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const probes = await win.webContents.executeJavaScript(buildInspectScript(candidates));
   const picked = pickCards(candidates, probes);
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
-  const taken = picked.filter((c) => c.action !== 'click').map((c) => c.selector);
+  const taken = picked.filter((c) => c.action !== 'click').map((c) => [c.selector, c.action]);
   const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
   const whole = new Set(extras && Array.isArray(extras.whole) ? extras.whole : []);
   const kept = picked.filter((c) => !(c.action === 'read' && whole.has(c.selector)));
