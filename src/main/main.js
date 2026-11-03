@@ -2,8 +2,8 @@
 // Electron の主の処理: 窓を作り、設定ファイルを読んで画面に渡す。
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, net, session } = require('electron');
-const { loadConfigSources, loadConfigFile } = require('./config');
+const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
+const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
 const { runCard, checkCards, showTarget } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
@@ -121,6 +121,21 @@ ipcMain.handle('card:run', async (_event, appId, cardId) => {
     return await runCard(BrowserWindow, config, cardId);
   } catch (e) {
     return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
+  }
+});
+
+// 出典のページ（設定ファイルの sourceUrl）を既定のブラウザで開く。画面からは appId だけを受け取り、URL は受け取らない。
+// 開くのは http:// と https:// だけ。
+ipcMain.handle('source:open', async (_event, appId) => {
+  const config = configs.get(appId);
+  if (!config || config.sourceUrl === undefined) return { ok: false, message: '出典のページが設定ファイルにありません。' };
+  const url = externalUrl(config.sourceUrl);
+  if (!url) return { ok: false, message: '出典のページの書き方が正しくありません。' };
+  try {
+    await shell.openExternal(url);
+    return { ok: true, message: '出典のページを、既定のブラウザで開きました。' };
+  } catch (e) {
+    return { ok: false, message: '出典のページを開けませんでした。' };
   }
 });
 

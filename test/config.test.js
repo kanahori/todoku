@@ -97,11 +97,51 @@ test('頭の description は、あれば文字列であること', () => {
   assert.deepEqual(validateConfig({ ...good(), description: 3 }).map((e) => e.where), ['description']);
 });
 
-test('気象庁の三つの設定ファイルは、頭の description に出典の文を持ち、読める', () => {
+test('気象庁の三つの設定ファイルは、頭の description に出典の文を持ち、URL は sourceUrl にだけ置く', () => {
   const { loadConfigFile } = require('../src/main/config');
   for (const name of ['jma-daily.json', 'jma-forecast.json', 'jma-obsdl.json']) {
     const r = loadConfigFile(path.join(__dirname, '..', 'cards', name));
     assert.ok(r.config, `${name}: ${JSON.stringify(r.errors)}`);
-    assert.match(r.config.description, /^出典：気象庁ホームページ（https:\/\/[^）]+）を加工して作成$/);
+    assert.equal(r.config.description, '出典：気象庁ホームページを加工して作成。');
+    assert.match(r.config.sourceUrl, /^https:\/\/www\.(data\.)?jma\.go\.jp\//);
+    // 読み上げで URL を一文字ずつ聞かせないように、説明の文には URL を入れない。
+    for (const c of r.config.cards) assert.doesNotMatch(c.description || '', /https?:/, `${name} の ${c.id}`);
   }
+});
+
+test('sourceUrl は、あれば http:// か https:// の URL であること', () => {
+  const { externalUrl } = require('../src/main/config');
+  assert.deepEqual(validateConfig({ ...good(), sourceUrl: 'https://example.com/about/' }), []);
+  for (const bad of ['javascript:alert(1)', 'file:///etc/passwd', 'example.com', 'https://example.com/a b', 3]) {
+    assert.deepEqual(validateConfig({ ...good(), sourceUrl: bad }).map((e) => e.where), ['sourceUrl'], String(bad));
+    assert.equal(externalUrl(bad), null, String(bad));
+  }
+  assert.equal(externalUrl('https://example.com/about/'), 'https://example.com/about/');
+});
+
+test('saveAs は click のカードにだけ、{date} と {n} と、ファイル名に使える文字で書ける', () => {
+  const c = good();
+  c.cards = [
+    { id: 'a', title: 'A', action: 'click', selector: '#a', saveAs: '作り物_{date}_{n}.csv' },
+    { id: 'b', title: 'B', action: 'read', selector: 'main', saveAs: '作り物.csv' },
+    { id: 'c', title: 'C', action: 'click', selector: '#c', saveAs: '作り物_{time}.csv' },
+    { id: 'd', title: 'D', action: 'click', selector: '#d', saveAs: '../作り物.csv' },
+    { id: 'e', title: 'E', action: 'click', selector: '#e', saveAs: '' },
+    { id: 'f', title: 'F', action: 'click', selector: '#f', saveAs: '作り物.csv.' },
+  ];
+  const errors = validateConfig(c);
+  assert.deepEqual(errors.map((e) => e.where), ['cards[1].saveAs', 'cards[2].saveAs', 'cards[3].saveAs', 'cards[4].saveAs', 'cards[5].saveAs']);
+  assert.match(errors[0].message, /click/);
+  assert.match(errors[1].message, /\{time\}/);
+});
+
+test('気象庁のダウンロードは、表の後に「メニューへ戻る」を持ち、CSV を日付の入った名前で保存する', () => {
+  const { loadConfigFile } = require('../src/main/config');
+  const { config } = loadConfigFile(path.join(__dirname, '..', 'cards', 'jma-obsdl.json'));
+  const ids = config.cards.map((c) => c.id);
+  const back = config.cards.find((c) => c.id === 'menu-top');
+  assert.equal(back.action, 'click');
+  assert.equal(back.selector, '#loadTop');
+  assert.ok(ids.indexOf('menu-top') > ids.indexOf('load-table'));
+  assert.equal(config.cards.find((c) => c.id === 'csv-download').saveAs, '気象庁_過去の気象データ_{date}.csv');
 });

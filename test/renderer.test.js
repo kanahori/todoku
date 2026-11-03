@@ -39,6 +39,13 @@ test('設定ファイルの頭の description は、アプリのはじめのカ�
   assert.match(appDeckBody, /texts\.push\(endSentence\(config\.description\)\)/);
 });
 
+test('出典のページ（sourceUrl）があれば、はじめのカードに「出典のページを開く」ボタンを置き、URL は読ませない', () => {
+  const appDeckBody = source.slice(source.indexOf('function appDeck('), source.indexOf('function topDeck('));
+  assert.match(appDeckBody, /button: '出典のページを開く'/);
+  assert.match(appDeckBody, /window\.cardsApi\.openSource\(config\.id\)/);
+  assert.doesNotMatch(appDeckBody, /texts\.push\([^)]*sourceUrl/);
+});
+
 test('押した結果のダウンロードは、保存したか（できなかったか）を知らせる', () => {
   assert.match(source, /if \(r\.ok && r\.download\) announce\(r\.download\.message, !r\.download\.ok\)/);
   assert.match(source, /onDownloadDone\(\(r\) => announce\(r\.message, !r\.ok\)\)/);

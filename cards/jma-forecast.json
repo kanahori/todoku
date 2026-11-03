@@ -1,7 +1,8 @@
 {
   "id": "jma-forecast",
   "name": "気象庁 天気予報（東京都）",
-  "description": "出典：気象庁ホームページ（https://www.jma.go.jp/bosai/forecast/）を加工して作成",
+  "description": "出典：気象庁ホームページを加工して作成。",
+  "sourceUrl": "https://www.jma.go.jp/bosai/forecast/",
   "url": "https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=130000",
   "cards": [
     {
@@ -9,7 +10,7 @@
       "title": "予報の発表の日時",
       "action": "read",
       "selector": "#short-table-container .forecast-table .contents-header",
-      "description": "出典：気象庁ホームページ（https://www.jma.go.jp/bosai/forecast/）を加工して作成"
+      "description": "出典：気象庁ホームページを加工して作成。"
     },
     {
       "id": "tokyo-weather",

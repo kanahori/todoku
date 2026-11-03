@@ -47,7 +47,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Downloads
 
-- When pressing a card starts a download in the web app window, the app saves the file to the user's Downloads folder under its original name (adding " (1)", " (2)", ... if the name is taken), without a save dialog, and announces "「file name」をダウンロードのフォルダに保存しました。" (or that it could not be saved).
+- When pressing a card starts a download in the web app window, the app saves the file to the user's Downloads folder under its original name (adding " (1)", " (2)", ... if the name is taken), or under the card's `saveAs` name if the config gives one, without a save dialog, and announces "「file name」をダウンロードのフォルダに保存しました。" (or that it could not be saved).
 
 ## How repair works (what is sent to Claude)
 
@@ -58,8 +58,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Config file format (short)
 
-- `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
-- Each card: `id`, `title`, `action` (`read` one element, `list` all matching items with numbers, `click`), `selector`, optional `path` (a page on the same site), `description`, and, for `list` cards only, `container` (the selector of the element that holds the items: if it matches but no item does, the card says "0 items"; if it does not match either, the card says it cannot read. Without `container`, no items means "cannot read", because an empty list and a changed screen look the same).
+- `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card; keep URLs out of it, because screen readers read them almost character by character), optional `sourceUrl` (the `http(s)://` page of the source; the app's first card gets a "出典のページを開く" button that opens it in the default browser), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
+- Each card: `id`, `title`, `action` (`read` one element, `list` all matching items with numbers, `click`), `selector`, optional `path` (a page on the same site), `description`, for `click` cards only, `saveAs` (the file name for a download the card starts: `{date}` becomes the save date as yyyy-mm-dd, `{n}` the first unused number from 1; the original extension is added when the name has none), and, for `list` cards only, `container` (the selector of the element that holds the items: if it matches but no item does, the card says "0 items"; if it does not match either, the card says it cannot read. Without `container`, no items means "cannot read", because an empty list and a changed screen look the same).
 
 ## Bundled examples
 

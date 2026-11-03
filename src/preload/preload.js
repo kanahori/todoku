@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('cardsApi', {
   loadConfigs: () => ipcRenderer.invoke('configs:load'),
   runCard: (appId, cardId) => ipcRenderer.invoke('card:run', String(appId), String(cardId)),
   showTarget: (appId) => ipcRenderer.invoke('target:show', String(appId)),
+  // 出典のページを既定のブラウザで開く（URL は主の処理が設定ファイルから取る）。
+  openSource: (appId) => ipcRenderer.invoke('source:open', String(appId)),
   checkCards: (appId) => ipcRenderer.invoke('cards:check', String(appId)),
   proposeRepairs: (appId) => ipcRenderer.invoke('repair:propose', String(appId)),
   applyRepairs: (appId, wheres) => ipcRenderer.invoke('repair:apply', String(appId), (wheres || []).map(String)),

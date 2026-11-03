@@ -1,7 +1,8 @@
 {
   "id": "jma-obsdl",
   "name": "気象庁 過去の気象データ・ダウンロード",
-  "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/risk/obsdl/）を加工して作成",
+  "description": "出典：気象庁ホームページを加工して作成。",
+  "sourceUrl": "https://www.data.jma.go.jp/risk/obsdl/",
   "url": "https://www.data.jma.go.jp/risk/obsdl/",
   "cards": [
     {
@@ -9,7 +10,7 @@
       "title": "地点を選ぶ",
       "action": "click",
       "selector": "#mainButton #stationButton",
-      "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/risk/obsdl/）を加工して作成。地点を選ぶ欄を開きます。はじめから開いています"
+      "description": "出典：気象庁ホームページを加工して作成。地点を選ぶ欄を開きます。はじめから開いています"
     },
     {
       "id": "pref-tokyo",
@@ -59,33 +60,43 @@
       "action": "list",
       "selector": "#selectedStationList .selectedStText",
       "container": "#selectedStationList",
-      "description": "選んだ地点の名前を、1件ずつ読みます"
+      "description": "選んだ地点の名前を、1件ずつ読みます。「データを表示」の後は、「メニューへ戻る」を押してから読みます"
     },
     {
       "id": "selected-element",
       "title": "選んだ項目",
       "action": "read",
-      "selector": "#selectedElementList"
+      "selector": "#selectedElementList",
+      "description": "「データを表示」の後は、「メニューへ戻る」を押してから読みます"
     },
     {
       "id": "selected-period",
       "title": "選んだ期間",
       "action": "read",
-      "selector": "#selectedPeriod"
+      "selector": "#selectedPeriod",
+      "description": "「データを表示」の後は、「メニューへ戻る」を押してから読みます"
     },
     {
       "id": "load-table",
       "title": "データを表示",
       "action": "click",
       "selector": "#loadTable",
-      "description": "選んだデータの表を、ページに出します。表を出した後に別のカードを押すと、ページがはじめの画面に戻ります"
+      "description": "選んだデータの表を、ページに出します。表を出している間は、選んだ地点・項目・期間は読めません。「メニューへ戻る」で、はじめの画面に戻ります"
+    },
+    {
+      "id": "menu-top",
+      "title": "メニューへ戻る",
+      "action": "click",
+      "selector": "#loadTop",
+      "description": "表を出した後に押すと、地点や項目を選ぶはじめの画面に戻ります。選んだ地点・項目・期間は、そのまま残ります"
     },
     {
       "id": "csv-download",
       "title": "CSVダウンロード",
       "action": "click",
       "selector": "#csvdl",
-      "description": "選んだデータを、CSVのファイルで受け取ります"
+      "saveAs": "気象庁_過去の気象データ_{date}.csv",
+      "description": "選んだデータを、CSVのファイルで受け取ります。ダウンロードのフォルダに「気象庁_過去の気象データ_」と保存した日の名前で保存します"
     }
   ]
 }

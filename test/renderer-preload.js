@@ -15,12 +15,16 @@ const config = {
   id: 'fake-app',
   name: '試しのアプリ（作り物）',
   url: 'fixture:practice.html',
+  description: '出典：作り物のサイトを加工して作成。',
+  sourceUrl: 'https://example.com/source/',
   cards: [
     { id: 'fast-read', title: 'すぐ返る読む所', action: 'read', selector: '#a' },
     { id: 'fast-list', title: 'すぐ返る一覧', action: 'list', selector: '#b li' },
     { id: 'slow-read', title: '時間のかかる読む所', action: 'read', selector: '#c' },
   ],
 };
+
+const opened = [];
 
 const answers = {
   'fast-read': { delay: 20, result: { ok: true, action: 'read', text: 'すぐ返った一つ目\nすぐ返った二つ目' } },
@@ -35,5 +39,13 @@ contextBridge.exposeInMainWorld('cardsApi', {
     setTimeout(() => resolve(a.result), a.delay);
   }),
   showTarget: async () => ({ ok: true }),
+  // 出典のページは開かず、呼ばれた appId を控えるだけ。
+  openSource: async (appId) => {
+    opened.push(appId);
+    return { ok: true, message: '出典のページを、既定のブラウザで開きました。' };
+  },
   onDownloadDone: () => {},
 });
+
+// 試しから、出典のページを開くように頼まれた回数と appId を見るため。
+contextBridge.exposeInMainWorld('fakeLog', { opened: () => opened.slice() });

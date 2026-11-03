@@ -1,7 +1,8 @@
 {
   "id": "jma-daily",
   "name": "気象庁 過去の気象データ検索（東京の日ごとの値）",
-  "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/stats/etrn/index.php）を加工して作成",
+  "description": "出典：気象庁ホームページを加工して作成。",
+  "sourceUrl": "https://www.data.jma.go.jp/stats/etrn/index.php",
   "url": "https://www.data.jma.go.jp/stats/etrn/view/daily_s1.php?prec_no=44&block_no=47662&year=2026&month=11",
   "cards": [
     {
@@ -9,7 +10,7 @@
       "title": "表の地点と月",
       "action": "read",
       "selector": "h3:has(+ #tablefix1)",
-      "description": "出典：気象庁ホームページ（https://www.data.jma.go.jp/stats/etrn/index.php）を加工して作成。表の題を読みます"
+      "description": "出典：気象庁ホームページを加工して作成。表の題を読みます"
     },
     {
       "id": "latest-day",

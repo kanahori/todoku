@@ -71,6 +71,25 @@ async function main() {
       fs.existsSync(saved) && fs.readFileSync(saved, 'utf8') === 'date,value\n2026-11-01,12.3\n', fs.readdirSync(downloadDir));
     check('前からあったファイルは書き換えない', fs.readFileSync(path.join(downloadDir, 'practice-data.csv'), 'utf8') === 'いまあるファイル');
     check('押すカードが受け取ったダウンロードは、別の知らせ（onDone）を出さない', lateDownloads.length === 0, lateDownloads);
+
+    // 保存の名前の型（saveAs）があれば、その名前で保存する。{date} は保存した日、{n} は使われていない番号。
+    const { formatDate } = require('../src/main/download');
+    const today = formatDate(new Date());
+    const named = { ...config, cards: [...config.cards, { id: 'download', title: '作り物の値をダウンロード', action: 'click', selector: '#download-sample', saveAs: '作り物の値_{date}.csv' }] };
+    const gotNamed = await runCard(BrowserWindow, named, 'download');
+    const namedFile = `作り物の値_${today}.csv`;
+    check(`saveAs があれば「${namedFile}」の名前で保存し、その名前で知らせる`,
+      gotNamed.ok && gotNamed.download && gotNamed.download.ok === true
+        && gotNamed.download.message === `「${namedFile}」をダウンロードのフォルダに保存しました。`
+        && fs.readFileSync(path.join(downloadDir, namedFile), 'utf8') === 'date,value\n2026-11-01,12.3\n', { gotNamed, files: fs.readdirSync(downloadDir) });
+    const numbered = { ...config, cards: [...config.cards, { id: 'download', title: '作り物の値をダウンロード', action: 'click', selector: '#download-sample', saveAs: '作り物の値_{n}' }] };
+    const n1 = await runCard(BrowserWindow, numbered, 'download');
+    const n2 = await runCard(BrowserWindow, numbered, 'download');
+    check('saveAs の {n} は 1 から使われていない番号になり、拡張子が無ければ元の名前の拡張子（.csv）を足す',
+      n1.download && n1.download.name === '作り物の値_1.csv' && n2.download && n2.download.name === '作り物の値_2.csv', { n1, n2 });
+    const plain = await runCard(BrowserWindow, withDownload, 'download');
+    check('saveAs の無い押すカードは、今までどおり元の名前で保存する（前の saveAs が残らない）',
+      plain.download && plain.download.name === 'practice-data (2).csv', plain);
   }
 
   // 後から出てくる所は、出てくるまで待って読む。
@@ -305,6 +324,23 @@ async function rendererFocusChecks() {
     check('時間のかかる読む所: 結果が来たら、焦点が結果の最初の項目に移り、読み込み中の項目は残っていない',
       slow.connected && slow.firstResult && slow.text === '遅れて返った一つ目' && !slow.isLoading && slow.loadingInDoc === 0 && slow.busy === null, slow);
     check('焦点のある要素を、一度も DOM から外していない', slow.watch.removedWithFocus === 0, slow.watch);
+
+    // 4. はじめのカード: 出典の文は URL を含まず、最後の項目の「出典のページを開く」ボタンで、そのアプリの出典のページを開く。
+    await key('Escape');
+    await key('Home');
+    await key('Enter');
+    const firstTexts = await js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((n) => n.textContent)");
+    check('はじめのカードの項目に、出典の文があり、URL は無い',
+      firstTexts.includes('出典：作り物のサイトを加工して作成。') && !firstTexts.some((t) => /https?:/.test(t)), firstTexts);
+    await key('End');
+    const sourceButton = await focusState();
+    check('はじめのカードの最後の項目は「出典のページを開く」ボタン', sourceButton.tag === 'BUTTON' && sourceButton.text === '出典のページを開く', sourceButton);
+    await js('document.activeElement.click()');
+    await wait(300);
+    const opened = await js('window.fakeLog.opened()');
+    const said = await js("document.getElementById('status').textContent");
+    check('ボタンを押すと、そのアプリの出典のページを開くよう頼み、開いたことを知らせる',
+      JSON.stringify(opened) === JSON.stringify(['fake-app']) && said === '出典のページを、既定のブラウザで開きました。', { opened, said });
   } finally {
     win.destroy();
   }

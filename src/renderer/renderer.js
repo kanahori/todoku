@@ -360,7 +360,23 @@ function appDeck(config, hasParent = true) {
   if (clicks === 0) texts.splice(texts.indexOf('押す所のカードでは、カード内のボタンで押します。'), 1);
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
-  const cards = [{ kind: 'info', heading: config.name, items: sentences(texts) }];
+  const items = sentences(texts);
+  // 出典のページ（sourceUrl）があれば、URL は読ませずに、開くボタンを最後の項目にする（既定のブラウザで開く）。
+  if (typeof config.sourceUrl === 'string' && config.sourceUrl !== '') {
+    items.push({
+      button: '出典のページを開く',
+      onPress: async () => {
+        let r;
+        try {
+          r = await window.cardsApi.openSource(config.id);
+        } catch (e) {
+          r = { ok: false, message: '出典のページを開けませんでした。' };
+        }
+        announce(r.message, !r.ok);
+      },
+    });
+  }
+  const cards = [{ kind: 'info', heading: config.name, items }];
   for (const c of config.cards) {
     cards.push({
       kind: c.action === 'click' ? 'click' : 'read',

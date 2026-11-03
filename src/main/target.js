@@ -204,7 +204,8 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const loginSelector = config.login ? config.login.selector : null;
   const container = card.action === 'list' && card.container ? card.container : null;
   // 押すカードは、押す前からダウンロードを待ち受ける。
-  const watch = card.action === 'click' ? watchDownload() : null;
+  // 保存の名前の型（saveAs）があれば、始まったダウンロードをその名前で保存する。
+  const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
     result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container));

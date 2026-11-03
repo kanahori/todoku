@@ -6,6 +6,9 @@
 //   "id": "sample",                 // 英数字とハイフン
 //   "name": "練習用のアプリ",        // 読み上げで使う名前
 //   "description": "出典：…",       // 任意。アプリの説明。アプリのはじめのカードの最後の項目として読まれる
+//                                   // URL は読み上げで一文字ずつ近い形で読まれるので、ここには書かず sourceUrl に置く
+//   "sourceUrl": "https://example.com/about/",
+//                                   // 任意。出典のページ。アプリのはじめのカードに「出典のページを開く」ボタンが出る（http:// か https:// だけ）
 //   "url": "https://example.com/",  // 開くページ。"fixture:practice.html" なら test/fixtures/ の練習のページ
 //   "login": { "selector": "body.notloggedin", "path": "/login/index.php" },
 //                                   // 任意。selector が当たったらログインが要ると見なし、path（任意）のログインの画面を開く
@@ -19,6 +22,9 @@
 //       "container": "main ul.messages", // 任意・list のカードだけ。項目を入れる入れ物。
 //                                        // 入れ物に当たって項目が無ければ「0件」、入れ物にも当たらなければ「読めません」。
 //                                        // 無いカードは、項目が無ければ「読めません」（0件と画面の変わりを分けられない）
+//       "saveAs": "作り物_{date}.csv",    // 任意・click のカードだけ。押してダウンロードが始まったら、この名前で保存する。
+//                                        // {date} は保存した日（yyyy-mm-dd）、{n} は使われていない番号（1 から）。
+//                                        // 拡張子が無ければ、元の名前の拡張子を足す。同じ名前があり {n} が無ければ「名前 (1)」にする
 //       "description": "任意の補足"
 //     }
 //   ]
@@ -30,6 +36,19 @@ const path = require('node:path');
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ACTIONS = new Set(['read', 'click', 'list']);
 const FIXTURE_PATTERN = /^fixture:[a-z0-9][a-z0-9-]*\.html$/;
+// 保存の名前の型で使える差し込み。
+const SAVE_AS_PLACEHOLDERS = new Set(['{date}', '{n}']);
+
+// 保存の名前の型（saveAs）を確かめ、誤りの理由を返す（正しければ null）。
+function saveAsProblem(saveAs) {
+  if (typeof saveAs !== 'string' || saveAs.trim() === '') return '空でない文字列が要ります';
+  const unknown = (saveAs.match(/\{[^}]*\}/g) || []).filter((p) => !SAVE_AS_PLACEHOLDERS.has(p));
+  if (unknown.length > 0) return `${unknown[0]} は使えません（使えるのは {date} と {n}）`;
+  const rest = saveAs.replace(/\{date\}|\{n\}/g, '');
+  if (/[\\/:*?"<>|{}\u0000-\u001f]/.test(rest)) return 'ファイル名に使えない文字（\\ / : * ? " < > | と { }）が入っています';
+  if (/^[\s.]|[\s.]$/.test(saveAs)) return '空白や「.」で始まる・終わる名前は使えません';
+  return null;
+}
 
 // 形を確かめ、当たらない所を「どの行か（パス）と理由」の一覧で返す。ページの中身は扱わない。
 function validateConfig(config) {
@@ -51,6 +70,9 @@ function validateConfig(config) {
   }
   if (config.description !== undefined && typeof config.description !== 'string') {
     add('description', '文字列が要ります');
+  }
+  if (config.sourceUrl !== undefined && !externalUrl(config.sourceUrl)) {
+    add('sourceUrl', 'http:// か https:// で始まる、空白の無い文字列が要ります');
   }
   if (config.login !== undefined) {
     if (config.login === null || typeof config.login !== 'object' || typeof config.login.selector !== 'string' || config.login.selector.trim() === '') {
@@ -97,11 +119,28 @@ function validateConfig(config) {
         add(`${at}.container`, 'action が "list" のカードにだけ使えます');
       }
     }
+    if (card.saveAs !== undefined) {
+      const problem = saveAsProblem(card.saveAs);
+      if (problem) add(`${at}.saveAs`, problem);
+      else if (card.action !== 'click') add(`${at}.saveAs`, 'action が "click" のカードにだけ使えます');
+    }
     if (card.description !== undefined && typeof card.description !== 'string') {
       add(`${at}.description`, '文字列が要ります');
     }
   });
   return errors;
+}
+
+// 出典のページを開いてよい URL か。http:// と https:// だけを、正しい URL の形で返す（そうでなければ null）。
+function externalUrl(value) {
+  if (typeof value !== 'string' || /\s/.test(value)) return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch (e) {
+    return null;
+  }
+  return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
 }
 
 // 一つのファイルを読む。結果は { file, config } か { file, errors }。
@@ -146,4 +185,4 @@ function loadConfigSources(sources) {
   return results;
 }
 
-module.exports = { validateConfig, loadConfigFile, loadConfigDir, loadConfigSources };
+module.exports = { validateConfig, loadConfigFile, loadConfigDir, loadConfigSources, externalUrl };
