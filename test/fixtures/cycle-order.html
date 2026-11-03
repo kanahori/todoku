@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」の貸し自転車の案内）。市のページで見た作り: 上の見出しのメニュー・本文の前の更新日の所・本文の後のお問い合わせ・ -->
+<!-- 横のメニュー（題は dt）・下のサイトの名前・検索。束の後ろの並び（お問い合わせ → メニュー・サイトの名前 → 検索）と、メニューの題・更新日の所の題の試し。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>貸し自転車のご案内／あおば町（作り物）</title>
+  <style>body { color: #000; background: #ffffff; }</style>
+</head>
+<body>
+  <header>
+    <form class="search" role="search"><input type="text" aria-label="サイト内を検索"><button type="button" class="search-button">検索</button></form>
+    <ul class="head-nav"><li><a href="?k=0">くらし・手続き</a></li><li><a href="?k=1">子育て・教育</a></li><li><a href="?k=2">健康・福祉</a></li><li><a href="?k=3">観光・文化</a></li><li><a href="?k=4">町の紹介</a></li></ul>
+  </header>
+  <div id="contents">
+    <h1>貸し自転車のご案内（作り物）</h1>
+    <div id="update"><p>更新日：4月1日</p><p>ページ番号：123</p></div>
+    <main>
+      <ul class="toc"><li><a href="#about">貸し自転車とは</a></li><li><a href="#fee">料金</a></li><li><a href="#pay">払い方</a></li><li><a href="#where">どの貸し場所でも</a></li><li><a href="#ask">お問い合わせ</a></li></ul>
+      <h2 id="about">貸し自転車とは</h2>
+      <p>貸し自転車は、町の中を自転車で回りたい方のための仕組みです。一日に何度でも、空いている自転車を借りられます。返すときは、どの貸し場所に返しても構いません。</p>
+      <h2 id="fee">料金</h2>
+      <p id="pay">一回百円、一日五百円です。料金は、借りるときに交通系のカードで払います。現金は使えません。どの貸し場所でも同じです。</p>
+      <p id="where">貸し場所は、駅の前と役場の前の二か所です。</p>
+      <div class="toiawase" id="ask"><h2 class="title">この記事に関するお問い合わせ先</h2><p>あおば町 まちづくり課 窓口へお越しください。</p></div>
+    </main>
+  </div>
+  <nav id="side-nav">
+    <dl>
+      <dt class="title"><a href="?s=top">自転車のまち</a></dt>
+      <dd><ul class="side-list"><li><a href="?s=0">子どもを乗せる自転車の購入費を一部補助します</a></li><li><a href="?s=1">貸し自転車のご案内</a></li><li><a href="?s=2">自転車の道の地図</a></li><li><a href="?s=3">自転車の点検の日</a></li><li><a href="?s=4">自転車の置き場</a></li></ul></dd>
+    </dl>
+  </nav>
+  <footer><address class="foot"><p class="name">あおば町役場</p><p>あおば町一丁目1番地</p></address></footer>
+</body>
+</html>

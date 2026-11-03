@@ -193,7 +193,7 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
     ['市町村を選ぶ', 'サイト内を検索する', '施設を検索する']);
 });
 
-test('束の並び: 検索・お問い合わせ・サイトの名前のカードは、本文のカードの後ろにまとめる（その中でも上からの順）', async () => {
+test('束の並び: 検索・お問い合わせ・サイトの名前のカードは、本文のカードの後ろにまとめ、お問い合わせ → サイトの名前 → 検索 の順にする', async () => {
   const { BrowserWindow } = fakeBrowserWindow(pageOf({
     probes: [
       { count: 1, hasText: true, containerOk: false, title: '検索', pos: 1 },
@@ -218,7 +218,7 @@ test('束の並び: 検索・お問い合わせ・サイトの名前のカード
       }),
     });
     assert.equal(r.ok, true, JSON.stringify(r));
-    assert.deepEqual(r.config.cards.map((c) => c.title), ['新着情報', '本文の案内', 'サイト内を検索する', 'あおば町役場', 'お問い合わせ']);
+    assert.deepEqual(r.config.cards.map((c) => c.title), ['新着情報', '本文の案内', 'お問い合わせ', 'あおば町役場', 'サイト内を検索する']);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

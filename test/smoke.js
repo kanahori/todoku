@@ -643,11 +643,11 @@ async function generateChecks() {
     // 節は h2 と h3 の両方で区切る。Claude の読むカードが幾つもの要素に当たっても、重なりは読む最初の一つで見る。丸ごとのカードも節に分ける。
     // サイトのメニュー（header の中の nav）は束の後ろへ。目次の項目が指す見出し（a の name で指す、文字の少ない「利用料」）も節にし、
     // 3項目の一覧を含む「利用の流れ」は、一覧だけのカードでなく節にする。
-    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '利用料（税込）', '利用の流れ', '借りられる場所', 'お知らせ', 'サイトのメニュー', 'お問い合わせ'];
+    const expectedSections = ['目次を読む', 'あおチャリとは', '料金', '利用料（税込）', '利用の流れ', '借りられる場所', 'お知らせ', 'お問い合わせ', 'サイトのメニュー'];
     const multi = await generateDeck({
       BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('menu', 'list', '.site-menu li'), noTitle('main', 'read', '.wysiwyg')] }), store, allowFixtures: true,
     });
-    check('カードを作る: h3 の節も節のカードにし（h2 の前にあるもの）、幾つもの要素に当たる読むカードは最初の一つ（頭の目次）だけと重なりを見る。サイトのメニューとお問い合わせは束の後ろ。目次の項目の見出しは短くても節にし、一覧を含む節は節のまま',
+    check('カードを作る: h3 の節も節のカードにし（h2 の前にあるもの）、幾つもの要素に当たる読むカードは最初の一つ（頭の目次）だけと重なりを見る。お問い合わせとサイトのメニューは束の後ろ（この順）。目次の項目の見出しは短くても節にし、一覧を含む節は節のまま',
       multi.ok && JSON.stringify(multi.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections), multi.ok ? multi.config.cards.map((c) => c.title) : multi);
     const { looksTextFree } = require('../src/main/structure');
     check('カードを作る: 節のカードの selector に、日本語の id（ページの文字）を使わない',
@@ -714,9 +714,38 @@ async function generateChecks() {
       splitDeck.ok ? splitDeck.config.cards : splitDeck);
     if (splitDeck.ok) {
       const warnRows = await runCard(BrowserWindow, splitDeck.config, splitDeck.config.cards[1].id, { waitMs: 500 });
-      check('カードを作る: 分けた表のカードで、その表の行だけを読む', warnRows.ok && JSON.stringify(warnRows.items) === JSON.stringify(['北部 大雨注意報', '南部 雷注意報']), warnRows.items);
+      check('カードを作る: 分けた表のカードで、その表の行だけを読み、地域の名前の見出しの行を下の行の頭に、更新の時刻を一件目の頭に付ける',
+        warnRows.ok && JSON.stringify(warnRows.items) === JSON.stringify(['4日8時00分 更新 北部 大雨注意報', '南部 発表されていません']), warnRows.items);
+      const levelRows = await runCard(BrowserWindow, splitDeck.config, splitDeck.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: 見出しの行が一つだけの表（列の名前）は、行の頭に何も付けない',
+        levelRows.ok && JSON.stringify(levelRows.items) === JSON.stringify(['北部 発表されていません', '南部 発表されていません', '西部 発表されていません']), levelRows.items);
       store.remove(splitDeck.config.id);
     }
+    // メニューの題は Claude の題の元を使わず、aria-label・見出し・最初の項目から取る。項目がほとんど地域の名前なら「地域のメニュー」。
+    const menuNamed = await generateDeck({
+      BrowserWindow, url: 'fixture:warnings-split.html', store, allowFixtures: true,
+      callModel: async () => ({ cards: [{ ...noTitle('menu', 'list', '.bosai li'), titleSelector: '.areas .label' }, { ...noTitle('menu', 'list', '.area-menu li'), titleSelector: '.areas .label' }] }),
+    });
+    const menuTitles = menuNamed.ok ? menuNamed.config.cards.filter((c) => /メニュー$/.test(c.title)).map((c) => c.title) : [];
+    check('カードを作る: メニューの題は、aria-label か最初の項目から「〇〇のメニュー」にし、項目が地域の名前なら「地域のメニュー」にする（「全域のメニュー」にしない）',
+      JSON.stringify(menuTitles) === JSON.stringify(['防災情報のメニュー', '地域のメニュー']), menuNamed.ok ? menuNamed.config.cards.map((c) => c.title) : menuNamed);
+    if (menuNamed.ok) store.remove(menuNamed.config.id);
+    // 束の後ろの並び: お問い合わせ → メニュー・サイトの名前 → 検索（ページの上の見出しのメニューが、お問い合わせより前に来ない）。
+    // 横のメニューの題は、包む dt から取る。ページの題（h1）を借りた更新日の所の題は、中の最初の短い文にする。目次はメニューの形でも後ろに回さない。
+    const orderDeck = await generateDeck({
+      BrowserWindow, url: 'fixture:cycle-order.html', store, allowFixtures: true,
+      callModel: async () => ({ cards: [
+        noTitle('search', 'click', '.search-button'), noTitle('menu', 'list', '.head-nav li'), noTitle('notice', 'read', '#update'), noTitle('menu', 'list', '.toc li'),
+        { ...noTitle('other', 'read', '.toiawase'), titleSelector: '.toiawase h2' }, noTitle('menu', 'list', '.side-list li'),
+        { ...noTitle('other', 'read', 'address.foot'), titleSelector: 'address.foot .name' },
+      ] }),
+    });
+    const orderTitles = orderDeck.ok ? orderDeck.config.cards.map((c) => c.title) : [];
+    check('カードを作る: 後ろのカードは お問い合わせ → メニュー・サイトの名前 → 検索 の順。横のメニューの題は dt から、更新日の所の題は中の最初の文から。リンクだけが5件の目次は後ろに回さない',
+      orderDeck.ok && JSON.stringify(orderTitles.slice(-5)) === JSON.stringify(['この記事に関するお問い合わせ先', 'くらし・手続きのメニュー', '自転車のまちのメニュー', 'あおば町役場', orderTitles[orderTitles.length - 1]])
+        && /検索/.test(orderTitles[orderTitles.length - 1]) && orderTitles[0] === '更新日：4月1日' && orderTitles[1] === '目次を読む',
+      orderDeck.ok ? orderTitles : orderDeck);
+    if (orderDeck.ok) store.remove(orderDeck.config.id);
     // 芯が同じになること: 本物の Claude の二つの回の案の形（一回目: 表そのものを読むカード・表を替えるカード / 二回目: 区画を丸ごと読むカード・
     // 表を替えるカード無し・メニュー）のどちらでも、発表状況・市町村ごと・市町村別の表と「表を替える」が一枚ずつあり、番号付きの重なりが無く、
     // メニューは「〇〇のメニュー」で後ろ。

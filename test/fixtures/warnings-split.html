@@ -18,12 +18,18 @@
       <tr><td>南部</td><td>発表されていません</td></tr>
       <tr><td>西部</td><td>発表されていません</td></tr>
     </table>
+    <!-- 地域の名前が、その下の行の見出しの行（th だけの行）にある表。題の行の次に、更新の時刻の行がある（気象台のページで見た作り）。 -->
     <table class="warn">
       <tr><th colspan="2">あおば県の警報・注意報（発表状況）</th></tr>
-      <tr><th>地域</th><th>警報・注意報</th></tr>
-      <tr><td>北部</td><td>大雨注意報</td></tr>
-      <tr><td>南部</td><td>雷注意報</td></tr>
+      <tr><th colspan="2">4日8時00分 更新</th></tr>
+      <tr><th class="area">北部</th><th>警報・注意報</th></tr>
+      <tr><td></td><td>大雨注意報</td></tr>
+      <tr><th class="area">南部</th><th>警報・注意報</th></tr>
+      <tr><td></td><td>発表されていません</td></tr>
     </table>
   </div>
+  <!-- メニューの題の試し: aria-label のある防災情報のメニューと、項目が地域の名前のメニュー（どちらもリンクだけが5件）。 -->
+  <nav aria-label="防災情報"><ul class="bosai"><li><a href="?m=0">警報・注意報</a></li><li><a href="?m=1">天気予報</a></li><li><a href="?m=2">雨雲の動き</a></li><li><a href="?m=3">台風情報</a></li><li><a href="?m=4">地震情報</a></li></ul></nav>
+  <div class="areas"><div class="label">全域</div><ul class="area-menu"><li><a href="?a=0">全域</a></li><li><a href="?a=1">北部</a></li><li><a href="?a=2">南部</a></li><li><a href="?a=3">西部</a></li><li><a href="?a=4">あおば地方</a></li></ul></div>
 </body>
 </html>

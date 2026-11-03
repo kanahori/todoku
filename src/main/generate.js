@@ -226,6 +226,26 @@ function pageInspect(tryOne, cards) {
     }
     return one(c.selector);
   };
+  // メニューの題の手がかり: 包む要素の aria-label（3段上まで）・包む見出し（中か、すぐ前の見出し）・最初の項目と項目の名前（10件まで）。
+  const menuNames = (c, region) => {
+    let label = '';
+    for (let n = region, d = 0; n && !label && d < 4; n = n.parentElement, d++) label = clean(n.getAttribute && n.getAttribute('aria-label'));
+    // 包む見出しは、h1〜h6 のほか、すぐ前の dt と、class に title の付いた短い文（20字まで）も見る（つくば市の横のメニューは dt.title）。
+    let heading = innerHeading(region);
+    for (let n = region, d = 0; n && !heading && d < 3; n = n.parentElement, d++) {
+      const p = n.previousElementSibling;
+      if (!p || hidden(p)) continue;
+      const t = nameOf(p);
+      if (p.matches(HEADINGS) || ((p.matches('dt') || /title/i.test(p.className || '')) && t.length <= 20)) heading = t;
+    }
+    let items = [];
+    try {
+      items = [...document.querySelectorAll(c.selector)].slice(0, 10).map((e) => nameOf(e).slice(0, 40));
+    } catch (e) {
+      items = [];
+    }
+    return { label: label.slice(0, 40), heading: heading.slice(0, 40), items };
+  };
   const innerHeading = (region) => {
     for (const h of region.querySelectorAll(HEADINGS)) {
       const t = hidden(h) ? '' : nameOf(h);
@@ -426,6 +446,11 @@ function pageInspect(tryOne, cards) {
           return false;
         }
       })() : false,
+      menuNames: c.action === 'list' && probe.count >= 5 && region ? menuNames(c, region) : null,
+      pageTitle: c.action !== 'click' && Boolean(region) && Boolean(title) && (() => {
+        const h1 = document.querySelector('h1');
+        return Boolean(h1 && !region.contains(h1) && !h1.contains(region) && nameOf(h1) === title);
+      })(),
       pos: region && order.has(region) ? order.get(region) : (one(c.selector) && order.get(one(c.selector))) || 0,
     };
   });
@@ -972,6 +997,20 @@ function isPlaceWord(text) {
   return PLACE_WORD.test(text);
 }
 
+// メニューの題。Claude の題の元は使わない（回ごとに違う題になり、「全域のメニュー」のような何のメニューか分からない題が来た。頼み19 の確かめ）。
+// 包む要素の aria-label・包む見出し・最初の項目の順に、地名でない短い名前（20字まで）を探して「〇〇のメニュー」にする。
+// 項目がほとんど地名なら「地域のメニュー」、何も無ければ「サイトのメニュー」。
+function menuTitle(names) {
+  const n = names || {};
+  const items = (Array.isArray(n.items) ? n.items : []).map((t) => cleanTitle(t)).filter(Boolean);
+  const place = (t) => isPlaceWord(t) || /(地方|地域|全域|[北南東西中]部)$/.test(t);
+  if (items.length > 0 && items.filter(place).length * 2 > items.length) return '地域のメニュー';
+  const name = [n.label, n.heading].map((t) => cleanTitle(t)).find((t) => t && t.length <= 20 && !place(t))
+    || [items[0]].map((t) => cleanTitle(t)).find((t) => t && t.length <= 12 && !place(t));
+  if (!name) return 'サイトのメニュー';
+  return /メニュー$/.test(name) ? name : `${name}のメニュー`;
+}
+
 // 題が地名の一語になる読む・一覧のカードと、題の手がかりの無い検索のカードの題。
 // 中の短い文字のうち、題と違い、地名の一語でもない最初のものを題にする。無ければ操作の種類から作る。
 // 気象庁の警報のページで、「全国」「茨城県」「検索 1」という題のカードができた（2026-11-03 の Windows の確かめ）。
@@ -1038,11 +1077,14 @@ function pickCards(candidates, probes, rejects = null) {
     // 表示の切り替えの押す所は、押すと何が起きるかを題にする（「大雨・土砂災害・高潮」→「表を替える（大雨・土砂災害・高潮）」）。
     if (c.action === 'click' && title && probe.toggle) title = `${probe.toggle === 'table' ? '表を替える' : '表示を替える'}（${title}）`;
     else if (c.action === 'click' && title) title = clickTitle(title);
+    // ページの題（h1）を借りた短い読むカードは、本文の節のカードがあるときに、中の最初の短い文を題にする（renamePageTitled）。
+    const pageTitled = c.action === 'read' && Boolean(probe.pageTitle) && body.length < 120 && title === cleanTitle(probe.title)
+      ? (Array.isArray(probe.texts) ? probe.texts : []).map((t) => cleanTitle(t)).find((t) => t && t !== title && !isPlaceWord(t)) || '' : '';
     const weak = (c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search');
     if (weak) title = betterTitle(c, title, probe);
     // リンクやボタンだけが5件以上並ぶ一覧（メニュー）は、本文と紛らわしい題にせず「〇〇のメニュー」にして、束の後ろへ回す。
     // 気象庁の警報のページで、防災情報のメニュー（リンク43件）が「警報・注意報」の題で来た（頼み18 の確かめ）。
-    if (probe.menu && title !== '目次を読む') title = /メニュー$/.test(title) ? title : `${title || ''}のメニュー`.replace(/^の/, '');
+    if (probe.menu && title !== '目次を読む') title = menuTitle(probe.menuNames);
     // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
     // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。
     if (!title) return drop('no-title');
@@ -1060,9 +1102,10 @@ function pickCards(candidates, probes, rejects = null) {
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
     if (c.action === 'list' && c.container && probe.containerOk) card.container = c.container;
     Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
-    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome) || Boolean(probe.menu), enumerable: false });
+    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome) || (Boolean(probe.menu) && title !== '目次を読む'), enumerable: false });
     Object.defineProperty(card, 'body', { value: body, enumerable: false });
     Object.defineProperty(card, 'weak', { value: weak, enumerable: false });
+    Object.defineProperty(card, 'pageTitled', { value: pageTitled, enumerable: false });
     cards.push(card);
   });
   return cards;
@@ -1088,9 +1131,33 @@ const BACK_TITLE = /検索|問い?合わせ|問合せ|(市役所|区役所|町�
 
 // 束のカードを、ページの上からの順に並べ、id を振り直す（Claude の返す順が毎回違っても、同じ束になるように）。
 // 検索・お問い合わせ・サイトの名前のカードは、本文のカードの後ろにまとめる（その中でも上からの順）。
+// 本文が見出しごとの節のカードに分かれているときに、ページの題（h1）を借りた短い読むカード（更新日とページ番号だけの所など）は、
+// 本文を全部読むカードと紛らわしいので、中の最初の短い文を題にする。
+// つくば市の自転車のページで、更新日の所が「〇〇のご案内」の題で一枚目に来た（頼み19 の確かめ）。
+function renamePageTitled(cards, sectionCount) {
+  if (!(sectionCount > 0)) return cards;
+  const titles = new Set(cards.map((c) => c.title));
+  return cards.map((c) => {
+    if (!c.pageTitled || titles.has(c.pageTitled)) return c;
+    titles.add(c.pageTitled);
+    const card = { ...c, title: c.pageTitled };
+    for (const k of ['pos', 'back', 'body']) Object.defineProperty(card, k, { value: c[k], enumerable: false });
+    return card;
+  });
+}
+
+// 後ろのカードの中は、お問い合わせ → メニュー・サイトの名前 → 検索 の順（それぞれの中はページの上からの順）。
+// ページの上にある見出しのメニューが、お問い合わせより前に来た（つくば市の自転車のページ。頼み19 の確かめ）。
+function backRank(c) {
+  if (!c.back) return 0;
+  if (/^search-/.test(String(c.id)) || /検索/.test(c.title)) return 3;
+  if (/問い?合わせ|問合せ/.test(c.title)) return 1;
+  return 2;
+}
+
 function orderCards(cards) {
   const sorted = cards.map((c, i) => ({ c, i }))
-    .sort((a, b) => Number(Boolean(a.c.back)) - Number(Boolean(b.c.back)) || (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i).map((x) => x.c);
+    .sort((a, b) => backRank(a.c) - backRank(b.c) || (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i).map((x) => x.c);
   return sorted.map((c, i) => ({ ...c, id: `${c.id.replace(/-\d+$/, '')}-${i + 1}` }));
 }
 
@@ -1172,7 +1239,8 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const whole = new Set(extras && Array.isArray(extras.whole) ? extras.whole : []);
   const kept = applySplits(picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector))), extras && extras.splits);
   const withMain = addToggleCards(addMainListCards(kept, extras && extras.mainLists), extras && extras.toggles);
-  const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
+  const sectionList = extras && Array.isArray(extras.sections) ? extras.sections : [];
+  const cards = orderCards(renamePageTitled(addSectionCards(withMain, sectionList), sectionList.length));
   dumpFile(id, 'c-deck.json', {
     url,
     cards,

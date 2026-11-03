@@ -318,17 +318,41 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         }
         items = units;
       }
+      // 表の中で、見出しだけの行（地域の名前）が行のまとまりごとに二つ以上あれば、その下の行の頭に、見出しの行の最初の升目を付けて読む。
+      // まとまりの前の見出しだけの行（一行目の題の行を除く。更新の時刻など）は、表の一件目の頭に付ける。
+      // 気象庁の発表状況の表で、地域名の行と「…更新」が抜け、「警報・注意報は発表されていません」の2件だけになった（2026-11-04 の Windows の確かめ）。
+      const groupHead = new Map();
+      if (items.length > 0 && !joinWith) {
+        const cellText = (c) => oneLine(textLines(c, false, 'item'));
+        for (const table of new Set(items.filter((it) => it.tagName === 'TR').map((it) => it.closest('table')))) {
+          const rows = [...table.rows].filter((r) => (r.textContent || '').trim() || r.querySelector('td'));
+          const isData = (r) => Boolean(r.querySelector('td'));
+          const groups = rows.filter((r, i) => !isData(r) && i > 0 && rows[i + 1] && isData(rows[i + 1]));
+          if (groups.length < 2) continue;
+          const before = rows.slice(0, rows.indexOf(groups[0])).filter((r, i) => !(i === 0 && r.cells.length === 1));
+          const lead = before.map((r) => oneLine(textLines(r, false, 'item'))).filter(Boolean).join(' ');
+          let label = '';
+          let first = true;
+          for (const r of rows) {
+            if (groups.includes(r)) label = r.cells[0] ? cellText(r.cells[0]) : '';
+            else if (isData(r) && items.includes(r)) {
+              groupHead.set(r, [first ? lead : '', label].filter(Boolean).join(' '));
+              first = false;
+            }
+          }
+        }
+      }
       if (items.length > 0) {
         let texts = items.map((it, k) => {
           if (overrides.has(it)) return overrides.get(it);
           const replace = new Map();
           for (const t of blanks.get(it) || []) replace.set(t, '');
-          let head = '';
+          let head = groupHead.get(it) ? `${groupHead.get(it)} ` : '';
           if (dateSelector) {
             const d = dateOf(it);
             const label = d.el ? dateLabel(d.el, !d.inside) : null;
             if (label && d.inside) replace.set(d.el, label);
-            else if (label) head = `${label} `;
+            else if (label) head += `${label} `;
           }
           const tags = [];
           if (tagSelector) {
