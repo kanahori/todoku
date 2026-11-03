@@ -135,7 +135,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## Future
 
 - A browser for people who use the web by voice: the goal is that any page can be reached, not only the sites someone has written a config file for. Making cards for a new page and repairing them on the spot are the first steps.
-- Going back and forth through a conversation in a chat screen. We tried this only on a made-up chat screen (`test/fixtures/chat.html`). We have not used it on real chat services, because their terms of use forbid reading their screens automatically.
+- Going back and forth through a conversation in a chat screen. We tried this only on a made-up chat screen (`test/fixtures/chat.html`). We have not used it on real chat services, because their terms of use restrict automated access to their screens, with no exception written for assistive tools.
 
 ## Third-party software
 
@@ -177,4 +177,4 @@ Claude がしていること（まとめ）
 - 動かし方・設定・使った部品・試しの数は、上の英語の節をご覧ください。
 - 同梱の例に、本物のつくば市公式ウェブサイト（https://www.city.tsukuba.lg.jp/ ）の設定ファイル（`cards/tsukuba-city.json`）があります。緊急情報・新着情報・お知らせ・今月のイベント情報（イベントカレンダーのページから）・大きな画像のお知らせとピックアップの全部（切り替えのために作られた写しは読みません）・くらしの情報（こんなときは）を読めます。サイト内の検索は、検索の欄が外の検索サービスの部品で、Todoku のカードはまだ文字を入れられないので、カードにしていません。はじめのカードで「出典：つくば市公式ウェブサイト。」と読み、公式サイトを開くボタン（`sourceUrl`）が付きます。アプリは市のページを自分の窓で開き、書いてあるとおりに読むだけで、ページを書き換えたり、フレームの中に入れたりはしません。`npm run real:tsukuba` で、本物のサイトで全部のカードと自動の直し（偽の Claude と、古い行を一つ含む写し `test/tsukuba-city-old-line-for-test.json` を使う）を確かめられます。サイトを3回読み込むので、手で一度ずつ動かしてください。
 - 練習のページ（みどり市・講座のページ・ことのはチャット）は作り物で、実在の自治体・サービス・人とは関係ありません。
-- これから（Future）: どんなページにも届く、音声で使う人のためのブラウザを目指しています。設定ファイルの無いページからカードを作ることと、その場で直すことは、その最初の一歩です。チャットの画面でやり取りを遡ったり追いかけたりする形は、作り物のチャットの画面でだけ試しました。本物のチャットのサービスには当てていません。各社の利用規約で、画面の自動の読み取りが禁じられているためです。
+- これから（Future）: どんなページにも届く、音声で使う人のためのブラウザを目指しています。設定ファイルの無いページからカードを作ることと、その場で直すことは、その最初の一歩です。チャットの画面でやり取りを遡ったり追いかけたりする形は、作り物のチャットの画面でだけ試しました。本物のチャットのサービスには当てていません。各社の利用規約が、画面への自動の手段でのアクセスを制限しており、支援技術のための例外が書かれていないためです。
