@@ -354,8 +354,9 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           const partner = partners[k] ? oneLine(textLines(partners[k], false, 'item')) : '';
           return `${head}${body}${partner ? ` ${partner}` : none}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
         });
-        // 二つに分けた表をつないで読むときは、どちらも空の行（表の頭の飾りの行など）を読まない。
-        if (joinWith) {
+        // 文字の無い一件（表の頭の飾りの空の行など）は読まない（「1件目: 」と空のまま読まれた。気象庁の警報の表）。
+        // 全部が空なら、今までどおり項目のまま返す（空の項目として知らせる）。
+        if (texts.some((t) => t.trim() !== '')) {
           const keep = texts.map((t, i) => (t.trim() !== '' ? i : -1)).filter((i) => i >= 0);
           items = keep.map((i) => items[i]);
           texts = keep.map((i) => texts[i]);
