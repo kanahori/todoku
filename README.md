@@ -132,9 +132,9 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## Tests
 
 - `npm test`: 117 tests, 112 passed, 5 skipped (the Electron-only scripts), 0 failed.
-- `npm run smoke`: 166 checks, 166 passed, against the practice pages (and a local test server that never answers) only.
+- `npm run smoke`: 170 checks, 170 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
-- Measured on macOS on 2026-11-04, after the fixes from the code review (commit `216749a`).
+- Measured on macOS on 2026-11-04, after the fixes for the real weather and city pages (commit `e413d35`).
 
 ## Future
 
