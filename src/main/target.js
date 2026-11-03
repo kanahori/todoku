@@ -283,9 +283,41 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           return { found: false, reason: 'invalid', field: 'joinWith' };
         }
       }
+      // 一件がほぼ表だけのとき（表が一つで、表の外の文が30字まで。表を含む li など）は、表をまるごと一件にせず、
+      // 表の前の文・見出しの行（一度だけ）・行ごとに分ける。表の外の文が長い一件（表の入ったチャットの返事など）は、一件のまま。
+      // 気象庁の「警戒レベルとの関係」が、表まるごと一件（400字ほど）になった（2026-11-04 の Windows の確かめ）。二つの表の組（joinWith）のときは分けない。
+      const overrides = new Map();
+      const blanks = new Map();
+      if (items.length > 0 && !joinWith && items.some((it) => it.tagName !== 'TR' && !it.closest('table') && it.querySelector('table'))) {
+        const units = [];
+        for (const it of items) {
+          const tables = it.tagName !== 'TR' && !it.closest('table') ? [...it.querySelectorAll('table')].filter((t) => !t.parentElement.closest('table')) : [];
+          const rest = (it.textContent || '').replace(/\s+/g, '').length - tables.reduce((n, t) => n + (t.textContent || '').replace(/\s+/g, '').length, 0);
+          if (tables.length !== 1 || rest > 30) {
+            units.push(it);
+            continue;
+          }
+          if (rest > 0) {
+            units.push(it);
+            blanks.set(it, tables);
+          }
+          for (const t of tables) {
+            const rows = [...t.rows];
+            const heads = rows.filter((r) => !r.querySelector('td'));
+            if (heads.length > 0) {
+              units.push(heads[0]);
+              overrides.set(heads[0], heads.map((r) => oneLine(textLines(r, false, 'item'))).filter(Boolean).join(' '));
+            }
+            for (const r of rows) if (r.querySelector('td')) units.push(r);
+          }
+        }
+        items = units;
+      }
       if (items.length > 0) {
         let texts = items.map((it, k) => {
+          if (overrides.has(it)) return overrides.get(it);
           const replace = new Map();
+          for (const t of blanks.get(it) || []) replace.set(t, '');
           let head = '';
           if (dateSelector) {
             const d = dateOf(it);

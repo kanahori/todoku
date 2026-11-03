@@ -631,6 +631,10 @@ async function generateChecks() {
       const dupRead = await runCard(BrowserWindow, { ...dup.config, cards: [{ id: 'r', title: '表', action: 'read', selector: '#prob .wide-scroll table' }] }, 'r', { waitMs: 500 });
       check('表の行: 読むカードでも、「-」で終わる行を次の行とつながず、一行ずつ読む',
         dupRead.ok && dupRead.text.split('\n').length === 6 && dupRead.text.split('\n')[1] === 'あおば市 - - 大雨', dupRead.text);
+      const explain = await runCard(BrowserWindow, { ...dup.config, cards: [{ id: 'e', title: '説明', action: 'list', selector: 'ul.asterisk > li' }] }, 'e', { waitMs: 500 });
+      check('表の行: 一覧の一件の中に表があれば、表の前の文・見出しの行（一度だけ）・行ごとに分けて読む（表まるごと一件にしない）',
+        explain.ok && JSON.stringify(explain.items) === JSON.stringify(['警戒レベルとの関係（作り物）', '警報・注意報 警戒レベル', '大雨警報 レベル3相当', '大雨注意報 レベル2相当', 'この表は作り物です。']),
+        explain.items);
       store.remove(dup.config.id);
     }
 
