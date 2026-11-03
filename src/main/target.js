@@ -132,6 +132,21 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     }
     return {};
   };
+  // ol の中の li の番号。start と reversed と、li の value に従う。
+  const olNumber = (li) => {
+    const ol = li.parentElement;
+    const lis = [...ol.children].filter((c) => c.tagName === 'LI');
+    const reversed = ol.hasAttribute('reversed');
+    let n = parseInt(ol.getAttribute('start'), 10);
+    if (Number.isNaN(n)) n = reversed ? lis.length : 1;
+    for (const x of lis) {
+      const v = parseInt(x.getAttribute('value'), 10);
+      if (!Number.isNaN(v)) n = v;
+      if (x === li) return n;
+      n += reversed ? -1 : 1;
+    }
+    return null;
+  };
   // replace は Map（要素 → 文字）。その要素を、中の文字の代わりにその文字として読む（日付の要素）。空の文字なら読まない（分類の言葉）。
   const textLines = (root, visibleOnly = false, scope = 'line', replace = null) => {
     let out = '';
@@ -156,6 +171,12 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       const block = cs.display === 'none' ? BLOCK.has(tag) : BLOCK.has(tag) || BLOCK_DISPLAY.test(cs.display);
       const sep = block ? '\n' : INLINE.has(tag) ? '' : ' ';
       out += sep;
+      // 番号の付いた一覧（ol）の項目は、頭に番号を付けて読む（画面に番号が出ているときだけ。list-style が none の ol は付けない）。
+      // 手順が番号無しで読まれた（2026-11-04 の Windows の確かめ）。当たった要素そのもの（一覧のカードの一件）には付けない（「1件目」と重なるため）。
+      if (tag === 'LI' && !isRoot && node.parentElement && node.parentElement.tagName === 'OL' && cs.listStyleType !== 'none') {
+        const n = olNumber(node);
+        if (n !== null) out += `${n} `;
+      }
       const label = (node.getAttribute('aria-label') || '').trim();
       if (tag === 'IMG' || node.getAttribute('role') === 'img') {
         const alt = (node.getAttribute('alt') || label).trim();

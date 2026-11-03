@@ -194,6 +194,10 @@ async function main() {
     const reply12 = await readItemTarget(BrowserWindow, chat, 'questions', 11);
     check('チャット: 12件目（最後の質問）を選ぶと、少しずつ描かれた最後の返事を読む',
       reply12.ok && reply12.text.startsWith('持ち物を確かめる手順') && reply12.text.endsWith('楽しい旅になりますように。'), reply12);
+    check('チャット: 番号の付いた手順（ol）は、頭に番号を付けて読む', reply12.ok && reply12.text.includes('\n1 前の日の夜に、一覧と見比べる\n2 雨合羽と上着を'), reply12.text);
+    const reply7 = await readItemTarget(BrowserWindow, chat, 'questions', 6);
+    check('チャット: ol の start と li の value に従って番号を付ける（3・7・8）',
+      reply7.ok && reply7.text.includes('\n3 費用を入れる\n7 列を選ぶ\n8 式を入れる\n'), reply7.text);
     const none = await readItemTarget(BrowserWindow, chat, 'questions', 99);
     check('チャット: 無い一件を選んだときは、見つからない（notFound）と返す', !none.ok && none.notFound === true && none.where === 'cards[1].itemTarget', none);
 

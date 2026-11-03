@@ -17,6 +17,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - Each web app (a learning site, a city website, ...) has a small config file that says, card by card, where to read and what to press.
 - The app turns that config into a deck of cards. Up and Down Arrow move between cards, Enter or Space opens a card or reads the web app, Up and Down Arrow then read the result item by item, and Esc goes back. Tab stops only on the current card. The web app itself stays in a separate window behind the card screen and never takes the keyboard focus (except for a login, when the user asks for it).
+- Items of a numbered list (`ol`) are read with their number first ("1 前の日の夜に、…"), following `start`, `reversed` and `value`; lists whose numbers are hidden with `list-style: none` are read without numbers.
 - In a table row, when only the heading cell (the `th` cells, or the first cell if there is none) has text and every other cell is empty, the row is read as "{name} なし", so an empty row is not mistaken for a row that could not be read.
 - `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...". Text in images is read from their `alt` text and `aria-label`, and slides that a carousel hides with `aria-hidden` are still read, because the person asked for them.
 - When a web app changes its screen and a config line no longer matches, the app reports only which line fails. With an API key, the repair happens on the spot (see "Automatic repair on the user's side"); a supporter can then write the fix into the config file to distribute it.
@@ -166,6 +167,7 @@ Claude がしていること（まとめ）
 - 鍵（CARDS_ANTHROPIC_API_KEY）が無くても、この二つのほかは全部使えます。
 
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをカードの束の画面にします。上下の矢印でカードを移り、Enter か Space でカードを開いて読み、結果は上下の矢印で一件ずつ読めます。Esc で戻ります。ウェブアプリの窓は、カードの画面の後ろの別の窓にあり、焦点を取りません（ログインのときだけ、使う人が前に出せます）。
+- 番号の付いた一覧（ol）の項目は、「1 前の日の夜に、…」のように頭に番号を付けて読みます（start・reversed・value に従います。番号を出していない ol には付けません）。
 - 表の行で、見出しの列（th。無ければ最初の升目）にだけ文字があり、ほかの升目が全部空なら、「水戸市 なし」のように名前の後に「なし」と読みます。
 - `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。
 - ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。鍵があれば、その場で直します（下の「使う人の側でも」）。直しを設定ファイルに書いて配るかは、支援者が「自動で直した所（支援者向け）」のカードで決めます。前の画面にあった、全部のカードを点検して案ごとに「採る／採らない」を選ぶ欄は、カードの画面に作り直している途中です。
