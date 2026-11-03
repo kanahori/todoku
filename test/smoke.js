@@ -530,9 +530,9 @@ async function generateChecks() {
       store,
       allowFixtures: true,
     });
-    check('カードを作る: パンくずと「現在のページ」を作らず、目次は「目次を読む」に、合わない題の元は使わず、重なった題は中の見出しにし、押すカードは「サイト内を検索する」にする',
+    check('カードを作る: パンくずと「現在のページ」を作らず、目次は「目次を読む」に、合わない題の元は使わず、重なった題は中の見出しにし、押すカードは「サイト内を検索する」にして束の後ろに置く',
       guide.ok && guide.dropped === 2 && guide.config.name === '路線バスのご案内（予約電話番号、利用方法）'
-        && JSON.stringify(guide.config.cards.map((c) => c.title)) === JSON.stringify(['サイト内を検索する', '目次を読む', '利用方法', '予約のしかた', '資料のダウンロード']),
+        && JSON.stringify(guide.config.cards.map((c) => c.title)) === JSON.stringify(['目次を読む', '利用方法', '予約のしかた', '資料のダウンロード', 'サイト内を検索する']),
       guide.ok ? { name: guide.config.name, dropped: guide.dropped, titles: guide.config.cards.map((c) => c.title) } : guide);
     if (guide.ok) store.remove(guide.config.id);
 

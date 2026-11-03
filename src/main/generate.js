@@ -703,6 +703,7 @@ function pickCards(candidates, probes) {
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
     if (c.action === 'list' && c.container && probe.containerOk) card.container = c.container;
     Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
+    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique), enumerable: false });
     cards.push(card);
   });
   return cards;
@@ -717,9 +718,15 @@ function nearlySame(body, title) {
   return b === t || ((b.includes(t) || t.includes(b)) && Math.abs(b.length - t.length) <= 4);
 }
 
+// 束の後ろにまとめるカードの題: 検索・お問い合わせ・サイトの名前（〇〇市役所・〇〇町役場・公式サイト など）。
+// 「サイト内を検索する」が一枚目に来て、本文が遠かった（2026-11-04 の Windows の確かめ）。
+const BACK_TITLE = /検索|問い?合わせ|問合せ|(市役所|区役所|町役場|村役場|役場|県庁|都庁|府庁|道庁|公式(ホームページ|ウェブサイト|サイト)?)$/;
+
 // 束のカードを、ページの上からの順に並べ、id を振り直す（Claude の返す順が毎回違っても、同じ束になるように）。
+// 検索・お問い合わせ・サイトの名前のカードは、本文のカードの後ろにまとめる（その中でも上からの順）。
 function orderCards(cards) {
-  const sorted = cards.map((c, i) => ({ c, i })).sort((a, b) => (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i).map((x) => x.c);
+  const sorted = cards.map((c, i) => ({ c, i }))
+    .sort((a, b) => Number(Boolean(a.c.back)) - Number(Boolean(b.c.back)) || (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i).map((x) => x.c);
   return sorted.map((c, i) => ({ ...c, id: `${c.id.replace(/-\d+$/, '')}-${i + 1}` }));
 }
 

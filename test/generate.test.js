@@ -193,6 +193,37 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
     ['市町村を選ぶ', 'サイト内を検索する', '施設を検索する']);
 });
 
+test('束の並び: 検索・お問い合わせ・サイトの名前のカードは、本文のカードの後ろにまとめる（その中でも上からの順）', async () => {
+  const { BrowserWindow } = fakeBrowserWindow(pageOf({
+    probes: [
+      { count: 1, hasText: true, containerOk: false, title: '検索', pos: 1 },
+      { count: 1, hasText: true, containerOk: false, title: 'あおば町役場', body: 'あおば町役場 電話は窓口でお知らせします', pos: 2 },
+      { count: 3, hasText: true, containerOk: false, title: '新着情報', body: '一件目 二件目', pos: 3 },
+      { count: 1, hasText: true, containerOk: false, title: 'お問い合わせ', pos: 9 },
+      { count: 1, hasText: true, containerOk: false, title: '本文の案内', body: '本文の文です。 二つ目の文です。', pos: 5 },
+    ],
+  }));
+  const { store, dir } = tmpStore();
+  try {
+    const r = await generateDeck({
+      BrowserWindow, url: 'https://example.com/', store, settle: SETTLE,
+      callModel: async () => ({
+        cards: [
+          { role: 'search', action: 'click', selector: '#find', container: '', titleSelector: '', reason: '検索。' },
+          { role: 'other', action: 'read', selector: '#site', container: '', titleSelector: '', reason: 'サイトの名前。' },
+          { role: 'list', action: 'list', selector: '#news li', container: '', titleSelector: '', reason: '新着。' },
+          { role: 'button', action: 'click', selector: '#ask', container: '', titleSelector: '', reason: '問い合わせ。' },
+          { role: 'main', action: 'read', selector: '#main', container: '', titleSelector: '', reason: '本文。' },
+        ],
+      }),
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(r.config.cards.map((c) => c.title), ['新着情報', '本文の案内', 'サイト内を検索する', 'あおば町役場', 'お問い合わせ']);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('表示の切り替えの押すカードは、「表を替える（…）」か「表示を替える（…）」の題にする', () => {
   const card = (selector) => ({ role: 'menu', action: 'click', selector, container: '', titleSelector: '' });
   const probes = [
