@@ -67,7 +67,9 @@ function zoomKey(input, platform = process.platform) {
   const key = String(input.key || '');
   const code = String(input.code || '');
   // 日本語の配列では、プラスは「;」のキーにある（Shift なしでも拡大にする）。
-  if (['+', '=', ';'].includes(key) || code === 'NumpadAdd') return 'in';
+  // Ctrl と Shift と「;」で拡大できなかった（2026-11-03 の Windows の確かめ）。キーの配列の設定が日本語でないと、
+  // 同じキーが「:」と読まれる。押したキーの場所（code が Semicolon）でも拡大にする（Chrome や Edge と同じ押し方で効くように）。
+  if (['+', '=', ';'].includes(key) || code === 'NumpadAdd' || code === 'Semicolon') return 'in';
   if (['-', '_'].includes(key) || code === 'NumpadSubtract') return 'out';
   if (key === '0' || code === 'Numpad0') return 'reset';
   return null;

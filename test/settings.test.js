@@ -54,6 +54,11 @@ test('文字の大きさのキー: Windows は Ctrl、macOS は Command と、�
   assert.equal(zoomKey(k({ control: true, key: '=' }), 'win32'), 'in');
   assert.equal(zoomKey(k({ control: true, shift: true, key: '+' }), 'win32'), 'in');
   assert.equal(zoomKey(k({ control: true, key: ';' }), 'win32'), 'in');
+  // 日本語の配列で Ctrl と Shift と「;」（+ を打つ押し方）。配列の設定が英語だと key は「:」になるので、キーの場所（code）でも見る。
+  assert.equal(zoomKey(k({ control: true, shift: true, key: '+', code: 'Semicolon' }), 'win32'), 'in');
+  assert.equal(zoomKey(k({ control: true, shift: true, key: ':', code: 'Semicolon' }), 'win32'), 'in');
+  assert.equal(zoomKey(k({ control: true, shift: true, key: ';', code: 'Semicolon' }), 'win32'), 'in');
+  assert.equal(zoomKey(k({ meta: true, shift: true, key: '+', code: 'Semicolon' }), 'darwin'), 'in');
   assert.equal(zoomKey(k({ control: true, key: '-' }), 'win32'), 'out');
   assert.equal(zoomKey(k({ control: true, key: '0' }), 'win32'), 'reset');
   assert.equal(zoomKey(k({ meta: true, key: '=' }), 'darwin'), 'in');
