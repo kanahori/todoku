@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」の警報のページ）。地図と表を後から描くページをまねる。 -->
+<!-- 1.7秒後に区域の見出しが、4秒後に主な区画（main）の表が出る。前の待ち方（要素の数が 1秒変わらなければ終わり）では表の前に終わった。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-03 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>あおば町の警報（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <main id="main"></main>
+  <section id="area"></section>
+  <script>
+    setTimeout(() => { document.getElementById('area').innerHTML = '<h2>区域の選び方</h2><p>地図から町を選びます。</p>'; }, 1700);
+    setTimeout(() => {
+      document.getElementById('main').innerHTML = '<h1>警報と注意報（作り物）</h1>'
+        + '<table class="warn-table"><tr><td>あおば町</td><td>大雨注意報</td></tr><tr><td>みどり町</td><td>雷注意報</td></tr>'
+        + '<tr><td>さくら町</td><td>発表なし</td></tr></table>';
+    }, 4000);
+  </script>
+</body>
+</html>

@@ -5,7 +5,8 @@
 //       → 題と束の名前をアプリの手元で作る → userData の下に新しい束として残す。
 // Claude に送るのは、ページの構造だけ。ページの文字・URL・題は送らない。
 // カードの題は、Claude が返す「題の元になる要素のセレクタ」（titleSelector）の文字を手元で読んで作る。
-// 作れないときは役目の種類から「一覧 1」のような題にする。束の名前は、ページの title を手元で使う。
+// 無いときは、その場所の見出し・aria-labelledby・ランドマークの aria-label・最初の短い文字から手元で作る（pageInspect）。
+// それでも作れないときは役目の種類から「一覧 1」のような題にする。束の名前は、ページの title を手元で使う。
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -121,18 +122,41 @@ function limitStructure(skeleton, max = MAX_STRUCTURE_CHARS) {
   return { text: skeleton.slice(0, k > 0 ? k : max), cut: true };
 }
 
-// ページが落ち着くまで待つ（後から出てくる作りのページのため）。要素の数が2回続けて変わらなくなったら終わる。
-async function waitForSettle(win, { stepMs = 500, minMs = 1000, maxMs = 8000 } = {}) {
+// ページの中で動く関数（落ち着いたかを見る）。要素の数・文字の量・読み込んだ部品の数と、
+// まだ中身を待っている印（読み込みが済んでいない・主な区画（main）が空・aria-busy="true" の所がある）を返す。
+// 文字の中身は返さない（量だけ）。
+function pageSettleProbe() {
+  const main = document.querySelector('main, [role="main"]');
+  const mainEmpty = Boolean(main) && main.textContent.trim() === '' && !main.querySelector('img, svg, canvas, table, iframe');
+  return {
+    nodes: document.getElementsByTagName('*').length,
+    chars: document.body ? document.body.textContent.length : 0,
+    resources: performance.getEntriesByType('resource').length,
+    waiting: document.readyState !== 'complete' || mainEmpty || Boolean(document.querySelector('[aria-busy="true"]')),
+  };
+}
+
+// ページが落ち着くまで待つ（後から出てくる作りのページのため）。
+// 要素の数・文字の量・読み込んだ部品の数（ページが後から取りに行く値も入る）の三つが stableMs のあいだ変わらず、
+// 中身を待っている印も無くなったら終わる。上限は maxMs（作る一巡の 90秒の中に収める）。
+// 前は「要素の数が 1秒変わらなければ終わり」だった。気象庁の警報のページは地図と表を後から描くので、
+// 作りを集めた時点で中身がまだ無く、警報の中身に届かなかった（2026-11-03 の Windows の確かめ）。
+async function waitForSettle(win, { stepMs = 500, minMs = 2500, stableMs = 2000, maxMs = 15000 } = {}) {
   const started = Date.now();
-  let last = -1;
-  let same = 0;
+  let last = null;
+  let stableSince = started;
+  let snap = null;
   for (;;) {
     await new Promise((r) => setTimeout(r, stepMs));
-    const n = await win.webContents.executeJavaScript("document.getElementsByTagName('*').length");
-    same = n === last ? same + 1 : 0;
-    last = n;
-    const t = Date.now() - started;
-    if ((same >= 2 && t >= minMs) || t >= maxMs) return n;
+    snap = await win.webContents.executeJavaScript(`(${pageSettleProbe.toString()})()`);
+    const key = `${snap.nodes}/${snap.chars}/${snap.resources}`;
+    const now = Date.now();
+    if (key !== last) {
+      last = key;
+      stableSince = now;
+    }
+    const t = now - started;
+    if ((t >= minMs && now - stableSince >= stableMs && !snap.waiting) || t >= maxMs) return snap.nodes;
   }
 }
 
@@ -154,10 +178,20 @@ function normalizeCandidates(answer) {
 }
 
 // ページの中で動く関数。案ごとに、当たる数・文字があるか（pageTry と同じ見方）・入れ物に当たるか・題の元の文字を返す。
-// 題の元の文字は、titleSelector の要素の aria-label・画像の alt・見出しなどの文字。押すカードで titleSelector が無いときは、押す所そのものの名前。
-// この文字はアプリの手元で題にするだけで、外へは送らない。
+// 題の元の文字は、次の順に探す（この文字はアプリの手元で題にするだけで、外へは送らない）。
+//   1. titleSelector の要素の aria-label・画像の alt・見出しなどの文字。押すカードで当たる所が一つなら、押す所そのものの名前。
+//   2. その場所（読む・押す所の要素。一覧は入れ物か、最初の項目の親）の中の見出し（h1〜h6）。無ければ直前の見出し（4段上の要素の中まで）。
+//   3. その場所か、その上の要素の aria-labelledby の先の文字。
+//   4. その場所を囲むランドマーク（nav・section・aside など）の aria-label。
+//   5. その場所の中の最初の短い文字（20字まで。日付や数字だけの文字は飛ばす）。
+// どれも無ければ、手元で役目の種類から「お知らせ 1」のような題にする（pickCards）。
+// 気象庁の警報のページから作った束で、3枚とも「お知らせ 1」「本文 1」「メニュー 1」になり、何のカードか分かりにくかった（2026-11-03 の Windows の確かめ）。
 function pageInspect(tryOne, cards) {
   const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+  const SHORT_MAX = 20;
+  const HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
+  const LANDMARKS = 'nav, aside, main, section, form, header, footer, [role="navigation"], [role="region"], [role="complementary"], '
+    + '[role="main"], [role="search"], [role="banner"], [role="contentinfo"], [role="form"]';
   const one = (s) => {
     if (!s) return null;
     try {
@@ -176,11 +210,76 @@ function pageInspect(tryOne, cards) {
     const img = el.querySelector('img[alt]:not([alt=""])');
     return img ? clean(img.getAttribute('alt')) : '';
   };
+  const hidden = (el) => Boolean(el.closest('[aria-hidden="true"]'));
+  // 読む・押す所の場所。一覧は入れ物か、最初の項目の親。
+  const regionOf = (c) => {
+    if (c.action === 'list') {
+      const box = one(c.container);
+      if (box) return box;
+      const first = one(c.selector);
+      return first ? first.parentElement : null;
+    }
+    return one(c.selector);
+  };
+  const innerHeading = (region) => {
+    for (const h of region.querySelectorAll(HEADINGS)) {
+      const t = hidden(h) ? '' : nameOf(h);
+      if (t) return t;
+    }
+    return '';
+  };
+  const precedingHeading = (region) => {
+    let anc = region.parentElement;
+    for (let depth = 0; anc && depth < 4; depth++, anc = anc.parentElement) {
+      const before = [...anc.querySelectorAll(HEADINGS)]
+        .filter((h) => !region.contains(h) && !hidden(h) && (h.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING));
+      for (let k = before.length - 1; k >= 0; k--) {
+        const t = nameOf(before[k]);
+        if (t) return t;
+      }
+    }
+    return '';
+  };
+  const labelledBy = (region) => {
+    let n = region;
+    for (let depth = 0; n && n !== document.body && depth < 5; depth++, n = n.parentElement) {
+      const ids = clean(n.getAttribute('aria-labelledby'));
+      if (!ids) continue;
+      const t = clean(ids.split(' ').map((id) => {
+        const e = document.getElementById(id);
+        return e ? (e.innerText || e.textContent) : '';
+      }).join(' '));
+      if (t) return t;
+    }
+    return '';
+  };
+  const landmarkLabel = (region) => {
+    const lm = region.closest(LANDMARKS);
+    return lm ? clean(lm.getAttribute('aria-label')) : '';
+  };
+  const firstShortText = (region) => {
+    const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
+    for (let k = 0; k < 200 && walker.nextNode(); k++) {
+      const node = walker.currentNode;
+      const parent = node.parentElement;
+      if (!parent || ['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE'].includes(parent.tagName) || hidden(parent)) continue;
+      const t = clean(node.nodeValue);
+      // 日付や数字だけの文字（「11月3日」「2026.11.03」）は、題にしても何のカードか分からないので飛ばす。
+      if (!t || !/[A-Za-zぁ-んァ-ヶ一-龠]/.test(t.replace(/[年月日時分秒曜]/g, ''))) continue;
+      return t.length <= SHORT_MAX ? t : '';
+    }
+    return '';
+  };
+  const placeName = (region) => {
+    if (!region) return '';
+    return innerHeading(region) || precedingHeading(region) || labelledBy(region) || landmarkLabel(region) || firstShortText(region);
+  };
   return cards.map((c) => {
     const probe = tryOne(c.selector);
     const containerOk = Boolean(c.container && one(c.container));
     let title = nameOf(one(c.titleSelector));
     if (!title && c.action === 'click' && probe.count === 1) title = nameOf(one(c.selector));
+    if (!title && probe.count > 0) title = placeName(regionOf(c));
     return { count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200) };
   });
 }
@@ -342,6 +441,7 @@ module.exports = {
   acceptUrl,
   limitStructure,
   waitForSettle,
+  pageSettleProbe,
   normalizeCandidates,
   pageInspect,
   buildInspectScript,

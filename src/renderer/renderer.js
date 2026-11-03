@@ -195,8 +195,13 @@ function renderItems(items) {
           e.preventDefault();
           // 文書全体のキーの処理には渡さない（焦点を移した先で、同じ Enter がもう一度働かないように）。
           e.stopPropagation();
+          fieldEnterAt = Date.now();
           item.onEnter(input.value);
         });
+        // 同じ Enter の keypress・keyup も、欄の中で止める。
+        for (const type of ['keypress', 'keyup']) {
+          input.addEventListener(type, (e) => { if (e.key === 'Enter') e.stopPropagation(); });
+        }
       }
       wrap.append(input);
       box.append(wrap);
@@ -1067,7 +1072,15 @@ function topDeck(configs, problems) {
 }
 
 // ---- キー ----
+// 入力欄の Enter で働きを始めた時刻。入力欄の Enter は欄の中で止めるが、その直後に、焦点を移した先へ
+// Enter がもう一度届くことがある（押したままの繰り返しや、読み上げソフトが続けて渡すもの）。
+// 「新しいページからカードを作る」の欄で Enter を押した直後に「読み込み中です。少しお待ちください。」が一度出た（2026-11-03 の Windows の確かめ）。
+// 欄の Enter から短い間に、ほかのキーを挟まずに届いた Enter と、押したままの繰り返しの Enter は、黙って捨てる。
+const FIELD_ENTER_GUARD_MS = 500;
+let fieldEnterAt = 0;
+
 document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') fieldEnterAt = 0;
   if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing || e.keyCode === 229) return;
   const active = document.activeElement;
   const cardNode = active && active.closest ? active.closest('article.card') : null;
@@ -1078,6 +1091,10 @@ document.addEventListener('keydown', (e) => {
   if (!handled) return;
   // 入力欄の中の Enter（入力欄が作り始める）・スペース・Home・End（文字の入力と移動）は、入力欄に任せる。
   if (active.tagName === 'INPUT' && ['Enter', ' ', 'Home', 'End'].includes(key)) return;
+  if (key === 'Enter' && (e.repeat || Date.now() - fieldEnterAt < FIELD_ENTER_GUARD_MS)) {
+    e.preventDefault();
+    return;
+  }
   if (busy && key !== 'Escape') {
     e.preventDefault();
     announce('読み込み中です。少しお待ちください。');

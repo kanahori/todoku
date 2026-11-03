@@ -4,7 +4,7 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { checkCards, showTarget, closeTarget } = require('./target');
+const { checkCards, showTarget, closeTarget, setHomeWindow } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
@@ -87,6 +87,8 @@ function createWindow() {
     },
   });
   mainWindow = win;
+  // ウェブアプリの窓に焦点が来てしまったときに、戻す先（target.js）。
+  setHomeWindow(win);
   win.on('closed', () => { if (mainWindow === win) mainWindow = null; });
   win.removeMenu();
   // メニューを外したので、文字の大きさのキー（Ctrl か Command と、プラス・マイナス・0）は主の処理で受ける。

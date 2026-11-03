@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   GenerateSchema, failureMessage, doneMessage, createGeneratedStore, newDeckId, acceptUrl, limitStructure,
-  normalizeCandidates, pickCards, deckName, generateDeck, exportDeck, exportedMessage, MAX_CARDS,
+  normalizeCandidates, pickCards, deckName, generateDeck, exportDeck, exportedMessage, MAX_CARDS, waitForSettle,
 } = require('../src/main/generate');
 const { validateConfig, loadConfigDir } = require('../src/main/config');
 
@@ -17,9 +17,10 @@ const { validateConfig, loadConfigDir } = require('../src/main/config');
 function fakeBrowserWindow(page, { title = '作り物の町のお知らせ', landed = null } = {}) {
   const made = [];
   class FakeWindow {
-    constructor() {
+    constructor(options = {}) {
       this.url = '';
       this.visible = false;
+      this.focusable = options.focusable !== false;
       this.destroyed = false;
       made.push(this);
       this.webContents = {
@@ -36,18 +37,20 @@ function fakeBrowserWindow(page, { title = '作り物の町のお知らせ', lan
     isVisible() { return this.visible; }
     showInactive() { this.visible = true; }
     hide() { this.visible = false; }
+    isFocusable() { return this.focusable; }
+    setFocusable(v) { this.focusable = v; }
     on() {}
   }
   return { BrowserWindow: FakeWindow, made };
 }
 
 const SKELETON = 'body\n  header.top\n    nav.menu\n      a (文字あり)\n  main\n    h2.news-title (文字あり)\n    ul.news\n      li (文字あり)';
-const SETTLE = { stepMs: 1, minMs: 0, maxMs: 30 };
+const SETTLE = { stepMs: 1, minMs: 0, stableMs: 0, maxMs: 30 };
 
 // ページで動かす文の種類ごとに答える。inspect は案の数だけの probe を返す。
 function pageOf({ skeleton = SKELETON, probes }) {
   return (script) => {
-    if (script.includes("getElementsByTagName('*').length")) return 40;
+    if (script.includes('pageSettleProbe')) return { nodes: 40, chars: 100, resources: 3, waiting: false };
     if (script.includes('pageSkeleton')) return { skeleton, nodes: 8, truncated: false };
     if (script.includes('pageInspect')) return probes;
     throw new Error(`試しに無い文: ${script.slice(0, 60)}`);
@@ -293,4 +296,32 @@ test('返させる形（GenerateSchema）と id', () => {
   assert.ok(!GenerateSchema.safeParse({ cards: [{ ...ANSWER.cards[0], role: 'nazo' }] }).success);
   assert.ok(!GenerateSchema.safeParse({ cards: [{ ...ANSWER.cards[0], action: 'type' }] }).success);
   assert.equal(newDeckId(() => new Date(0)), 'page-0');
+});
+
+test('落ち着くまで待つ: 要素の数・文字の量・読み込んだ部品の数が変わらず、待つ印が無くなってから終わる', async () => {
+  // 一回ごとのページの様子（作り物）。3回目に後から表が出て、5回目までは主な区画が空（waiting）。
+  const snaps = [
+    { nodes: 10, chars: 50, resources: 2, waiting: true },
+    { nodes: 10, chars: 50, resources: 3, waiting: true },
+    { nodes: 30, chars: 400, resources: 3, waiting: true },
+    { nodes: 30, chars: 400, resources: 3, waiting: true },
+    { nodes: 30, chars: 400, resources: 3, waiting: false },
+    { nodes: 30, chars: 400, resources: 3, waiting: false },
+    { nodes: 30, chars: 400, resources: 3, waiting: false },
+  ];
+  let calls = 0;
+  const win = { webContents: { executeJavaScript: async () => snaps[Math.min(calls++, snaps.length - 1)] } };
+  // 一回を 1ミリ秒、落ち着きは 1ミリ秒以上変わらないこととする。
+  const n = await waitForSettle(win, { stepMs: 1, minMs: 0, stableMs: 1, maxMs: 5000 });
+  assert.equal(n, 30);
+  assert.ok(calls >= 5, `待つ印が消える5回目より前に終わった（${calls}回）`);
+  assert.ok(calls <= 7, `落ち着いた後も待ち続けた（${calls}回）`);
+});
+
+test('落ち着くまで待つ: ずっと変わり続けるページでも、上限の時間で終わる', async () => {
+  let calls = 0;
+  const win = { webContents: { executeJavaScript: async () => ({ nodes: ++calls, chars: 0, resources: 0, waiting: false }) } };
+  const started = Date.now();
+  await waitForSettle(win, { stepMs: 5, minMs: 0, stableMs: 50, maxMs: 60 });
+  assert.ok(Date.now() - started < 1000);
 });

@@ -30,35 +30,72 @@ function resolveUrl(url, cardPath) {
 // container（list のカードだけ・任意）は、項目を入れる入れ物の selector。
 // 入れ物に当たって項目が 0件なら「0件」（found: true・items: []）、入れ物にも当たらなければ「当たらない」と返す。
 async function pageAction(selector, action, loginSelector, limit, waitMs, container) {
-  const readText = (el) => (el.innerText || el.textContent || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-  // 画面読み上げが読む文に近づける: 中の文字に加えて、画像の説明（alt）と aria-label も読む。
-  // 隠れている要素（自動で切り替わるスライドの見えない分）も読む。aria-hidden="true" の中と script・style は読まない。
-  // 本物の自治体のカルーセルは、文字が画像の alt だけのことが多い（2026-11-02 Mac の確かめ）。
-  const accessibleText = (root) => {
-    const parts = [];
-    // 当たった項目そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
-    const walk = (node, isRoot = false) => {
-      if (node.nodeType === 3) { parts.push(node.nodeValue); return; }
-      if (node.nodeType !== 1) return;
-      const tag = node.tagName;
-      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return;
-      if (!isRoot && node.getAttribute('aria-hidden') === 'true') return;
-      const label = (node.getAttribute('aria-label') || '').trim();
-      if (tag === 'IMG' || (node.getAttribute('role') === 'img')) {
-        const alt = (node.getAttribute('alt') || label).trim();
-        if (alt) parts.push(' ' + alt + ' ');
+  // 読む文を、行の並びとして取り出す。画面読み上げが読む文に近づける。
+  // - 中の文字に加えて、画像の説明（alt）と aria-label も読む。aria-hidden="true" の中と script・style は読まない。
+  //   当たった要素そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
+  //   本物の自治体のカルーセルは、文字が画像の alt だけのことが多い（2026-11-02 Mac の確かめ）。
+  // - 別々の要素の文字の間に空白を入れる。日付の数字の直後に英字の題が続けて読まれた（2026-11-03 の Windows の確かめ）。
+  //   字の飾りの要素（strong・em など）は、文の途中にあるので区切らない。
+  // - 段落・行（p・div・li・tr や、表示が block の要素）と改行（br・white-space が pre の文の改行）で行を分ける。
+  //   住所・電話・窓口の時間が、一つの段落として続けて読まれた（同じ確かめ）。
+  // visibleOnly のときは、見えていない要素（display: none・visibility: hidden）を読まない（読むカード。今までの innerText と同じ見方）。
+  // 一覧のカードは、隠れているスライドも読む（自動で切り替わるスライドの見えない分）。
+  const INLINE = new Set(['B', 'STRONG', 'EM', 'I', 'U', 'S', 'MARK', 'SMALL', 'SUB', 'SUP', 'ABBR', 'CODE', 'KBD', 'Q', 'CITE', 'DFN',
+    'VAR', 'SAMP', 'FONT', 'WBR', 'BDI', 'BDO', 'RUBY', 'RB', 'RT', 'RP', 'INS', 'DEL']);
+  const BLOCK = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'DL', 'DT', 'DD', 'TR', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'CAPTION', 'SECTION',
+    'ARTICLE', 'HEADER', 'FOOTER', 'NAV', 'ASIDE', 'MAIN', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'ADDRESS', 'BLOCKQUOTE', 'PRE',
+    'FIGURE', 'FIGCAPTION', 'FORM', 'FIELDSET', 'LEGEND', 'HR', 'DETAILS', 'SUMMARY', 'BODY']);
+  const BLOCK_DISPLAY = /^(block|flex|grid|list-item|table|table-row|table-caption|flow-root)$/;
+  const PRE_SPACE = /^(pre|pre-wrap|pre-line|break-spaces)/;
+  const textLines = (root, visibleOnly = false) => {
+    let out = '';
+    const walk = (node, isRoot, keepNewlines, shown) => {
+      if (node.nodeType === 3) {
+        if (shown) out += keepNewlines ? node.nodeValue : node.nodeValue.replace(/\s+/g, ' ');
         return;
       }
-      const before = parts.length;
-      for (const child of node.childNodes) walk(child);
-      const inner = parts.slice(before).join('').trim();
-      if (label && !inner) parts.push(' ' + label + ' ');
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') return;
+      if (tag === 'BR') { out += '\n'; return; }
+      if (!isRoot && node.getAttribute('aria-hidden') === 'true') return;
+      const cs = getComputedStyle(node);
+      if (visibleOnly && !isRoot && cs.display === 'none') return;
+      const visible = !visibleOnly || cs.visibility === 'visible';
+      const pre = PRE_SPACE.test(cs.whiteSpace || '');
+      const block = cs.display === 'none' ? BLOCK.has(tag) : BLOCK.has(tag) || BLOCK_DISPLAY.test(cs.display);
+      const sep = block ? '\n' : INLINE.has(tag) ? '' : ' ';
+      out += sep;
+      const label = (node.getAttribute('aria-label') || '').trim();
+      if (tag === 'IMG' || node.getAttribute('role') === 'img') {
+        const alt = (node.getAttribute('alt') || label).trim();
+        if (alt && visible) out += ' ' + alt + ' ';
+        out += sep;
+        return;
+      }
+      const before = out.length;
+      for (const child of node.childNodes) walk(child, false, pre, visible);
+      if (label && visible && out.slice(before).trim() === '') out += ' ' + label + ' ';
+      out += sep;
     };
-    walk(root, true);
-    const words = parts.join('').replace(/\s+/g, ' ').trim();
-    // 同じ文が続けて二度出たら一度にする（画像の alt とその下の文字が同じときなど）。
-    return words.replace(/(\S.{3,}?) \1(?= |$)/g, '$1');
+    walk(root, true, false, true);
+    const lines = [];
+    for (const raw of out.split('\n')) {
+      const line = raw
+        .replace(/[^\S\n]+/g, ' ')
+        .trim()
+        // 区切りに入れた空白が、句読点と括弧の内側に来たら外す。
+        .replace(/ (?=[、。，．！？）」』】])/g, '')
+        .replace(/([（「『【]) /g, '$1')
+        // 同じ文が続けて二度出たら一度にする（画像の alt とその下の文字が同じときなど）。
+        .replace(/(\S.{3,}?) \1(?= |$)/g, '$1');
+      if (line && line !== lines[lines.length - 1]) lines.push(line);
+    }
+    return lines;
   };
+  // 一覧の1件は、一つの項目として読む。行の区切りは、句読点で終わっていなければ読点にする。
+  const oneLine = (lines) => lines.reduce((acc, line) => (acc === '' ? line : `${acc}${/[、。，．！？：:,.;；]$/.test(acc) ? ' ' : '、'}${line}`), '')
+    .replace(/(\S.{3,}?)[、 ]\1(?=[、 ]|$)/g, '$1');
   const query = (s) => {
     try {
       return { el: document.querySelector(s) };
@@ -80,7 +117,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         return { found: false, reason: 'invalid' };
       }
       if (items.length > 0) {
-        const texts = items.map((it) => accessibleText(it));
+        const texts = items.map((it) => oneLine(textLines(it)));
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
         // 画面で1件ずつのカードにするため、1件ずつの文も返す（全体の上限は text と同じ）。
@@ -115,7 +152,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     const q = query(selector);
     if (q.invalid) return { found: false, reason: 'invalid' };
     el = q.el;
-    if (el && (action === 'click' || readText(el) !== '' || accessibleText(el) !== '')) break;
+    if (el && (action === 'click' || textLines(el).length > 0)) break;
     if (!el && loginSelector) {
       const login = query(loginSelector);
       if (login.el) return { found: false, reason: 'login' };
@@ -128,9 +165,10 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     el.click();
     return { found: true };
   }
-  // ふだんは見えている文（改行を保つ innerText）。文が無いときと、画像の説明があるときは、画像の説明も入る形で読む。
-  let text = readText(el);
-  if (!text || el.querySelector('img[alt]:not([alt=""]), [role="img"][aria-label]')) text = accessibleText(el);
+  // ふだんは見えている文を、行ごとに読む（画面の項目は行ごとに一つ）。見えている文が無いときは、隠れている所も読む。
+  let lines = textLines(el, true);
+  if (lines.length === 0) lines = textLines(el);
+  const text = lines.join('\n');
   return { found: true, text: text.slice(0, limit), truncated: text.length > limit };
 }
 
@@ -157,6 +195,20 @@ function isSamePage(current, wanted) {
 // ウェブアプリの窓が二つ見えていると、二つ目を見せたときに NVDA がカードの画面を見失い、黙ることがあった（2026-11-03 の確かめ）。
 const windows = new Map();
 
+// ウェブアプリの窓は、ふだんは焦点を取れない窓にする（focusable: false）。
+// 本物のつくば市のトップは、読み込むとページの中の欄に自分で焦点を当てる。Windows ではそれで窓ごと前に出て、
+// NVDA がつくば市の窓へ移り、使う人がカードの画面から取り残された（2026-11-03 の Windows の確かめ）。
+// 焦点を取れるようにするのは、使う人が「ログインの窓を前に出す」を押したとき（showTarget）だけ。次にカードを動かすときに戻す。
+const loginFocus = new Set();
+// カードの画面の窓（Todoku の窓）。ウェブアプリの窓に焦点が来てしまったら、ここへ戻す。
+let homeWindow = null;
+function setHomeWindow(win) { homeWindow = win; }
+
+function keepUnfocusable(id, win) {
+  loginFocus.delete(id);
+  if (win.isFocusable()) win.setFocusable(false);
+}
+
 async function openTarget(BrowserWindow, config, url) {
   for (const [id, other] of windows) {
     if (id !== config.id && !other.isDestroyed() && other.isVisible()) other.hide();
@@ -167,6 +219,7 @@ async function openTarget(BrowserWindow, config, url) {
       width: 1000,
       height: 760,
       show: false,
+      focusable: false,
       title: config.name,
       webPreferences: {
         contextIsolation: true,
@@ -177,7 +230,16 @@ async function openTarget(BrowserWindow, config, url) {
     // 新しい窓を勝手に開かせない。
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     windows.set(config.id, win);
-    win.on('closed', () => windows.delete(config.id));
+    const id = config.id;
+    win.on('closed', () => { windows.delete(id); loginFocus.delete(id); });
+    // 守りの二つ目: 焦点を取れない窓でも、OS やページの動きで焦点が来たら、ログインのとき以外は Todoku の窓へ返す。
+    win.on('focus', () => {
+      if (loginFocus.has(id)) return;
+      if (homeWindow && !homeWindow.isDestroyed() && homeWindow !== win) homeWindow.focus();
+    });
+  } else {
+    // ログインのために前に出した窓も、使う人がカードの画面からカードを動かしたら、焦点を取れない窓に戻す。
+    keepUnfocusable(config.id, win);
   }
   // 同じページにいるなら読み込み直さない（共用のデモサイトに負荷をかけないため）。
   // ページの中の動きで # から後だけが変わったとき（気象庁の「データを表示」の後など）も、同じページとして扱う。
@@ -294,9 +356,14 @@ async function checkCards(BrowserWindow, config, options = {}) {
 }
 
 // ウェブアプリの窓を前に出して、焦点を移す（ログインのため）。窓がまだ無ければ false。
+// ログインの間だけ焦点を取れる窓にする（キーで打てるように）。次にカードを動かすと、焦点を取れない窓に戻る（openTarget）。
 function showTarget(appId) {
   const win = windows.get(appId);
   if (!win || win.isDestroyed()) return false;
+  loginFocus.add(appId);
+  if (!win.isFocusable()) win.setFocusable(true);
+  // Windows では焦点を取れない窓はタスクバーに出ないので、ログインの間は出す。
+  if (process.platform === 'win32') win.setSkipTaskbar(false);
   win.show();
   win.focus();
   return true;
@@ -309,4 +376,6 @@ function closeTarget(appId) {
   if (win && !win.isDestroyed()) win.destroy();
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage };
+module.exports = {
+  resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow,
+};

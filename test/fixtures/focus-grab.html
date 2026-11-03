@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>焦点を取るページ（作り物）</title>
+</head>
+<body>
+<!-- 試しのための作り物のページ。読み込んだら自分で焦点を取る（本物の自治体のページで見た動きをまねる）。 -->
+<h1>あおば町からのお知らせ（作り物）</h1>
+<form role="search" aria-label="サイト内検索">
+  <label for="q">検索</label>
+  <input id="q" type="text" autofocus>
+</form>
+<!-- 一件の中の日付と題は別々の要素。区切りが無いと、続けて読まれる。 -->
+<ul id="news">
+  <li><span class="date">2026年11月3日</span><a href="#a">Open Day のご案内</a></li>
+  <li><span class="date">2026年11月1日</span><a href="#b"><strong>重要</strong>：図書館の休館日</a></li>
+  <li><p class="date">2026年10月30日</p><p class="title">ごみの出し方が変わります</p><span aria-hidden="true">NEW</span></li>
+</ul>
+<!-- 窓口の案内は、一つの段落の中を改行で分けている。 -->
+<div id="office">
+  <h2>役場の窓口</h2>
+  <p><img src="data:," alt="役場の写真">あおば町役場<br>電話 （作り物の番号）<br>窓口 8時30分から17時15分</p>
+  <p style="display: none">見えない注意書き</p>
+</div>
+<script>
+  // 読み込んだら、窓とページの中の欄に焦点を取る。少し後にも、もう一度取る。
+  window.focus();
+  document.getElementById('q').focus();
+  setTimeout(() => { window.focus(); document.getElementById('q').focus(); }, 300);
+  window.addEventListener('load', () => { window.focus(); });
+</script>
+</body>
+</html>

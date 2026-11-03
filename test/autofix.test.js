@@ -15,9 +15,10 @@ const { sourceOpenedMessage } = require('../src/main/messages');
 function fakeBrowserWindow(page) {
   const scripts = [];
   class FakeWindow {
-    constructor() {
+    constructor(options = {}) {
       this.url = '';
       this.visible = false;
+      this.focusable = options.focusable !== false;
       this.loads = 0;
       this.webContents = {
         setWindowOpenHandler() {},
@@ -34,6 +35,8 @@ function fakeBrowserWindow(page) {
     isVisible() { return this.visible; }
     showInactive() { this.visible = true; }
     hide() { this.visible = false; }
+    isFocusable() { return this.focusable; }
+    setFocusable(v) { this.focusable = v; }
     on() {}
   }
   return { BrowserWindow: FakeWindow, scripts };

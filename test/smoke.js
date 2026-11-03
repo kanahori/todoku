@@ -15,7 +15,7 @@ const { dialog: errorDialog } = require('electron');
 errorDialog.showErrorBox = (title, content) => { console.log(`エラー: ${title} ${content}`); app.exit(3); };
 process.on('uncaughtException', (e) => { console.log(`エラー: ${e.stack}`); app.exit(3); });
 const { loadConfigFile } = require('../src/main/config');
-const { runCard, checkCards } = require('../src/main/target');
+const { runCard, checkCards, setHomeWindow, showTarget, closeTarget } = require('../src/main/target');
 
 const checks = [];
 function check(name, ok, detail) {
@@ -230,6 +230,7 @@ async function main() {
   }
 
   await autoRepairChecks();
+  await focusAndSeparatorChecks();
   await generateChecks();
   // カードの画面の試しは、表示設定の口を本物（settings.js）にして、一時のフォルダの settings.json につなぐ。
   const { createSettingsStore, registerSettingsHandlers } = require('../src/main/settings');
@@ -244,6 +245,71 @@ async function main() {
     await rendererSearchChecks(settingsStore);
   } finally {
     fs.rmSync(settingsDir, { recursive: true, force: true });
+  }
+}
+
+// ウェブアプリの窓が焦点を奪わないか、と、読む文の区切り。作り物のページ（test/fixtures/focus-grab.html）は、
+// 読み込んだら自分で window.focus() を呼び、ページの中の欄に焦点を当てる（本物のつくば市のトップで見た動きをまねる）。
+// 2026-11-03 の Windows の確かめでは、つくば市のトップのカードを読んだ直後に NVDA がつくば市の窓へ移り、使う人が取り残された。
+async function focusAndSeparatorChecks() {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Todoku の窓の代わりに、見える窓を一つ開いて前に出す。
+  const home = new BrowserWindow({ width: 480, height: 320, title: 'Todoku（試し）' });
+  try {
+    await home.loadURL('data:text/html;charset=utf-8,<title>Todoku</title><p>試し</p>');
+    setHomeWindow(home);
+    if (app.focus) app.focus({ steal: true });
+    home.focus();
+    await wait(300);
+    const before = BrowserWindow.getFocusedWindow() === home;
+    // 焦点を得た窓を順に控える（この機械でほかのアプリが前に出て、Todoku のどの窓にも焦点が無くなることがあるため、
+    // 「いま焦点のある窓」だけでなく、ウェブアプリの窓に一度でも焦点が来たかで見る）。
+    const focusLog = [];
+    const onFocus = (_e, w) => focusLog.push(w.getTitle());
+    app.on('browser-window-focus', onFocus);
+    const grab = { id: 'grab', name: '焦点を取るページ（作り物）', url: 'fixture:focus-grab.html', login: { selector: '#no-such-login' },
+      cards: [
+        { id: 'news', title: 'お知らせ', action: 'list', selector: '#news li' },
+        { id: 'office', title: '役場の窓口', action: 'read', selector: '#office' },
+      ] };
+    const news = await runCard(BrowserWindow, grab, 'news');
+    await wait(800); // ページが 300ミリ秒後にもう一度焦点を取るのを待つ
+    const target = BrowserWindow.getAllWindows().find((w) => w !== home && w.getTitle() === '焦点を取るページ（作り物）');
+    const focused = BrowserWindow.getFocusedWindow();
+    app.removeListener('browser-window-focus', onFocus);
+    check('焦点: 自分で焦点を取るページのカードを読んだ後も、ウェブアプリの窓に一度も焦点が来ず、Todoku の窓から焦点が移らない（ウェブアプリの窓は焦点を取れない窓）',
+      before && target && target.isVisible() && target.isFocusable() === false && !focusLog.includes(target.getTitle()) && focused !== target
+        && (focused === home || focused === null),
+      { before, focused: focused ? focused.getTitle() : null, focusLog, focusable: target ? target.isFocusable() : null });
+
+    // 守りの二つ目: それでもウェブアプリの窓に焦点が来たら、Todoku の窓へ返す。
+    let homeFocusCalls = 0;
+    const homeFocus = home.focus.bind(home);
+    home.focus = () => { homeFocusCalls += 1; homeFocus(); };
+    target.emit('focus');
+    home.focus = homeFocus;
+    check('焦点: ウェブアプリの窓に焦点が来たと知らされたら、Todoku の窓へ返す', homeFocusCalls === 1, { homeFocusCalls });
+
+    // ログインのために前に出すときだけ焦点を取れる窓にし、次にカードを動かすと戻す。
+    const shown = showTarget('grab');
+    const duringLogin = target.isFocusable();
+    await runCard(BrowserWindow, grab, 'office');
+    check('焦点: 「ログインの窓を前に出す」の間だけ焦点を取れる窓にし、次にカードを読むと焦点を取れない窓に戻す',
+      shown === true && duringLogin === true && target.isFocusable() === false, { shown, duringLogin, after: target.isFocusable() });
+
+    // 区切り: 一件の中の別々の要素の文字の間に区切りを入れる。字の飾り（strong）は区切らない。aria-hidden の中は読まない。
+    check('区切り: 一覧の一件の中で、日付と題の間に空白か読点が入る（字の飾りの所は区切らず、aria-hidden の中は読まない）',
+      news.ok && JSON.stringify(news.items) === JSON.stringify(['2026年11月3日 Open Day のご案内', '2026年11月1日 重要：図書館の休館日', '2026年10月30日、ごみの出し方が変わります']),
+      news.items);
+    home.focus();
+    await wait(200);
+    const office = await runCard(BrowserWindow, grab, 'office');
+    check('区切り: 読むカードは、見出し・画像の説明・段落の中の改行ごとに別の行になる（見えない所は読まない）',
+      office.ok && office.text === '役場の窓口\n役場の写真 あおば町役場\n電話 （作り物の番号）\n窓口 8時30分から17時15分', office.text);
+  } finally {
+    closeTarget('grab');
+    setHomeWindow(null);
+    home.destroy();
   }
 }
 
@@ -291,6 +357,56 @@ async function generateChecks() {
     check('カードを作る: 作った束のお知らせのカードで、4件読める', slides.ok && slides.text.startsWith('4件あります。') && slides.text.includes('市民まつり'), slides);
     const counter = await runCard(BrowserWindow, deck, deck.cards[3].id, { waitMs: 500 });
     check('カードを作る: 作った束の本文のカードで、窓口の案内を読める', counter.ok && counter.text.includes('8時30分'), counter);
+
+    // 題の手がかり: Claude が題の元（titleSelector）を返さないときも、見出し・aria-labelledby・ランドマークの aria-label・
+    // 最初の短い文字から、手元で題を作る（気象庁の警報のページで3枚とも「お知らせ 1」のような題になった）。
+    const noTitle = (role, action, selector, container = '') => ({ role, action, selector, container, titleSelector: '', reason: '作り物。' });
+    const titled = await generateDeck({
+      BrowserWindow,
+      url: 'fixture:titles.html',
+      callModel: async () => ({
+        cards: [
+          noTitle('notice', 'read', '.banner'),
+          noTitle('menu', 'list', 'nav .menu a'),
+          noTitle('notice', 'read', '.pickup'),
+          noTitle('main', 'read', '.weather'),
+          noTitle('main', 'read', '.mayor'),
+          noTitle('list', 'list', '.warn-list li', '.warn-list'),
+          noTitle('main', 'read', '.topic'),
+        ],
+      }),
+      store,
+      allowFixtures: true,
+    });
+    check('カードを作る: 題の元が無いときは、ランドマークの aria-label・最初の短い文字・aria-labelledby・直前の見出し・中の見出しから手元で題を作り、何も無いときだけ役目の種類の題にする',
+      titled.ok && JSON.stringify(titled.config.cards.map((c) => c.title))
+        === JSON.stringify(['お知らせ 1', '町のメニュー', 'ごみの出し方', 'あすの天気', '町長の部屋', 'いま出ている注意報', '図書館の本の返し方']),
+      titled.ok ? titled.config.cards.map((c) => c.title) : titled);
+    if (titled.ok) store.remove(titled.config.id);
+
+    // 待ち方: 主な区画（main）が空のうちと、ページが変わり続けているうちは、構造を集めない（表を後から描くページ）。
+    let lateStructure = '';
+    const started = Date.now();
+    const late = await generateDeck({
+      BrowserWindow,
+      url: 'fixture:late-content.html',
+      callModel: async ({ user }) => {
+        lateStructure = user;
+        return { cards: user.includes('table.warn-table') ? [noTitle('table', 'list', '.warn-table tr')] : [] };
+      },
+      store,
+      allowFixtures: true,
+    });
+    const lateMs = Date.now() - started;
+    check('カードを作る: 4秒後に表を描くページでも、表が出るまで待ってから構造を集め、表のカードを作る（題は直前の見出し）',
+      late.ok && lateStructure.includes('table.warn-table') && late.config.cards.length === 1 && late.config.cards[0].title === '警報と注意報（作り物）',
+      { ok: late.ok, reason: late.reason, lateMs, sawTable: lateStructure.includes('table.warn-table'), cards: late.ok ? late.config.cards : null });
+    if (late.ok) {
+      const rows = await runCard(BrowserWindow, late.config, late.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: 後から描いた表のカードで、3行を区切り付きで読める',
+        rows.ok && JSON.stringify(rows.items) === JSON.stringify(['あおば町 大雨注意報', 'みどり町 雷注意報', 'さくら町 発表なし']), rows.items);
+      store.remove(late.config.id);
+    }
     check('カードを作る: 消すと、置き場から消え、次の起動で出ない', store.remove(deck.id) === true && loadConfigDir(store.dir).length === 0);
   } finally {
     fs.rmSync(userData, { recursive: true, force: true });
@@ -699,6 +815,28 @@ async function rendererGenerateChecks() {
       delSaid === '「作り物の町のページ」のカードの束を消しました。' && afterDel.heading === '新しいページからカードを作る'
         && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
         && JSON.stringify(await js('window.fakeLog.deleted()')) === '["page-test"]', { delSaid, afterDel, topAfterDel });
+
+    // 欄の Enter で作り始めた直後に、焦点を移した先へ Enter が続けて届いても（押したままの繰り返し・読み上げソフトが続けて渡すもの）、
+    // 「読み込み中です。少しお待ちください。」を言わない（2026-11-03 の Windows の確かめで一度出た）。
+    await js(`(() => {
+      window.__saidAll = [];
+      for (const id of ['status', 'alert']) {
+        const n = document.getElementById(id);
+        new MutationObserver(() => { if (n.textContent) window.__saidAll.push(n.textContent); }).observe(n, { childList: true, characterData: true, subtree: true });
+      }
+      return true;
+    })()`);
+    await key('Enter');
+    await typeUrl('https://example.com/town');
+    await key('Enter');
+    const afterEnter = await active();
+    await js("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))");
+    await js("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true, cancelable: true }))");
+    await wait(800);
+    const saidAfterEnter = await js('window.__saidAll.slice()');
+    check('作る欄の Enter で作り始めた直後に Enter が続けて届いても、「読み込み中です。少しお待ちください。」を言わず、作り終えたことを一度だけ言う',
+      afterEnter.text.startsWith('カードを作っています。') && !saidAfterEnter.some((t) => t.startsWith('読み込み中です'))
+        && saidAfterEnter.filter((t) => t === '「作り物の町のページ」のカードを2枚作りました。').length === 1, { afterEnter, saidAfterEnter });
   } finally {
     win.destroy();
   }

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」）。設定ファイルの無いページから作った束の題を、見出しなどの手がかりから手元で作れるかの試し。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-03 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>あおば町のページ（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <div class="banner"><p>手がかりの無い所です。この文は二十字より長いので、題には使いません。</p></div>
+  <header>
+    <nav aria-label="町のメニュー">
+      <ul class="menu"><li><a href="#a">くらし</a></li><li><a href="#b">子育て</a></li><li><a href="#c">観光</a></li></ul>
+    </nav>
+  </header>
+  <main>
+    <!-- 最初の短い文字（日付だけの文字は飛ばす） -->
+    <div class="pickup"><p>2026年11月3日</p><p>ごみの出し方</p><p>燃えるごみは月曜と木曜の朝に出してください。</p></div>
+    <!-- aria-labelledby の先 -->
+    <div class="weather" role="region" aria-labelledby="weather-title"><p id="weather-title">あすの天気</p><p>晴れのち くもりの見込みです。</p></div>
+    <!-- ランドマークの aria-label -->
+    <section aria-label="町長の部屋"><div class="mayor"><p>町長からのあいさつの文がここに入ります。長い文なので題には使いません。</p></div></section>
+    <!-- 直前の見出し -->
+    <section class="warn"><h2>いま出ている注意報</h2><ul class="warn-list"><li>あおば町 大雨注意報</li><li>みどり町 雷注意報</li></ul></section>
+    <!-- 中の見出し -->
+    <article class="topic"><h3>図書館の本の返し方</h3><p>返す箱は入口の左にあります。</p></article>
+  </main>
+</body>
+</html>
