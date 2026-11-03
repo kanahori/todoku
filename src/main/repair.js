@@ -43,6 +43,7 @@ function createClaudeCaller({ model = process.env.CARDS_REPAIR_MODEL || DEFAULT_
     const response = await client.beta.messages.parse({
       model,
       max_tokens: 16000,
+      // temperature は付けない。claude-opus-5-5 は temperature・top_p・top_k を受け付けず 400 になる（作るたびに束が変わる件は、手元の守りで抑える）。
       // 安全の判定で断られたときは、サーバーの側で別のモデルに回す。
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',

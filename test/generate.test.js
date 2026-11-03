@@ -48,9 +48,9 @@ const SKELETON = 'body\n  header.top\n    nav.menu\n      a (文字あり)\n  ma
 const SETTLE = { stepMs: 1, minMs: 0, stableMs: 0, maxMs: 30 };
 
 // ページで動かす文の種類ごとに答える。inspect は案の数だけの probe を返す。
-function pageOf({ skeleton = SKELETON, probes, sections = [] }) {
+function pageOf({ skeleton = SKELETON, probes, sections = [], mainList = null }) {
   return (script) => {
-    if (script.includes('pageSections')) return sections;
+    if (script.includes('pageSections')) return { sections, mainList };
     if (script.includes('pageSettleProbe')) return { nodes: 40, chars: 100, resources: 3, waiting: false };
     if (script.includes('pageSkeleton')) return { skeleton, nodes: 8, truncated: false };
     if (script.includes('pageInspect')) return probes;
@@ -73,8 +73,8 @@ const ANSWER = {
 };
 const PROBES = [
   { count: 3, hasText: true, containerOk: true, title: '町のお知らせ' },
-  { count: 4, hasText: true, containerOk: false, title: '' },
-  { count: 1, hasText: true, containerOk: false, title: '' },
+  { count: 4, hasText: true, containerOk: false, title: 'くらしのメニュー' },
+  { count: 1, hasText: true, containerOk: false, title: '町の案内' },
   { count: 4, hasText: true, containerOk: false, title: 'くらし' },
 ];
 
@@ -143,17 +143,17 @@ test('試した結果で残すカードを選ぶ: 当たらない・空・押す
   const cards = pickCards(candidates, probes);
   assert.deepEqual(cards, [
     { id: 'list-1', title: '町の お知らせ', action: 'list', selector: 'ul.news li', container: 'ul.news' },
-    { id: 'list-2', title: '一覧 1', action: 'list', selector: 'ol li' },
-    { id: 'button-3', title: '探す', action: 'click', selector: '#go' },
-    { id: 'main-4', title: '同じ題', action: 'read', selector: '.a' },
-    { id: 'main-5', title: '同じ題 2', action: 'read', selector: '.b' },
+    // 題を作れない一覧（ol li）は作らない。
+    { id: 'button-2', title: '探す', action: 'click', selector: '#go' },
+    { id: 'main-3', title: '同じ題', action: 'read', selector: '.a' },
+    { id: 'main-4', title: '同じ題 2', action: 'read', selector: '.b' },
   ]);
   // 多すぎるときは上限で止める。
   const lots = Array.from({ length: 12 }, (_, k) => ({ role: 'main', action: 'read', selector: `#p${k}`, container: '', titleSelector: '' }));
-  const lotsProbes = lots.map(() => ({ count: 1, hasText: true, containerOk: false, title: '' }));
+  const lotsProbes = lots.map((_, k) => ({ count: 1, hasText: true, containerOk: false, title: `節の${k}` }));
   const capped = pickCards(lots, lotsProbes);
   assert.equal(capped.length, MAX_CARDS);
-  assert.equal(capped[7].title, '本文 8');
+  assert.equal(capped[7].title, '節の7');
 });
 
 test('題が地名の一語のカードと、題の手がかりの無い検索のカード: 中の短い文字か操作の種類を題にし、中身が一語だけのカードは作らない。押すカードの一語の題は、何をするかの分かる形にする', () => {
@@ -187,7 +187,8 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
   ];
   // 一つの束は 8枚までなので、前の7つと後の4つに分けて確かめる。
   assert.deepEqual(pickCards(candidates.slice(0, 7), probes.slice(0, 7)).map((c) => c.title),
-    ['地域を選ぶ', '大雨注意報が出ています。', 'みどり市の情報', 'サイト内を検索する', 'くわしく探す', '地域を選ぶ（さくら町）']);
+    ['地域を選ぶ', '大雨注意報が出ています。', 'みどり市の情報', '地域を選ぶ（さくら町）']);
+  // 名前の無い押す所（検索のボタンでも）は作らない（押す所の名前が分からないため）。
   assert.deepEqual(pickCards(candidates.slice(7), probes.slice(7)).map((c) => c.title),
     ['市町村を選ぶ', 'サイト内を検索する', '施設を検索する']);
 });
@@ -195,8 +196,10 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
 test('題と束の名前: 長ければ語の切れ目で切り、「ページの題／サイトの名前」はページの題だけにする', () => {
   // 束の名前（40字まで）: サイトの名前を外す。
   assert.equal(deckName('路線バスのご案内／あおば町公式ウェブサイト', 'https://example.com/'), '路線バスのご案内');
-  assert.equal(deckName('自転車の貸し出し | あおば町', 'https://example.com/'), '自転車の貸し出し');
-  assert.equal(deckName('お知らせ - あおば町', 'https://example.com/'), 'お知らせ');
+  // サイトの名前と分からない所は外さない（「気象庁｜警報・注意報」を「気象庁」だけにしない）。
+  assert.equal(deckName('あおば気象台｜警報・注意報', 'https://example.com/'), 'あおば気象台｜警報・注意報');
+  assert.equal(deckName('自転車の貸し出し | あおば町', 'https://example.com/'), '自転車の貸し出し | あおば町');
+  assert.equal(deckName('お知らせ - あおば町公式サイト', 'https://example.com/'), 'お知らせ');
   // 語の切れ目（括弧の前・読点の前）で切る。
   const long = 'あおば町の路線バスと乗り合いタクシーのご案内と時刻表の見方（予約電話番号、利用方法）';
   assert.equal(deckName(long, 'https://example.com/'), 'あおば町の路線バスと乗り合いタクシーのご案内と時刻表の見方');
@@ -272,8 +275,8 @@ test('作る: 構造だけを送り、試して残ったカードを新しい束
     assert.match(sent.system, /4〜8枚/);
     assert.deepEqual(r.config.cards.map((c) => [c.id, c.title, c.action]), [
       ['list-1', '町のお知らせ', 'list'],
-      ['menu-2', 'メニュー 1', 'list'],
-      ['main-3', '本文 1', 'read'],
+      ['menu-2', 'くらしのメニュー', 'list'],
+      ['main-3', '町の案内', 'read'],
     ]);
     assert.equal(r.dropped, 1);
     assert.equal(r.config.name, '作り物の町のお知らせ');

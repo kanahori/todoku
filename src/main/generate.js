@@ -335,19 +335,35 @@ function pageInspect(tryOne, cards) {
     if (!region) return '';
     return innerHeading(region) || precedingHeading(region) || labelledBy(region) || landmarkLabel(region) || firstShortText(region);
   };
+  // 文書の中の順（束のカードを、Claude の返した順でなく、ページの上からの順に並べるため）。
+  const order = new Map();
+  [...document.querySelectorAll('*')].forEach((e, i) => order.set(e, i));
+  // 中身が見出しだけか（見出しの文字を除くと、文字が残らない）。
+  const squeeze = (t) => clean(t).replace(/[\s、。，．・：:（）()「」『』【】［］\[\]!！?？]/g, '');
+  const headingOnly = (el) => {
+    if (!el) return false;
+    const all = squeeze(el.innerText || el.textContent);
+    if (!all) return false;
+    const heads = el.matches(HEADINGS) ? [el] : [...el.querySelectorAll(HEADINGS)];
+    const headText = squeeze(heads.map((h) => h.innerText || h.textContent).join(''));
+    return headText !== '' && all === headText;
+  };
   return cards.map((c) => {
     const probe = tryOne(c.selector);
     const containerOk = Boolean(c.container && one(c.container));
     const region = probe.count > 0 ? regionOf(c) : null;
+    // 押すカードの題は、押す所そのものの名前だけ（分からなければ作らない）。
+    const ownName = c.action === 'click' && probe.count === 1 ? nameOf(one(c.selector)) : '';
     const titleEl = one(c.titleSelector);
-    let title = titleFits(titleEl, region) ? nameOf(titleEl) : '';
-    if (!title && c.action === 'click' && probe.count === 1) title = nameOf(one(c.selector));
-    if (!title && probe.count > 0) title = placeName(region);
+    let title = c.action === 'click' ? ownName : titleFits(titleEl, region) ? nameOf(titleEl) : '';
+    if (!title && c.action !== 'click' && probe.count > 0) title = placeName(region);
     // 題が重なったときに、番号でなく別の題にするための候補（場所の中の見出し・直前の見出し・中の短い文字）。
     const alts = region ? [innerHeading(region), precedingHeading(region), ...shortTexts(region)].filter(Boolean) : [];
     return {
       count: probe.count, hasText: probe.hasText, containerOk, title: title.slice(0, 200), body: bodyOf(c), texts: shortTexts(region),
       alts: alts.map((t) => t.slice(0, 200)), toc: c.action !== 'click' && isToc(region), crumb: isCrumb(region),
+      headingOnly: c.action === 'read' && headingOnly(one(c.selector)),
+      pos: region && order.has(region) ? order.get(region) : (one(c.selector) && order.get(one(c.selector))) || 0,
     };
   });
 }
@@ -357,6 +373,8 @@ function pageInspect(tryOne, cards) {
 // 節は、見出しを含む区画（その見出しだけを含む section など）か、見出しから次の同じ段か上の段の見出しの手前まで。
 // 文字が少ない節（minChars 字より少ない）と、Claude が選んだカード（taken の selector）の中にある節は作らない。
 // 自転車のページの「〇〇とは」の長い段落など、本文の節を読むカードが無かった（2026-11-04 の Windows の確かめ）。
+// あわせて、本文の区画の主な表・一覧（行の一番多い table か ul・ol。3行以上）を一つ返す（mainList）。
+// Claude の案に無くても必ず一枚作るため（気象庁の警報のページで、一番大事な発表状況の表が、作るたびに入ったり入らなかったりした）。
 function pageSections(taken, maxSections, minChars) {
   const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
   const textOf = (el) => clean(el.innerText || el.textContent);
@@ -375,7 +393,9 @@ function pageSections(taken, maxSections, minChars) {
     }
     main = best;
   }
-  if (!main) return [];
+  if (!main) return { sections: [], mainList: null };
+  const order = new Map();
+  [...document.querySelectorAll('*')].forEach((e, i) => order.set(e, i));
   const selectorOf = (el) => {
     if (el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
     const parts = [];
@@ -403,6 +423,40 @@ function pageSections(taken, maxSections, minChars) {
       // 書き方の誤りのある selector は、もう落としてある
     }
   }
+  // 本文の主な表・一覧。
+  const outside = (el) => Boolean(el.closest('nav, header, footer, aside, [role="navigation"]')) || hidden(el);
+  const overlapsTaken = (el) => takenEls.some((t) => el === t || el.contains(t) || t.contains(el));
+  const lists = [];
+  for (const t of main.querySelectorAll('table')) {
+    const rows = [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td')).length;
+    if (rows >= 3 && !outside(t)) lists.push({ el: t, rows, table: true });
+  }
+  for (const l of main.querySelectorAll('ul, ol')) {
+    const rows = [...l.children].filter((c) => c.tagName === 'LI').length;
+    if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol')) lists.push({ el: l, rows, table: false });
+  }
+  lists.sort((a, b) => b.rows - a.rows || order.get(a.el) - order.get(b.el));
+  let mainList = null;
+  const top = lists[0];
+  if (top && !overlapsTaken(top.el)) {
+    const sel = selectorOf(top.el);
+    if (sel) {
+      const cap = top.table && top.el.caption ? textOf(top.el.caption) : '';
+      const label = clean(top.el.getAttribute('aria-label'));
+      let heading = '';
+      for (let n = top.el, d = 0; n && n !== main && !heading && d < 3; n = n.parentElement, d++) {
+        for (let p = n.previousElementSibling; p && !heading; p = p.previousElementSibling) {
+          const h = p.matches('h1, h2, h3, h4, h5, h6') ? p : null;
+          if (h) heading = textOf(h);
+          else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
+        }
+      }
+      mainList = {
+        selector: top.table ? `${sel} tr:has(td)` : `${sel} > li`, container: sel, table: top.table,
+        title: cap || label || heading, pos: order.get(top.el),
+      };
+    }
+  }
   let level = 0;
   for (const l of [2, 3, 4]) {
     if ([...main.querySelectorAll(`h${l}`)].some((h) => !hidden(h) && !h.closest('nav, aside') && textOf(h))) {
@@ -410,7 +464,7 @@ function pageSections(taken, maxSections, minChars) {
       break;
     }
   }
-  if (!level) return [];
+  if (!level) return { sections: [], mainList };
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
   const out = [];
@@ -426,7 +480,9 @@ function pageSections(taken, maxSections, minChars) {
     if (box && box !== main && main.contains(box) && box.children.length > 1 && box.querySelectorAll(stops).length === 1 && box.firstElementChild === h) {
       const sel = selectorOf(box);
       const chars = textOf(box).length - title.length;
-      if (sel && chars >= minChars && !overlaps([box])) out.push({ selector: sel, until: null, title, chars });
+      if (sel && chars >= minChars && !overlaps([box]) && !(mainList && box.contains(top.el))) {
+        out.push({ selector: sel, until: null, title, chars, pos: order.get(box) });
+      }
       continue;
     }
     // 見出しから、次の同じ段か上の段の見出しの手前まで。見出しが包みの中にあるときは、包みから数える。
@@ -439,9 +495,11 @@ function pageSections(taken, maxSections, minChars) {
       range.push(n);
     }
     const sel = selectorOf(anchor);
-    if (sel && chars >= minChars && !overlaps(range)) out.push({ selector: sel, until, title, chars });
+    if (sel && chars >= minChars && !overlaps(range) && !(mainList && range.some((n) => n === top.el || n.contains(top.el)))) {
+      out.push({ selector: sel, until, title, chars, pos: order.get(anchor) });
+    }
   }
-  return out;
+  return { sections: out, mainList };
 }
 
 function buildSectionsScript(taken) {
@@ -461,9 +519,22 @@ function addSectionCards(cards, sections) {
     titles.add(unique);
     const card = { id: `section-${out.length + 1}`, title: unique, action: 'read', selector: s.selector };
     if (s.until) card.until = s.until;
+    Object.defineProperty(card, 'pos', { value: Number(s.pos) || 0, enumerable: false });
     out.push(card);
   }
   return out;
+}
+
+// 本文の主な表・一覧のカードを、Claude の案に無ければ足す。題は表の題（caption）・aria-label・直前の見出し、無ければ「表を読む」「一覧を読む」。
+function addMainListCard(cards, mainList) {
+  if (!mainList || !mainList.selector) return cards;
+  const titles = new Set(cards.map((c) => c.title));
+  const title = cleanTitle(mainList.title) || (mainList.table ? '表を読む' : '一覧を読む');
+  let unique = title;
+  for (let n = 2; titles.has(unique); n++) unique = `${title} ${n}`;
+  const card = { id: `${mainList.table ? 'table' : 'list'}-${cards.length + 1}`, title: unique, action: 'list', selector: mainList.selector, container: mainList.container };
+  Object.defineProperty(card, 'pos', { value: Number(mainList.pos) || 0, enumerable: false });
+  return [...cards, card];
 }
 
 function buildInspectScript(candidates) {
@@ -540,7 +611,6 @@ function pickCards(candidates, probes) {
   const cards = [];
   const seen = new Set();
   const titles = new Set();
-  const perRole = {};
   let tocTaken = false;
   candidates.forEach((c, k) => {
     if (cards.length >= MAX_CARDS) return;
@@ -552,6 +622,10 @@ function pickCards(candidates, probes) {
     let title = cleanTitle(probe.title);
     const body = cleanTitle(probe.body, 200);
     if (c.action !== 'click' && ((title && body === title) || isOneWord(body))) return;
+    // 中身が見出し一行だけのカードと、題とほぼ同じ一行だけのカードは作らない（バスのページと気象庁の一枚目がこの形だった）。
+    if (c.action !== 'click' && (probe.headingOnly || nearlySame(body, title))) return;
+    // 押すカードは、押す所の名前が分からなければ作らない。
+    if (c.action === 'click' && !title) return;
     // パンくずと、題が「現在のページ」のカードは作らない。
     if (probe.crumb || /^現在(の)?(ページ|位置|地)$/.test(title)) return;
     // 目次は「目次を読む」の一枚にまとめる（二つ目からは作らない）。
@@ -562,10 +636,9 @@ function pickCards(candidates, probes) {
     }
     if (c.action === 'click' && title) title = clickTitle(title);
     if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
-    if (!title) {
-      perRole[c.role] = (perRole[c.role] || 0) + 1;
-      title = `${ROLE_LABELS[c.role]} ${perRole[c.role]}`;
-    }
+    // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
+    // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。
+    if (!title) return;
     // 題が重なったら、番号を付ける前に、場所の中の見出し・直前の見出し・中の短い文字から、まだ使っていない題を探す。
     let unique = title;
     if (titles.has(unique)) {
@@ -577,16 +650,36 @@ function pickCards(candidates, probes) {
     titles.add(unique);
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
     if (c.action === 'list' && c.container && probe.containerOk) card.container = c.container;
+    Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
     cards.push(card);
   });
   return cards;
 }
 
+// 中身が題とほぼ同じ一行か（空白・記号を除いて比べ、同じか、片方が他方を含み、違いが4字までのとき）。
+function nearlySame(body, title) {
+  const sq = (t) => String(t || '').replace(/[\s、。，．・：:（）()「」『』【】［］[\]!！?？]/g, '');
+  const b = sq(body);
+  const t = sq(title);
+  if (!b || !t) return false;
+  return b === t || ((b.includes(t) || t.includes(b)) && Math.abs(b.length - t.length) <= 4);
+}
+
+// 束のカードを、ページの上からの順に並べ、id を振り直す（Claude の返す順が毎回違っても、同じ束になるように）。
+function orderCards(cards) {
+  const sorted = cards.map((c, i) => ({ c, i })).sort((a, b) => (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i).map((x) => x.c);
+  return sorted.map((c, i) => ({ ...c, id: `${c.id.replace(/-\d+$/, '')}-${i + 1}` }));
+}
+
 // 束の名前: ページの title。無ければ URL のホスト名、それも無ければ「新しいページ」。
-// 「ページの題／サイトの名前」「ページの題 | サイトの名前」の形なら、ページの題の所だけを使う。
+// 「ページの題／サイトの名前」の形で、区切った所の一つがサイトの名前（公式・ホームページ・ウェブサイト など）なら、それを外す。
+// サイトの名前と分からないときは外さない（「気象庁｜警報・注意報」を「気象庁」だけにしない。2026-11-04 の Windows の確かめ）。
+const SITE_WORD = /公式|ホームページ|ウェブサイト|Webサイト|WEBサイト|webサイト|サイト$/;
 function deckName(title, url) {
   const parts = String(title || '').split(/\s*[｜|／]\s*|\s+[-–—]\s+/).map((p) => p.trim()).filter(Boolean);
-  const name = cleanTitle(parts.length > 1 && parts[0].length >= 2 ? parts[0] : title, NAME_MAX);
+  const kept = parts.filter((p) => !SITE_WORD.test(p));
+  const page = parts.length > 1 && kept.length > 0 && kept.length < parts.length ? kept.join('｜') : title;
+  const name = cleanTitle(page, NAME_MAX);
   if (name) return name;
   try {
     const host = new URL(url).hostname;
@@ -625,8 +718,9 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const picked = pickCards(candidates, probes);
   // 本文の見出しごとの節を読むカードを足す（Claude が選んだ読む・一覧のカードの中にある節は除く）。
   const taken = picked.filter((c) => c.action !== 'click').map((c) => c.selector);
-  const sections = await win.webContents.executeJavaScript(buildSectionsScript(taken));
-  const cards = addSectionCards(picked, Array.isArray(sections) ? sections : []);
+  const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken));
+  const withMain = addMainListCard(picked, extras && extras.mainList);
+  const cards = orderCards(addSectionCards(withMain, extras && Array.isArray(extras.sections) ? extras.sections : []));
   if (cards.length === 0) return fail('no-cards');
   // 行き先が変わった（転送された）ときは、行き着いたページの URL を残す（http:// と https:// のときだけ）。
   const landed = externalUrl(win.webContents.getURL());
@@ -651,7 +745,8 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
     file,
     tried: candidates.length,
     dropped: candidates.length - picked.length,
-    sections: cards.length - picked.length,
+    sections: cards.filter((c) => c.id.startsWith('section-')).length,
+    mainList: withMain.length > picked.length,
     structure: { nodes, chars: limited.text.length, cut: truncated || limited.cut },
     at: now().toISOString(),
   };

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば気象台」の警報・注意報）。気象台の警報のページで見た作り（見出しだけの区画・発表状況の表・名前の無いボタン）をまねる。 -->
+<!-- 設定ファイルの無いページから作った束が、Claude の案が毎回違っても同じ束になるか、主な表を必ず一枚作るかの試し。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>あおば気象台｜警報・注意報（作り物）</title>
+  <style>body { color: #000000; background: #ffffff; }</style>
+</head>
+<body>
+  <div class="banner"><p>このページの情報は、練習のために作ったもので、本物の発表ではありません。</p></div>
+  <main>
+    <h1>あおば県の警報・注意報</h1>
+    <div class="lead"><h2>あおば県の警報・注意報（発表状況）</h2></div>
+    <table class="status">
+      <caption>発表状況</caption>
+      <tr><th>市町村</th><th>発表中の警報・注意報</th></tr>
+      <tr><td>あおば市</td><td>大雨注意報</td></tr>
+      <tr><td>みどり市</td><td>雷注意報</td></tr>
+      <tr><td>さくら町</td><td>発表なし</td></tr>
+      <tr><td>やまなみ町</td><td>大雨注意報、雷注意報</td></tr>
+      <tr><td>かわべ村</td><td>発表なし</td></tr>
+      <tr><td>うみべ町</td><td>波浪注意報</td></tr>
+      <tr><td>おかの市</td><td>発表なし</td></tr>
+      <tr><td>もりの村</td><td>大雨注意報</td></tr>
+    </table>
+    <p class="note">発表状況は、作り物の値です。大雨や雷に気をつけて、川や海に近づかないでください。</p>
+    <button class="tool" type="button"><span class="icon"></span></button>
+    <button class="print" type="button">印刷する</button>
+  </main>
+</body>
+</html>

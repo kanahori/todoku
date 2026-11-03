@@ -377,21 +377,21 @@ async function generateChecks() {
       };
     };
     const r = await generateDeck({ BrowserWindow, url: 'fixture:city-top.html', callModel: fakeModel, store, allowFixtures: true });
-    check('カードを作る: 練習のページから、当たる5枚の束を作る（当たらない・空・押す所が3つ・書き方の誤りの4枚を落とす）',
-      r.ok && r.config.cards.length === 5 && r.dropped === 4, r);
+    check('カードを作る: 練習のページから、当たる4枚の束を作る（当たらない・空・押す所が3つ・書き方の誤り・題を作れないの5枚を落とす）',
+      r.ok && r.config.cards.length === 4 && r.dropped === 5, r);
     check('カードを作る: Claude に送る文に、ページの文字も URL も入っていない',
       sentUser.includes('news-list') && !sentUser.includes('市民まつり') && !sentUser.includes('新着情報')
         && !sentUser.includes('みどり市') && !sentUser.includes('city-top') && !sentUser.includes('file:'), sentUser.slice(0, 300));
-    check('カードを作る: 題は手元で、見出しの文字・押す所の文字・役目の種類から作る',
-      r.ok && JSON.stringify(r.config.cards.map((c) => c.title)) === JSON.stringify(['お知らせ 1', '新着情報', 'ごみの日', '窓口の案内', 'くらし']), r.ok && r.config.cards);
-    check('カードを作る: 束の名前はページの title（手元で使う）で、知らせは「「名前」のカードを5枚作りました。」',
-      r.ok && r.config.name === 'みどり市 公式ホームページ（作り物）' && doneMessage(r.config) === '「みどり市 公式ホームページ（作り物）」のカードを5枚作りました。', r.ok && r.config.name);
+    check('カードを作る: 題は手元で、見出しの文字・押す所の文字から作り、ページの上からの順に並べる（題を作れないお知らせのカードは作らない）',
+      r.ok && JSON.stringify(r.config.cards.map((c) => c.title)) === JSON.stringify(['くらし', '新着情報', 'ごみの日', '窓口の案内']), r.ok && r.config.cards);
+    check('カードを作る: 束の名前はページの title（手元で使う）で、知らせは「「名前」のカードを4枚作りました。」',
+      r.ok && r.config.name === 'みどり市 公式ホームページ（作り物）' && doneMessage(r.config) === '「みどり市 公式ホームページ（作り物）」のカードを4枚作りました。', r.ok && r.config.name);
     // 次の起動: 置き場を設定ファイルの読み方で読み直すと、同じ束が出る。
     const reloaded = loadConfigDir(store.dir);
     check('カードを作る: 次の起動でも、置き場から同じ束が読める', reloaded.length === 1 && reloaded[0].config && reloaded[0].config.id === r.config.id, reloaded);
     const deck = reloaded[0].config;
-    const slides = await runCard(BrowserWindow, deck, deck.cards[0].id, { waitMs: 500 });
-    check('カードを作る: 作った束のお知らせのカードで、4件読める', slides.ok && slides.text.startsWith('4件あります。') && slides.text.includes('市民まつり'), slides);
+    const news = await runCard(BrowserWindow, deck, deck.cards[1].id, { waitMs: 500 });
+    check('カードを作る: 作った束の新着情報のカードで、項目を読める', news.ok && news.action === 'list' && news.items.length > 0, news);
     const counter = await runCard(BrowserWindow, deck, deck.cards[3].id, { waitMs: 500 });
     check('カードを作る: 作った束の本文のカードで、窓口の案内を読める', counter.ok && counter.text.includes('8時30分'), counter);
 
@@ -415,9 +415,9 @@ async function generateChecks() {
       store,
       allowFixtures: true,
     });
-    check('カードを作る: 題の元が無いときは、ランドマークの aria-label・最初の短い文字・aria-labelledby・直前の見出し・中の見出しから手元で題を作り、何も無いときだけ役目の種類の題にする',
+    check('カードを作る: 題の元が無いときは、ランドマークの aria-label・最初の短い文字・aria-labelledby・直前の見出し・中の見出しから手元で題を作り、何も無いカードは作らない',
       titled.ok && JSON.stringify(titled.config.cards.map((c) => c.title))
-        === JSON.stringify(['お知らせ 1', '町のメニュー', 'ごみの出し方', 'あすの天気', '町長の部屋', 'いま出ている注意報', '図書館の本の返し方']),
+        === JSON.stringify(['町のメニュー', 'ごみの出し方', 'あすの天気', '町長の部屋', 'いま出ている注意報', '図書館の本の返し方']),
       titled.ok ? titled.config.cards.map((c) => c.title) : titled);
     if (titled.ok) store.remove(titled.config.id);
 
@@ -437,9 +437,9 @@ async function generateChecks() {
       store,
       allowFixtures: true,
     });
-    check('カードを作る: 中身が題と同じ一語だけのカード（全国）は作らず、地名の一語の題は「地域を選ぶ」や中の短い文に、手がかりの無い検索は「サイト内を検索する」にする',
-      area.ok && area.dropped === 1
-        && JSON.stringify(area.config.cards.map((c) => c.title)) === JSON.stringify(['地域を選ぶ', '大雨注意報が出ています。', 'サイト内を検索する']),
+    check('カードを作る: 中身が題と同じ一語だけのカード（全国）は作らず、地名の一語の題は「地域を選ぶ」や中の短い文に、名前の無い検索のボタンは作らない',
+      area.ok && area.dropped === 2
+        && JSON.stringify(area.config.cards.map((c) => c.title)) === JSON.stringify(['地域を選ぶ', '大雨注意報が出ています。']),
       area.ok ? { dropped: area.dropped, titles: area.config.cards.map((c) => c.title) } : area);
     if (area.ok) store.remove(area.config.id);
 
@@ -465,9 +465,37 @@ async function generateChecks() {
     });
     check('カードを作る: パンくずと「現在のページ」を作らず、目次は「目次を読む」に、合わない題の元は使わず、重なった題は中の見出しにし、押すカードは「サイト内を検索する」にする',
       guide.ok && guide.dropped === 2 && guide.config.name === '路線バスのご案内（予約電話番号、利用方法）'
-        && JSON.stringify(guide.config.cards.map((c) => c.title)) === JSON.stringify(['目次を読む', '資料のダウンロード', '利用方法', '予約のしかた', 'サイト内を検索する']),
+        && JSON.stringify(guide.config.cards.map((c) => c.title)) === JSON.stringify(['サイト内を検索する', '目次を読む', '利用方法', '予約のしかた', '資料のダウンロード']),
       guide.ok ? { name: guide.config.name, dropped: guide.dropped, titles: guide.config.cards.map((c) => c.title) } : guide);
     if (guide.ok) store.remove(guide.config.id);
+
+    // 同じページから二回作る: Claude の案の数・順・中身が違っても、手元の守り（題を作れないカード・見出しだけのカード・
+    // 名前の無い押す所を作らない・主な表を必ず一枚作る・ページの上からの順に並べる）で、同じ束になる。
+    const runOnce = (answer) => generateDeck({ BrowserWindow, url: 'fixture:warnings-table.html', callModel: async () => ({ cards: answer }), store, allowFixtures: true });
+    const first = await runOnce([
+      noTitle('notice', 'read', '.banner'),
+      noTitle('heading', 'read', '.lead'),
+      noTitle('button', 'click', '.tool'),
+      noTitle('button', 'click', '.print'),
+      noTitle('main', 'read', '.note'),
+    ]);
+    const second = await runOnce([
+      noTitle('main', 'read', '.note'),
+      noTitle('button', 'click', '.tool'),
+      noTitle('button', 'click', '.print'),
+    ]);
+    const shape = (r) => (r.ok ? { name: r.config.name, cards: r.config.cards } : r);
+    check('カードを作る: Claude の案が違っても同じ束になり、主な表（発表状況・8行）を必ず一枚作り、題の無いカード・見出しだけのカード・名前の無いボタンは作らない',
+      first.ok && second.ok && JSON.stringify(shape(first)) === JSON.stringify(shape(second))
+        && first.config.name === 'あおば気象台｜警報・注意報（作り物）'
+        && JSON.stringify(first.config.cards.map((c) => c.title)) === JSON.stringify(['発表状況', 'あおば県の警報・注意報（発表状況）', '印刷する']),
+      { first: shape(first), second: shape(second) });
+    if (first.ok) {
+      const table = await runCard(BrowserWindow, first.config, first.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: 主な表のカードで、8行を読める', table.ok && table.items.length === 8 && table.items[0] === 'あおば市 大雨注意報', table.items);
+      store.remove(first.config.id);
+    }
+    if (second.ok) store.remove(second.config.id);
 
     // 本文の節: 見出しごとの節を読むカードを足す（Claude の選んだカードの中にある節と、文字の少ない節は作らない）。
     const cycle = await generateDeck({
@@ -479,10 +507,10 @@ async function generateChecks() {
     });
     check('カードを作る: 本文の見出しごとの節を読むカードを足す（見出しの後に続く節・見出しを包んだ節。Claude のカードの中の節と、文字の少ない節は作らない）',
       cycle.ok && cycle.sections === 3
-        && JSON.stringify(cycle.config.cards.map((c) => c.title)) === JSON.stringify(['メニュー', '借りられる場所', '貸し自転車とは', '料金', '乗り方']),
+        && JSON.stringify(cycle.config.cards.map((c) => c.title)) === JSON.stringify(['メニュー', '貸し自転車とは', '料金', '借りられる場所', '乗り方']),
       cycle.ok ? { sections: cycle.sections, cards: cycle.config.cards } : cycle);
     if (cycle.ok) {
-      const about = await runCard(BrowserWindow, cycle.config, cycle.config.cards[2].id, { waitMs: 500 });
+      const about = await runCard(BrowserWindow, cycle.config, cycle.config.cards[1].id, { waitMs: 500 });
       check('カードを作る: 節のカードは、見出しから次の見出しの手前までを読む',
         about.ok && about.text === '貸し自転車とは\n貸し自転車は、町の中を自転車で回りたい方のための仕組みです。一日に何度でも、空いている自転車を借りられます。\n返すときは、どの貸し場所に返しても構いません。',
         about.text);
