@@ -38,9 +38,11 @@ function resolveUrl(url, cardPath) {
 // つくば市のイベントカレンダーで、分類の言葉が題の前に続いて聞き分けにくかった（2026-11-04 の Windows の確かめ）。
 // 書いている途中の所（チャットの返事など）: 読む所か、それを囲む要素・中の要素に aria-busy="true" が付いている間は、外れるまで待つ（待つ長さの内）。
 // 待っても外れなければ、そこまでを読み、partial: true を返す（画面が「書いている途中です」と知らせる）。
+// joinWith（list のカードだけ・任意）は、二つ目の表の行の selector。一覧の n 件目の後ろに、joinWith の n 件目を空白でつないで読む
+// （横に長い表を、名前の列の表と値の列の表に分けて描くページのため）。
 // until（read のカードだけ・任意）は、節の終わりの selector。当たった要素から、後に続く兄弟の要素を、until に当たる要素の手前まで読む
 // （見出しから次の同じ段の見出しの手前までの節。作った束の、本文の節を読むカード）。
-async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until, tagSelector) {
+async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until, tagSelector, joinWith) {
   // 読む文を、行の並びとして取り出す。画面読み上げが読む文に近づける。
   // - 中の文字に加えて、画像の説明（alt）と aria-label も読む。aria-hidden="true" の中と script・style は読まない。
   //   当たった要素そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
@@ -271,8 +273,16 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         await new Promise((r) => setTimeout(r, 250));
         continue;
       }
+      let partners = [];
+      if (joinWith) {
+        try {
+          partners = [...document.querySelectorAll(joinWith)];
+        } catch (e) {
+          return { found: false, reason: 'invalid', field: 'joinWith' };
+        }
+      }
       if (items.length > 0) {
-        const texts = items.map((it) => {
+        let texts = items.map((it, k) => {
           const replace = new Map();
           let head = '';
           if (dateSelector) {
@@ -307,8 +317,15 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
             const empty = (c) => !(c.textContent || '').trim() && !c.querySelector('img[alt]:not([alt=""]), [aria-label]');
             if (rest.length > 0 && rest.every(empty) && heads.some((h) => (h.textContent || '').trim())) none = ' なし';
           }
-          return `${head}${body}${none}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
+          const partner = partners[k] ? oneLine(textLines(partners[k], false, 'item')) : '';
+          return `${head}${body}${partner ? ` ${partner}` : none}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
         });
+        // 二つに分けた表をつないで読むときは、どちらも空の行（表の頭の飾りの行など）を読まない。
+        if (joinWith) {
+          const keep = texts.map((t, i) => (t.trim() !== '' ? i : -1)).filter((i) => i >= 0);
+          items = keep.map((i) => items[i]);
+          texts = keep.map((i) => texts[i]);
+        }
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
         // 画面で1件ずつのカードにするため、1件ずつの文も返す（全体の上限は text と同じ）。
@@ -396,8 +413,9 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
 }
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
-function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null, until = null, tagSelector = null) {
-  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until, tagSelector].map((v) => JSON.stringify(v)).join(', ');
+function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null, until = null, tagSelector = null,
+  joinWith = null) {
+  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until, tagSelector, joinWith].map((v) => JSON.stringify(v)).join(', ');
   return `(${pageAction.toString()})(${args})`;
 }
 
@@ -520,12 +538,13 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const dateSelector = card.action === 'list' && card.dateSelector ? card.dateSelector : null;
   const until = card.action === 'read' && card.until ? card.until : null;
   const tagSelector = card.action === 'list' && card.tagSelector ? card.tagSelector : null;
+  const joinWith = card.action === 'list' && card.joinWith ? card.joinWith : null;
   // 押すカードは、押す前からダウンロードを待ち受ける。
   // 保存の名前の型（saveAs）があれば、始まったダウンロードをその名前で保存する。
   const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
-    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector));
+    result = await win.webContents.executeJavaScript(buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector, joinWith));
   } catch (e) {
     if (watch) watch.cancel();
     throw e;
@@ -550,6 +569,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   }
   if (!result.found) {
     if (result.field === 'container') return { ok: false, where: `cards[${index}].container`, message: 'container の書き方が正しくありません' };
+    if (result.field === 'joinWith') return { ok: false, where: `cards[${index}].joinWith`, message: 'joinWith の書き方が正しくありません' };
     if (result.field === 'until') return { ok: false, where: `cards[${index}].until`, message: 'until の書き方が正しくありません' };
     const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に当たる所がありません';
     return { ok: false, where, message };

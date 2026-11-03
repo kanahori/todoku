@@ -574,6 +574,25 @@ async function generateChecks() {
     }
     if (second.ok) store.remove(second.config.id);
 
+    // main も見出しも無く、表を名前の列と値の列の二つに分けて描くページ（気象台の警報のページの作り）。
+    // body を本文の区画とみて、最初の表と行の一番多い表を、二つの表の行をつないで読むカード（joinWith）にし、role の無い div の並びも表の切り替えとみる。
+    const wide = await generateDeck({
+      BrowserWindow, url: 'fixture:warnings-wide.html', callModel: async () => ({ cards: [noTitle('menu', 'click', '#tool .radio-button:nth-of-type(1)')] }), store, allowFixtures: true,
+    });
+    check('カードを作る: 見出しの無いページでも、分けて描いた二つの表を一つの表のカードにし（題は表の前の短い文）、div の並びを「表を替える（…）」にする',
+      wide.ok && JSON.stringify(wide.config.cards.map((c) => c.title)) === JSON.stringify(['あおば県の警報・注意報（発表状況）', '表を替える（大雨・土砂災害・高潮）', '市町村ごとの状況'])
+        && wide.config.cards[0].joinWith && wide.config.cards[2].joinWith,
+      wide.ok ? wide.config.cards : wide);
+    if (wide.ok) {
+      const summaryRows = await runCard(BrowserWindow, wide.config, wide.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: 二つに分けた表の行を、名前と値をつないで読む（値の無い行は「なし」ではなく名前だけ）',
+        summaryRows.ok && JSON.stringify(summaryRows.items) === JSON.stringify(['あおば市 大雨注意報 雷注意報', 'みどり市 雷注意報', 'さくら町']), summaryRows.items);
+      const townRows = await runCard(BrowserWindow, wide.config, wide.config.cards[2].id, { waitMs: 500 });
+      check('カードを作る: 行の一番多い二つに分けた表（12行）も、名前と値をつないで読む',
+        townRows.ok && townRows.items.length === 12 && townRows.items[0] === 'あおば市 大雨注意報' && townRows.items[1] === 'みどり市 雷注意報', townRows.items);
+      store.remove(wide.config.id);
+    }
+
     // 本文の節: 見出しごとの節を読むカードを足す（Claude の選んだカードの中にある節と、文字の少ない節は作らない）。
     const cycle = await generateDeck({
       BrowserWindow,

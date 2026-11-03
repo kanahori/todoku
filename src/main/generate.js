@@ -360,12 +360,20 @@ function pageInspect(tryOne, cards) {
     const state = el.hasAttribute('aria-pressed') || el.hasAttribute('aria-selected');
     const group = isButton && el.parentElement
       && [...el.parentElement.children].filter((x) => x.matches('button, [role="button"], [role="tab"]')).length >= 3;
-    if (!(isTab || controls || state || group)) return '';
+    // ボタンの要素でなくても、名前（class）が切り替えの部品らしく（radio・tab・toggle・switch）、同じ名前の兄弟が三つ以上並ぶもの。
+    // 気象庁の警報のページの「大雨・土砂災害・高潮」は、class が radio-button の div で、role も tabindex も無かった。
+    const firstClass = (x) => (typeof x.className === 'string' ? x.className.trim().split(/\s+/)[0] : '');
+    const lookalike = !el.matches('a') && /radio|tab|toggle|switch/i.test(firstClass(el)) && el.parentElement
+      && [...el.parentElement.children].filter((x) => x.tagName === el.tagName && firstClass(x) === firstClass(el)).length >= 3;
+    if (!(isTab || controls || state || group || lookalike)) return '';
     const hasTable = (t) => Boolean(t && (t.matches('table') || t.querySelector('table')));
     if (controls && controls.split(' ').some((id) => hasTable(document.getElementById(id)))) return 'table';
-    const box = el.closest('[role="tablist"]') || el.parentElement;
-    for (let n = box ? box.nextElementSibling : null, d = 0; n && d < 3; n = n.nextElementSibling, d++) {
-      if (hasTable(n)) return 'table';
+    // 切り替える先: 並びの後ろの兄弟（3つまで）。並びを包む要素を4段上までたどって、それぞれの後ろも見る。
+    let box = el.closest('[role="tablist"]') || el.parentElement;
+    for (let up = 0; box && box !== document.body && up < 4; up++, box = box.parentElement) {
+      for (let n = box.nextElementSibling, d = 0; n && d < 3; n = n.nextElementSibling, d++) {
+        if (hasTable(n)) return 'table';
+      }
     }
     return 'view';
   };
@@ -415,7 +423,9 @@ function pageSections(taken, maxSections, minChars, maxMust) {
         most = n;
       }
     }
-    main = best;
+    // 見出しが一つも無いページ（気象庁の警報のページは main も h1〜h6 も無かった。2026-11-04 に Mac で一度開いて測った）は、
+    // body を本文の区画とみる（nav・header・footer・aside の中は、表・一覧のところで外す）。
+    main = best || document.body;
   }
   if (!main) return { sections: [], mainLists: [], whole: [] };
   const order = new Map();
@@ -471,9 +481,27 @@ function pageSections(taken, maxSections, minChars, maxMust) {
     return links.length >= 2 && links.filter((a) => /^#./.test(a.getAttribute('href'))).length / links.length >= 0.8;
   };
   const lists = [];
-  for (const t of main.querySelectorAll('table')) {
-    const rows = [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td')).length;
-    if (rows >= 3 && !outside(t)) lists.push({ el: t, rows, table: true });
+  const dataRows = (t) => [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td, th') && (r.querySelector('td') || r.parentElement.tagName !== 'THEAD')).length;
+  const tables = [...main.querySelectorAll('table')].filter((t) => !outside(t) && !t.parentElement.closest('table'));
+  // 横に長い表を、左の固定の列（名前）と右の流れる列（値）の二つの表に分けて描くページがある（気象庁の警報のページ）。
+  // 二つの表が、同じ親の隣り合う子の中にあり、行の数が同じなら、組にして一行ずつつないで読む（joinWith）。
+  const paired = new Set();
+  const pairOf = new Map();
+  for (const t of tables) {
+    if (paired.has(t)) continue;
+    let a = t;
+    while (a.parentElement && a.parentElement !== main && a.parentElement.children.length === 1) a = a.parentElement;
+    const sib = a.nextElementSibling;
+    const u = sib ? (sib.matches('table') ? sib : sib.querySelector('table')) : null;
+    if (u && u !== t && tables.includes(u) && !paired.has(u) && dataRows(u) === dataRows(t) && dataRows(t) >= 3) {
+      paired.add(u);
+      pairOf.set(t, u);
+    }
+  }
+  for (const t of tables) {
+    if (paired.has(t)) continue;
+    const rows = pairOf.has(t) ? dataRows(t) : [...t.querySelectorAll('tr')].filter((r) => r.querySelector('td')).length;
+    if (rows >= 3) lists.push({ el: t, rows, table: true, join: pairOf.get(t) || null });
   }
   for (const l of main.querySelectorAll('ul, ol')) {
     const rows = [...l.children].filter((c) => c.tagName === 'LI').length;
@@ -500,9 +528,24 @@ function pageSections(taken, maxSections, minChars, maxMust) {
         else if (p.querySelector('h1, h2, h3, h4, h5, h6')) break;
       }
     }
+    // 見出しの無いページでは、表の前（6段上まで）にある短い文（40字まで）を題にする。見出しの行だけの表（分けて描いた表の頭）は飛ばす。
+    let near = '';
+    for (let n = top.el, d = 0; n && n !== main && !near && d < 6; n = n.parentElement, d++) {
+      for (let p = n.previousElementSibling; p && !near; p = p.previousElementSibling) {
+        if (p.matches('script, style')) continue;
+        if (p.matches('table') && !p.querySelector('td')) continue;
+        if (p.querySelector('table') || p.matches('table')) break;
+        const t = textOf(p);
+        if (t && t.length <= 40) near = t;
+        else if (t) break;
+      }
+    }
+    const rowsOf = (t) => (top.join ? `${selectorOf(t)} tr:has(td, th):not(thead tr)` : `${selectorOf(t)} tr:has(td)`);
+    const joinSel = top.join ? selectorOf(top.join) : null;
     mainLists.push({
-      el: top.el, selector: top.table ? `${sel} tr:has(td)` : `${sel} > li`, container: sel, table: top.table,
-      title: cap || label || heading, pos: order.get(top.el),
+      el: top.el, selector: top.table ? rowsOf(top.el) : `${sel} > li`, container: sel, table: top.table,
+      ...(joinSel ? { joinWith: `${joinSel} tr:has(td, th):not(thead tr)` } : {}),
+      title: cap || label || heading || near, pos: order.get(top.el),
     });
   }
   const holdsMust = (nodes) => mainLists.some((m) => nodes.some((n) => n === m.el || n.contains(m.el)));
@@ -583,6 +626,7 @@ function addMainListCard(cards, mainList) {
   let unique = title;
   for (let n = 2; titles.has(unique); n++) unique = `${title} ${n}`;
   const card = { id: `${mainList.table ? 'table' : 'list'}-${cards.length + 1}`, title: unique, action: 'list', selector: mainList.selector, container: mainList.container };
+  if (mainList.joinWith) card.joinWith = mainList.joinWith;
   Object.defineProperty(card, 'pos', { value: Number(mainList.pos) || 0, enumerable: false });
   return [...cards, card];
 }
@@ -870,6 +914,7 @@ module.exports = {
   normalizeCandidates,
   pageInspect,
   buildInspectScript,
+  buildSectionsScript,
   pickCards,
   deckName,
   generateDeck,

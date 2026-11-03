@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば気象台」の警報）。気象台の警報のページで見た作りをまねる: main も見出し（h1〜h6）も無く、 -->
+<!-- 横に長い表を、名前の列の表（左に固定）と値の列の表（右に流れる）の二つに分けて描き、表を切り替える所は role の無い div が並ぶ。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>あおば気象台｜警報・注意報（作り物・二つに分けた表）</title>
+  <style>body { color: #000000; background: #ffffff; } .wide-body { display: flex; }</style>
+</head>
+<body>
+  <div class="container">
+    <div id="summary">
+      <div class="title">あおば県の警報・注意報（発表状況）</div>
+      <div class="block">
+        <div class="wide">
+          <table class="head"><tr><th>市町村</th><th>大雨</th><th>雷</th></tr></table>
+          <div class="wide-body">
+            <div class="wide-fix"><table class="names"><tr><td>あおば市</td></tr><tr><td>みどり市</td></tr><tr><td>さくら町</td></tr></table></div>
+            <div class="wide-scroll"><table class="values"><tr><td>大雨注意報</td><td>雷注意報</td></tr><tr><td></td><td>雷注意報</td></tr><tr><td></td><td></td></tr></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="tool">
+      <div><span>表示</span><div class="radio-button" data-type="rain">大雨・土砂災害・高潮</div><div class="radio-button" data-type="thunder">雷</div><div class="radio-button" data-type="wave">波浪</div></div>
+    </div>
+    <div id="timeline">
+      <div class="title">市町村ごとの状況</div>
+      <div class="block">
+        <div class="wide">
+          <table class="head"><tr><th>市町村</th><th>大雨</th><th>雷</th></tr></table>
+          <div class="wide-body">
+            <div class="wide-fix"><table class="names"><tr><th>あおば市</th></tr><tr><th>みどり市</th></tr><tr><th>さくら町</th></tr><tr><th>やまなみ町</th></tr><tr><th>かわべ村</th></tr><tr><th>うみべ町</th></tr><tr><th>おかの市</th></tr><tr><th>もりの村</th></tr><tr><th>はやし町</th></tr><tr><th>いずみ市</th></tr><tr><th>ひがし村</th></tr><tr><th>にし町</th></tr></table></div>
+            <div class="wide-scroll"><table class="values"><tr><td>大雨注意報</td><td></td></tr><tr><td></td><td>雷注意報</td></tr><tr><td></td><td></td></tr><tr><td>大雨注意報</td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td>雷注意報</td></tr><tr><td>大雨注意報</td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td>大雨注意報</td><td>雷注意報</td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

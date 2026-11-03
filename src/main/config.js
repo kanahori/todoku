@@ -24,6 +24,7 @@
 //                                        // 無いカードは、項目が無ければ「読めません」（0件と画面の変わりを分けられない）
 //       "dateSelector": "td.date",       // 任意・list のカードだけ。項目の中の日付の要素。その要素の datetime か id に
 //                                        // 書かれた年・月・日（2026-11-06・2026_11_6 の形）から「11月6日」と読む（日だけの表のため）
+//       "joinWith": ".values tr",         // 任意・list のカードだけ。二つ目の表の行。一覧の n 件目の後ろに、その n 件目をつないで読む
 //       "tagSelector": ".tag",           // 任意・list のカードだけ。項目の中の分類の言葉の要素。題の後ろに括弧で読む
 //       "itemTarget": {                  // 任意・list のカードだけ。一覧の一件を選んで Enter を押すと読む、その項目に結び付いた所。
 //         "label": "返事",               //   読む所の呼び名（「3件目の返事」と言う）。要る
@@ -150,6 +151,13 @@ function validateConfig(config) {
           if (t[key] !== undefined && !str(t[key])) add(`${at}.itemTarget.${key}`, '空でない文字列が要ります');
         }
         if (![t.closest, t.next, t.find].some(str)) add(`${at}.itemTarget`, 'closest・next・find のどれか一つが要ります');
+      }
+    }
+    if (card.joinWith !== undefined) {
+      if (typeof card.joinWith !== 'string' || card.joinWith.trim() === '') {
+        add(`${at}.joinWith`, '空でない文字列が要ります');
+      } else if (card.action !== 'list') {
+        add(`${at}.joinWith`, 'action が "list" のカードにだけ使えます');
       }
     }
     if (card.tagSelector !== undefined) {
