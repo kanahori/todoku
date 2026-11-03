@@ -330,14 +330,33 @@ function betterTitle(c, title, probe) {
   const texts = Array.isArray(probe.texts) ? probe.texts : [];
   const alt = texts.map((t) => cleanTitle(t)).find((t) => t && t !== title && !isPlaceWord(t));
   if (alt) return alt;
-  if (c.role === 'search') return '検索する';
+  if (c.role === 'search') return 'サイト内を検索する';
   if (c.action === 'read') return `${title}の情報`;
   return '地域を選ぶ';
 }
 
+// 中身が一語だけ（空白・句読点が無く、12字まで）か。読んでも一語だけのカードは作らない。
+// 気象庁の警報のページで、題を直した後も中身が「全国」の一語だけのカードが残った（2026-11-04 の Windows の確かめ）。
+function isOneWord(text) {
+  return text !== '' && text.length <= 12 && !/[\s、。，．,.!?！？：:]/.test(text);
+}
+
+// 押すカードの題が、地名や部品の名前の一語のときに、何をするカードかが分かる形にする。
+// 「茨城県」→「地域を選ぶ（茨城県）」、「市町村選択」→「市町村を選ぶ」、「検索」→「サイト内を検索する」、「〇〇検索」→「〇〇を検索する」。
+function clickTitle(title) {
+  if (/\s/.test(title)) return title;
+  if (isPlaceWord(title)) return `地域を選ぶ（${title}）`;
+  if (title === '検索') return 'サイト内を検索する';
+  let m = /^(.{1,12})選択$/.exec(title);
+  if (m) return `${m[1]}を選ぶ`;
+  m = /^(.{1,12})検索$/.exec(title);
+  if (m) return `${m[1]}を検索する`;
+  return title;
+}
+
 // 試した結果から、残すカードを選び、題と id を付ける。
 // 落とすもの: 当たらない・中身が空（read は文字あり・list は1件以上・click は当たる数ちょうど1 でないもの）・同じ所の重なり・
-// 中身が題と同じ一語だけの読む・一覧のカード（読んでも題をくり返すだけのため）。
+// 中身が題と同じか、一語だけの読む・一覧のカード（読んでも題をくり返すか、一語だけのため）。
 function pickCards(candidates, probes) {
   const cards = [];
   const seen = new Set();
@@ -351,7 +370,9 @@ function pickCards(candidates, probes) {
     if (seen.has(key)) return;
     seen.add(key);
     let title = cleanTitle(probe.title);
-    if (c.action !== 'click' && title && cleanTitle(probe.body) === title) return;
+    const body = cleanTitle(probe.body, 200);
+    if (c.action !== 'click' && ((title && body === title) || isOneWord(body))) return;
+    if (c.action === 'click' && title) title = clickTitle(title);
     if ((c.action !== 'click' && isPlaceWord(title)) || (!title && c.role === 'search')) title = betterTitle(c, title, probe);
     if (!title) {
       perRole[c.role] = (perRole[c.role] || 0) + 1;

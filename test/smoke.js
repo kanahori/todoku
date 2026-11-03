@@ -437,9 +437,9 @@ async function generateChecks() {
       store,
       allowFixtures: true,
     });
-    check('カードを作る: 中身が題と同じ一語だけのカード（全国）は作らず、地名の一語の題は「地域を選ぶ」や中の短い文に、手がかりの無い検索は「検索する」にする',
+    check('カードを作る: 中身が題と同じ一語だけのカード（全国）は作らず、地名の一語の題は「地域を選ぶ」や中の短い文に、手がかりの無い検索は「サイト内を検索する」にする',
       area.ok && area.dropped === 1
-        && JSON.stringify(area.config.cards.map((c) => c.title)) === JSON.stringify(['地域を選ぶ', '大雨注意報が出ています。', '検索する']),
+        && JSON.stringify(area.config.cards.map((c) => c.title)) === JSON.stringify(['地域を選ぶ', '大雨注意報が出ています。', 'サイト内を検索する']),
       area.ok ? { dropped: area.dropped, titles: area.config.cards.map((c) => c.title) } : area);
     if (area.ok) store.remove(area.config.id);
 

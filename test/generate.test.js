@@ -155,7 +155,7 @@ test('試した結果で残すカードを選ぶ: 当たらない・空・押す
   assert.equal(capped[7].title, '本文 8');
 });
 
-test('題が地名の一語のカードと、題の手がかりの無い検索のカード: 中の短い文字か操作の種類を題にし、中身が題と同じ一語だけのカードは作らない', () => {
+test('題が地名の一語のカードと、題の手がかりの無い検索のカード: 中の短い文字か操作の種類を題にし、中身が一語だけのカードは作らない。押すカードの一語の題は、何をするかの分かる形にする', () => {
   const candidates = [
     { role: 'heading', action: 'read', selector: '.crumb', container: '', titleSelector: '' },
     { role: 'list', action: 'list', selector: '.towns li', container: '.towns', titleSelector: '' },
@@ -164,6 +164,10 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
     { role: 'search', action: 'click', selector: '.go', container: '', titleSelector: '' },
     { role: 'search', action: 'click', selector: '.go2', container: '', titleSelector: '' },
     { role: 'menu', action: 'click', selector: '#town', container: '', titleSelector: '' },
+    { role: 'main', action: 'read', selector: '.warn', container: '', titleSelector: '' },
+    { role: 'menu', action: 'click', selector: '#pick', container: '', titleSelector: '' },
+    { role: 'search', action: 'click', selector: '#find', container: '', titleSelector: '' },
+    { role: 'search', action: 'click', selector: '#find-town', container: '', titleSelector: '' },
   ];
   const probes = [
     { count: 1, hasText: true, containerOk: false, title: '全国', body: '全国', texts: ['全国'] },
@@ -172,11 +176,19 @@ test('題が地名の一語のカードと、題の手がかりの無い検索�
     { count: 1, hasText: true, containerOk: false, title: 'みどり市', body: 'みどり市 長い説明の文だけがあります', texts: ['みどり市'] },
     { count: 1, hasText: true, containerOk: false, title: '', body: '', texts: [] },
     { count: 1, hasText: true, containerOk: false, title: '', body: '', texts: ['くわしく探す'] },
-    // 押すカードの題が地名なのは、押す所の名前なので、そのまま。
+    // 押すカードの題が地名や部品の名前の一語なら、何をするカードかが分かる形にする。
     { count: 1, hasText: true, containerOk: false, title: 'さくら町', body: '', texts: ['さくら町'] },
+    // 題が違っても、中身が一語だけの読むカードは作らない。
+    { count: 1, hasText: true, containerOk: false, title: 'あおば県の警報・注意報', body: '全国', texts: ['全国'] },
+    { count: 1, hasText: true, containerOk: false, title: '市町村選択', body: '', texts: [] },
+    { count: 1, hasText: true, containerOk: false, title: '検索', body: '', texts: [] },
+    { count: 1, hasText: true, containerOk: false, title: '施設検索', body: '', texts: [] },
   ];
-  assert.deepEqual(pickCards(candidates, probes).map((c) => c.title),
-    ['地域を選ぶ', '大雨注意報が出ています。', 'みどり市の情報', '検索する', 'くわしく探す', 'さくら町']);
+  // 一つの束は 8枚までなので、前の7つと後の4つに分けて確かめる。
+  assert.deepEqual(pickCards(candidates.slice(0, 7), probes.slice(0, 7)).map((c) => c.title),
+    ['地域を選ぶ', '大雨注意報が出ています。', 'みどり市の情報', 'サイト内を検索する', 'くわしく探す', '地域を選ぶ（さくら町）']);
+  assert.deepEqual(pickCards(candidates.slice(7), probes.slice(7)).map((c) => c.title),
+    ['市町村を選ぶ', 'サイト内を検索する', '施設を検索する']);
 });
 
 test('束の名前はページの title（長ければ切る）。無ければホスト名、それも無ければ「新しいページ」', () => {
