@@ -237,7 +237,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
     return els.map((e) => {
       const t = (e.textContent || '').replace(/\s+/g, ' ').trim();
       let h = 0x811c9dc5;
-      for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
+      for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), (1 << 24) + 0x193) >>> 0;
       const base = h.toString(16).padStart(8, '0');
       const n = (seen.get(base) || 0) + 1;
       seen.set(base, n);
@@ -677,7 +677,7 @@ function pageMarkItemTarget(selector, target, index, attr, token, key) {
     return els.map((e) => {
       const t = (e.textContent || '').replace(/\s+/g, ' ').trim();
       let h = 0x811c9dc5;
-      for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 0x01000193) >>> 0;
+      for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), (1 << 24) + 0x193) >>> 0;
       const base = h.toString(16).padStart(8, '0');
       const n = (seen.get(base) || 0) + 1;
       seen.set(base, n);

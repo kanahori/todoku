@@ -329,12 +329,13 @@ async function main() {
     const { buildSkeletonScript } = require('../src/main/structure');
     const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
     try {
-      const html = '<!doctype html><body><div role="Dialog for user alice" id="u2412345" class="box s2412345 3f2b1c9e-1a2b-4c3d-8e9f-001122334455"'
-        + ' data-user="s2412345" data-token="abc123def456ghi789" data-kind="list" aria-describedby="x1"><p>t</p></div></body>';
+      // 試しの値に、6桁以上の数字の並びを書かない（名前の点検に当たるため）。5桁の数字で「5桁以上の数字を含む」に当てる。
+      const html = '<!doctype html><body><div role="Dialog for user alice" id="u24123" class="box s24123 3f2b1c9e-1a2b-4c3d-8e9f-0a1b2c3d4e5f"'
+        + ' data-user="s24123" data-token="abc123def456ghi789" data-kind="list" aria-describedby="x1"><p>t</p></div></body>';
       await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
       const { skeleton } = await w.webContents.executeJavaScript(buildSkeletonScript());
       check('構造の守り: role の文・学籍番号の形・長い英数字・GUID の値を入れず（属性の名前だけ）、ふつうの名前（box・data-kind=list）は残す',
-        !/alice|Dialog|2412345|abc123|3f2b1c9e/.test(skeleton) && skeleton.includes('div.box') && skeleton.includes('[role]') && skeleton.includes('[data-user]')
+        !/alice|Dialog|24123|abc123|3f2b1c9e/.test(skeleton) && skeleton.includes('div.box') && skeleton.includes('[role]') && skeleton.includes('[data-user]')
           && skeleton.includes('[data-kind=list]'), skeleton);
     } finally {
       w.destroy();

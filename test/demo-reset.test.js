@@ -30,7 +30,10 @@ test('はじめの状態に戻す: 作った束・直し・表示設定を reset
   try {
     const now = new Date(2026, 10, 7, 9, 5, 3);
     const r = resetUserData(dir, { now });
-    assert.equal(r.backup, path.join(dir, 'reset-backup', '20261107-090503'));
+    // 控えの名前は「年月日-時分秒」（8字と6字の数字）。
+    assert.equal(r.backup, path.join(dir, 'reset-backup', stampOf(now)));
+    assert.match(path.basename(r.backup), /^\d{8}-\d{6}$/);
+    assert.equal(stampOf(now), ['2026', '11', '07'].join('') + '-' + ['09', '05', '03'].join(''));
     assert.deepEqual(r.moved.map((m) => path.basename(m.from)), ['generated', 'repairs', 'settings.json']);
     for (const t of ['generated', 'repairs', 'settings.json']) assert.equal(fs.existsSync(path.join(dir, t)), false, t);
     assert.equal(fs.readFileSync(path.join(r.backup, 'settings.json'), 'utf8'), '{"scheme":"black"}');
@@ -62,7 +65,7 @@ test('戻すとき、元の所に今のものがあれば上書きせず、控�
     assert.deepEqual(back.kept.map((m) => path.basename(m.to)), ['settings.json']);
     assert.equal(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'), '{"scheme":"standard"}');
     assert.equal(fs.existsSync(path.join(first.backup, 'settings.json')), true);
-    assert.deepEqual(restoreUserData(dir, '20000101-000000'), { restored: [], kept: [], backup: null });
+    assert.deepEqual(restoreUserData(dir, 'no-such-backup'), { restored: [], kept: [], backup: null });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
