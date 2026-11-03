@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('cardsApi', {
   listRepairs: (appId) => ipcRenderer.invoke('repair:list', String(appId)),
   undoRepair: (appId, cardId) => ipcRenderer.invoke('repair:undo', String(appId), String(cardId)),
   publishRepair: (appId, cardId) => ipcRenderer.invoke('repair:publish', String(appId), String(cardId)),
+  // 設定ファイルの無いページから、Claude がカードの束を作る・作った束を消す・設定ファイルとして書き出す（支援者向け）。
+  generateDeck: (url) => ipcRenderer.invoke('generate:start', String(url)),
+  deleteGenerated: (appId) => ipcRenderer.invoke('generate:delete', String(appId)),
+  exportGenerated: (appId) => ipcRenderer.invoke('generate:export', String(appId)),
   // カードが当たらず、自動で直し始めたときの知らせ。受け取るのは { appId, cardId } だけ。
   onRepairing: (callback) => ipcRenderer.on('card:repairing', (_event, r) => callback({ appId: String((r && r.appId) || ''), cardId: String((r && r.cardId) || '') })),
   // ダウンロードが終わったときの知らせ（押すカードの結果にならなかったもの）。受け取るのは { ok, message } だけ。

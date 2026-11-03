@@ -230,7 +230,59 @@ async function main() {
   }
 
   await autoRepairChecks();
+  await generateChecks();
   await rendererFocusChecks();
+  await rendererGenerateChecks();
+}
+
+// 設定ファイルの無いページから、Claude がその場でカードの束を作る一巡（Claude は偽の返事。Mac には鍵が無いので本物は呼ばない）。
+// みどり市の練習のページ（test/fixtures/city-top.html）を開く → 文字を落とした構造を偽の Claude に渡す → 案をページで試し、
+// 当たらない・空・押す所が一つでないカードを落とす → 題を手元で作り、新しい束として保存する → 読める → 消す。
+async function generateChecks() {
+  const { generateDeck, createGeneratedStore, doneMessage } = require('../src/main/generate');
+  const { loadConfigDir } = require('../src/main/config');
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'generate-smoke-'));
+  try {
+    const store = createGeneratedStore(path.join(userData, 'generated'));
+    let sentUser = '';
+    const fakeModel = async ({ user }) => {
+      sentUser = user;
+      return {
+        cards: [
+          { role: 'notice', action: 'list', selector: '.hero .slide', container: '.hero', titleSelector: '', reason: '自動で切り替わるお知らせ。' },
+          { role: 'list', action: 'list', selector: '.news-list li', container: '.news-list', titleSelector: '.wrap h4:nth-of-type(1)', reason: '新着の一覧。' },
+          { role: 'table', action: 'list', selector: 'table.garbage tr', container: '', titleSelector: '.wrap h4:nth-of-type(2)', reason: '表。' },
+          { role: 'main', action: 'read', selector: '.counter-info', container: '', titleSelector: '.wrap h4:nth-of-type(3)', reason: '本文。' },
+          { role: 'menu', action: 'click', selector: '.global-nav a:first-child', container: '', titleSelector: '', reason: '最初のメニュー。' },
+          { role: 'link', action: 'click', selector: '.news-list a', container: '', titleSelector: '', reason: '当たる数が3つ。' },
+          { role: 'other', action: 'read', selector: '.no-such-place', container: '', titleSelector: '', reason: '当たらない。' },
+          { role: 'other', action: 'read', selector: '.hero img', container: '', titleSelector: '', reason: '文字が無い。' },
+          { role: 'other', action: 'read', selector: '[[', container: '', titleSelector: '', reason: '書き方の誤り。' },
+        ],
+      };
+    };
+    const r = await generateDeck({ BrowserWindow, url: 'fixture:city-top.html', callModel: fakeModel, store, allowFixtures: true });
+    check('カードを作る: 練習のページから、当たる5枚の束を作る（当たらない・空・押す所が3つ・書き方の誤りの4枚を落とす）',
+      r.ok && r.config.cards.length === 5 && r.dropped === 4, r);
+    check('カードを作る: Claude に送る文に、ページの文字も URL も入っていない',
+      sentUser.includes('news-list') && !sentUser.includes('市民まつり') && !sentUser.includes('新着情報')
+        && !sentUser.includes('みどり市') && !sentUser.includes('city-top') && !sentUser.includes('file:'), sentUser.slice(0, 300));
+    check('カードを作る: 題は手元で、見出しの文字・押す所の文字・役目の種類から作る',
+      r.ok && JSON.stringify(r.config.cards.map((c) => c.title)) === JSON.stringify(['お知らせ 1', '新着情報', 'ごみの日', '窓口の案内', 'くらし']), r.ok && r.config.cards);
+    check('カードを作る: 束の名前はページの title（手元で使う）で、知らせは「「名前」のカードを5枚作りました。」',
+      r.ok && r.config.name === 'みどり市 公式ホームページ（作り物）' && doneMessage(r.config) === '「みどり市 公式ホームページ（作り物）」のカードを5枚作りました。', r.ok && r.config.name);
+    // 次の起動: 置き場を設定ファイルの読み方で読み直すと、同じ束が出る。
+    const reloaded = loadConfigDir(store.dir);
+    check('カードを作る: 次の起動でも、置き場から同じ束が読める', reloaded.length === 1 && reloaded[0].config && reloaded[0].config.id === r.config.id, reloaded);
+    const deck = reloaded[0].config;
+    const slides = await runCard(BrowserWindow, deck, deck.cards[0].id, { waitMs: 500 });
+    check('カードを作る: 作った束のお知らせのカードで、4件読める', slides.ok && slides.text.startsWith('4件あります。') && slides.text.includes('市民まつり'), slides);
+    const counter = await runCard(BrowserWindow, deck, deck.cards[3].id, { waitMs: 500 });
+    check('カードを作る: 作った束の本文のカードで、窓口の案内を読める', counter.ok && counter.text.includes('8時30分'), counter);
+    check('カードを作る: 消すと、置き場から消え、次の起動で出ない', store.remove(deck.id) === true && loadConfigDir(store.dir).length === 0);
+  } finally {
+    fs.rmSync(userData, { recursive: true, force: true });
+  }
 }
 
 // 使う人の側で、その場で自動で直す一巡（Claude を呼ぶ所は偽の返事。Mac には鍵が無いので本物は呼ばない）。
@@ -308,7 +360,14 @@ async function rendererFocusChecks() {
     await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
     const js = (code) => win.webContents.executeJavaScript(code);
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 4; k++) await wait(50);
+    const cardCount = () => js("document.querySelectorAll('#deck > article.card').length");
+    for (let k = 0; k < 50 && (await cardCount()) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    // 0. はじめの束（Todoku）から、試しのアプリの束へ進む（はじめの束は、アプリが一つでも出す）。
+    // 束を移るときは束を丸ごと描き直すので、見張りはアプリの束へ進んでから付ける（読むカードの焦点を見る試しのため）。
+    await key('ArrowDown');
+    await key('Enter');
+    for (let k = 0; k < 50 && (await cardCount()) < 4; k++) await wait(50);
     // 見張り: 読み込み中の項目が DOM に入った回数と、焦点のある要素（か、それを含む要素）を DOM から外した回数を数える。
     await js(`(() => {
       const t = { loadingAdded: 0, removedWithFocus: 0 };
@@ -332,7 +391,6 @@ async function rendererFocusChecks() {
       Node.prototype.removeChild = function (c) { if (c.nodeType === 1 && holdsFocus(c)) t.removedWithFocus++; return origRemoveChild.call(this, c); };
       return true;
     })()`);
-    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
     const focusState = () => js(`(() => {
       const a = document.activeElement;
       const card = a && a.closest ? a.closest('article.card') : null;
@@ -467,6 +525,111 @@ async function rendererFocusChecks() {
     const unfixed = await focusState();
     check('直せなかった読む所: 「読めません」の中に「自動で直せませんでした。」が足される',
       unfixed.heading === '直せない読む所（読めません）' && unfixed.text === '画面が変わったため、読む所が見つかりませんでした。\n自動で直せませんでした。', unfixed);
+  } finally {
+    win.destroy();
+  }
+}
+
+// カードの画面で「新しいページからカードを作る」を、読み上げの操作（キー）だけで使う試し。cardsApi は偽物（test/renderer-preload.js）。
+async function rendererGenerateChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    const headings = () => js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
+    const status = () => js("document.getElementById('status').textContent");
+    const alertSaid = () => js("document.getElementById('alert').textContent");
+    const typeUrl = (v) => js(`(() => { const a = document.activeElement; a.value = ${JSON.stringify(v)}; a.dispatchEvent(new Event('input', { bubbles: true })); return a.tagName; })()`);
+    const active = () => js(`(() => {
+      const a = document.activeElement;
+      const card = a && a.closest ? a.closest('article.card') : null;
+      return { tag: a.tagName, text: a.textContent, value: a.value === undefined ? null : a.value,
+        label: a.labels && a.labels[0] ? a.labels[0].textContent : null, connected: a.isConnected,
+        heading: card ? card.querySelector('h2').textContent : null };
+    })()`);
+
+    const top = await headings();
+    check('はじめの束に「新しいページからカードを作る」のカードがある（アプリが一つでも、はじめの束を出す）',
+      JSON.stringify(top) === JSON.stringify(['Todoku', '試しのアプリ（作り物）', '新しいページからカードを作る']), top);
+
+    await key('End');
+    await key('Enter');
+    const input = await active();
+    check('作るカードの上で Enter を押すと、ラベル付きの URL の入力欄へ移る',
+      input.tag === 'INPUT' && input.label === 'ページのURL（http か https で始まるもの）', input);
+
+    await typeUrl('example.com');
+    await key('Enter');
+    await wait(150);
+    const badSaid = await alertSaid();
+    check('http か https で始まらない URL では作らず、「http:// か https:// で始まるページのURLを入れてください。」と知らせる',
+      badSaid === 'http:// か https:// で始まるページのURLを入れてください。' && JSON.stringify(await js('window.fakeLog.generated()')) === '[]', badSaid);
+
+    await typeUrl('https://example.com/fail');
+    await key('Enter');
+    await wait(400);
+    const failSaid = await alertSaid();
+    const afterFail = await active();
+    const failItems = await js("[...document.querySelectorAll('#deck > article.card')[2].querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + (n.value || n.textContent))");
+    check('作れなかったときは、理由を一文で知らせ、理由の項目に焦点を移し、入れた URL を残した入力欄をもう一度出す',
+      failSaid === 'ページを開けなかったので、カードを作れませんでした。' && afterFail.text === failSaid
+        && failItems.includes('INPUT:https://example.com/fail'), { failSaid, afterFail, failItems });
+
+    // Enter でなく、作り始めるボタンでも作れる。
+    await key('End');
+    const button = await active();
+    await js("(() => { const i = document.querySelector('[data-input]'); i.value = 'https://example.com/town'; i.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    await js('document.activeElement.click()');
+    await wait(150);
+    const making = await active();
+    check('作り始めるボタンを押すと、「カードを作っています。…」の項目に焦点が移り、見出しに（作っています）が付く',
+      button.text === '作り始める' && making.connected && making.text.startsWith('カードを作っています。') && making.heading === '新しいページからカードを作る（作っています）', { button, making });
+    await wait(700);
+    const done = await active();
+    const doneSaid = await status();
+    const deckHeadings = await headings();
+    check('作り終えたら、その束を開き、「「作り物の町のページ」のカードを2枚作りました。」と一度だけ知らせる',
+      doneSaid === '「作り物の町のページ」のカードを2枚作りました。' && done.tag === 'ARTICLE' && done.heading === '作り物の町のページ'
+        && JSON.stringify(deckHeadings) === JSON.stringify(['作り物の町のページ', '新着', '本文 1']), { doneSaid, done, deckHeadings });
+
+    await key('Enter');
+    await key('End');
+    const delButton = await active();
+    await key('ArrowUp');
+    const expButton = await active();
+    await js('document.activeElement.click()');
+    await wait(150);
+    const expSaid = await status();
+    check('作った束のはじめのカードに、書き出す（支援者向け）ボタンと消すボタンがあり、書き出すと知らせる',
+      delButton.text === 'このカードの束を消す' && expButton.text === '設定ファイルとして書き出す（支援者向け）'
+        && expSaid === 'ダウンロードのフォルダに「todoku-page-test.json」として書き出しました。支援者が確かめてから、設定ファイルとして配ってください。'
+        && JSON.stringify(await js('window.fakeLog.exported()')) === '["page-test"]', { delButton, expButton, expSaid });
+
+    await key('Escape');
+    await key('Escape');
+    const back = await active();
+    const topAfter = await headings();
+    check('Esc ではじめの束へ戻ると、作った束の行き先のカードが足されていて、そこに焦点がある',
+      back.heading === '作り物の町のページ' && JSON.stringify(topAfter) === JSON.stringify(['Todoku', '試しのアプリ（作り物）', '作り物の町のページ', '新しいページからカードを作る']), { back, topAfter });
+
+    await key('Enter');
+    await key('Enter');
+    await key('End');
+    await js('document.activeElement.click()');
+    await wait(150);
+    const delSaid = await status();
+    const afterDel = await active();
+    const topAfterDel = await headings();
+    check('消すボタンで、束を消し、はじめの束の作るカードへ戻り、「「作り物の町のページ」のカードの束を消しました。」と知らせる',
+      delSaid === '「作り物の町のページ」のカードの束を消しました。' && afterDel.heading === '新しいページからカードを作る'
+        && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '試しのアプリ（作り物）', '新しいページからカードを作る'])
+        && JSON.stringify(await js('window.fakeLog.deleted()')) === '["page-test"]', { delSaid, afterDel, topAfterDel });
   } finally {
     win.destroy();
   }

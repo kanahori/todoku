@@ -73,6 +73,21 @@ h1 {
   .items dd { margin-bottom: 0.5rem; }
 }
 
+/* 入力欄: ラベルを上に置き、罫線の色の 2px の枠（線の対比は index.html の頭のコメントの罫線と同じ）。 */
+.item-input { margin: 0.5rem 0; }
+.item-input label { display: block; font-weight: bold; }
+.item-input input {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0.25rem 0.5rem;
+  color: var(--moji);
+  background: var(--card);
+  border: 2px solid var(--keisen);
+  border-radius: 6px;
+}
+
 .item-button {
   font: inherit;
   min-height: 44px;

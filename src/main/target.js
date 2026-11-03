@@ -302,4 +302,11 @@ function showTarget(appId) {
   return true;
 }
 
-module.exports = { resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, isSamePage };
+// ウェブアプリの窓を閉じる（カードの束を作れなかったとき・消したとき）。窓が無ければ何もしない。
+function closeTarget(appId) {
+  const win = windows.get(appId);
+  windows.delete(appId);
+  if (win && !win.isDestroyed()) win.destroy();
+}
+
+module.exports = { resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage };

@@ -28,6 +28,20 @@ const config = {
 
 const opened = [];
 const undone = [];
+const generated = [];
+const exported = [];
+const deleted = [];
+// 作った束（作り物）。URL に fail を含むときは、作れなかった答えを返す。
+const madeDeck = {
+  id: 'page-test',
+  name: '作り物の町のページ',
+  url: 'https://example.com/town',
+  description: 'このカードの束は、Claude がページの作りから作ったものです。この機械の中だけにあります。',
+  cards: [
+    { id: 'list-1', title: '新着', action: 'list', selector: '#n li' },
+    { id: 'main-2', title: '本文 1', action: 'read', selector: 'main' },
+  ],
+};
 const repaired = { cardId: 'fixed-read', title: '画面が変わった読む所', action: 'read', before: '#d', after: '#d2', reason: 'id が変わったため。', at: '2026-11-03T04:05:00.000Z' };
 let fixedOnce = false;
 
@@ -66,8 +80,30 @@ contextBridge.exposeInMainWorld('cardsApi', {
     return { ok: true, repair: repaired };
   },
   listRepairs: async () => ({ ok: true, repairs: undone.length > 0 ? [] : [repaired] }),
+  generateDeck: (url) => new Promise((resolve) => {
+    generated.push(url);
+    if (url.includes('fail')) {
+      setTimeout(() => resolve({ ok: false, reason: 'open-failed', message: 'ページを開けなかったので、カードを作れませんでした。' }), 50);
+      return;
+    }
+    setTimeout(() => resolve({ ok: true, config: madeDeck, message: `「${madeDeck.name}」のカードを${madeDeck.cards.length}枚作りました。` }), 500);
+  }),
+  exportGenerated: async (appId) => {
+    exported.push(appId);
+    return { ok: true, message: 'ダウンロードのフォルダに「todoku-page-test.json」として書き出しました。支援者が確かめてから、設定ファイルとして配ってください。' };
+  },
+  deleteGenerated: async (appId) => {
+    deleted.push(appId);
+    return { ok: true, message: `「${madeDeck.name}」のカードの束を消しました。` };
+  },
   publishRepair: async () => ({ ok: true, message: '「画面が変わった読む所」の直しを、設定ファイルに書きました。' }),
 });
 
 // 試しから、出典のページを開くように頼まれた回数と appId を見るため。
-contextBridge.exposeInMainWorld('fakeLog', { opened: () => opened.slice(), undone: () => undone.slice() });
+contextBridge.exposeInMainWorld('fakeLog', {
+  opened: () => opened.slice(),
+  undone: () => undone.slice(),
+  generated: () => generated.slice(),
+  exported: () => exported.slice(),
+  deleted: () => deleted.slice(),
+});

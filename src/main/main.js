@@ -4,11 +4,14 @@
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { checkCards, showTarget } = require('./target');
+const { checkCards, showTarget, closeTarget } = require('./target');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair } = require('./autofix');
 const { sourceOpenedMessage } = require('./messages');
+const {
+  GenerateSchema, generateDeck, createGeneratedStore, failureMessage, doneMessage, exportDeck, exportedMessage,
+} = require('./generate');
 const { proxySwitches } = require('./proxy');
 
 // 環境変数にプロキシがあれば、Electron に渡す（学内のネットワークで、外のページに届くように）。窓を作る前に渡す。
@@ -39,6 +42,18 @@ function refreshEffective(appId) {
   configs.set(appId, config);
   return active;
 }
+
+// 設定ファイルの無いページから Claude がその場で作ったカードの束（generate.js）。置き場は app.getPath('userData') の下の generated/。
+const GENERATED_LABEL = '作ったカード';
+let generatedStoreCache = null;
+function generatedStore() {
+  if (!generatedStoreCache) generatedStoreCache = createGeneratedStore(path.join(app.getPath('userData'), 'generated'));
+  return generatedStoreCache;
+}
+// 作った束の id（消す・書き出すは、この束にだけ許す）。
+const generatedIds = new Set();
+// いま作っている途中か（二つを同時には作らない）。
+let generating = false;
 
 // 画面に渡す直しの形（どのカード・前と後のセレクタ・理由・日時）。
 function repairView(r) {
@@ -73,13 +88,16 @@ ipcMain.handle('configs:load', () => {
   // 読めたものと、当たらない所の一覧の両方を返す。
   const sources = [{ dir: CARDS_DIR, label: 'cards' }];
   if (CARDS_LOCAL_DIR) sources.push({ dir: CARDS_LOCAL_DIR, label: '手元' });
-  const results = loadConfigSources(sources);
+  sources.push({ dir: generatedStore().dir, label: GENERATED_LABEL });
+  const results = loadConfigSources(sources).map((r) => ({ ...r, generated: r.file.startsWith(`${GENERATED_LABEL}/`) }));
   configs.clear();
   baseConfigs.clear();
   configPaths.clear();
+  generatedIds.clear();
   const repairs = new Map();
   for (const r of results) {
     if (r.config) {
+      if (r.generated) generatedIds.add(r.config.id);
       baseConfigs.set(r.config.id, r.config);
       configPaths.set(r.config.id, r.path);
       repairs.set(r.config.id, refreshEffective(r.config.id).map(repairView));
@@ -144,11 +162,62 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
 });
 
 // Claude を呼ぶ関数を作る。鍵が無ければ null（自動では直さず、「自動で直せませんでした。」と知らせる）。
-function makeCallModel() {
+// schema（任意）は返す形（カードの束を作るときは GenerateSchema）。
+function makeCallModel(schema) {
   if (!hasApiKey()) return null;
   // Electron の通信（net.fetch）を使い、学内のプロキシの設定に従わせる。
-  return createClaudeCaller({ fetch: net.fetch.bind(net) });
+  return createClaudeCaller({ fetch: net.fetch.bind(net), ...(schema ? { schema } : {}) });
 }
+
+// 設定ファイルの無いページから、Claude がその場でカードの束を作る（generate.js）。画面からは URL の文字だけを受け取る。
+// 結果は { ok: true, config, message } か { ok: false, message }（理由の一文）。
+ipcMain.handle('generate:start', async (_event, url) => {
+  if (generating) return { ok: false, message: failureMessage('busy') };
+  generating = true;
+  try {
+    const r = await generateDeck({ BrowserWindow, url: String(url || ''), callModel: makeCallModel(GenerateSchema), store: generatedStore() });
+    if (!r.ok) return { ok: false, reason: r.reason, message: failureMessage(r.reason) };
+    baseConfigs.set(r.config.id, r.config);
+    configPaths.set(r.config.id, r.file);
+    generatedIds.add(r.config.id);
+    refreshEffective(r.config.id);
+    return { ok: true, config: r.config, message: doneMessage(r.config) };
+  } catch (e) {
+    return { ok: false, reason: 'error', message: failureMessage('error') };
+  } finally {
+    generating = false;
+  }
+});
+
+// 作った束を消す（置き場の設定ファイル・手元の自動の直し・開いている窓）。作った束にだけ効く。
+ipcMain.handle('generate:delete', (_event, appId) => {
+  const base = baseConfigs.get(appId);
+  if (!base || !generatedIds.has(appId)) return { ok: false, message: 'この束は、作ったカードの束ではないので消せません。' };
+  try {
+    generatedStore().remove(appId);
+  } catch (e) {
+    return { ok: false, message: 'カードの束を消せませんでした。' };
+  }
+  for (const r of store().load(appId)) store().remove(appId, r.cardId);
+  closeTarget(appId);
+  configs.delete(appId);
+  baseConfigs.delete(appId);
+  configPaths.delete(appId);
+  generatedIds.delete(appId);
+  return { ok: true, message: `「${base.name}」のカードの束を消しました。` };
+});
+
+// 作った束を、支援者が確かめて配れるように、ダウンロードのフォルダへ設定ファイルとして書き出す。
+ipcMain.handle('generate:export', (_event, appId) => {
+  const base = baseConfigs.get(appId);
+  if (!base || !generatedIds.has(appId)) return { ok: false, message: 'この束は、作ったカードの束ではないので書き出せません。' };
+  try {
+    // 自動で直した所があれば、それも当てた中身を書き出す。
+    return { ok: true, message: exportedMessage(exportDeck(configs.get(appId) || base, app.getPath('downloads'))) };
+  } catch (e) {
+    return { ok: false, message: '設定ファイルを書き出せませんでした。' };
+  }
+});
 
 // カードを動かす。当たらなければ、その場で自動で直す（autofix.js）。
 ipcMain.handle('card:run', async (event, appId, cardId) => {

@@ -67,6 +67,17 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - Undo: the repaired card has a "直す前に戻す" button. Supporters can open the "自動で直した所（支援者向け）" card at the end of the app's cards to see every automatic fix, write one into the config file (the same way as accepted proposals, with a backup in `config-backups`), or undo it.
 - Without an API key, or when Claude fails, times out or the proposal does not look right, the card says "cannot read" as before with one more sentence: "自動で直せませんでした。"
 
+## Cards for a page without a config file
+
+- The first screen ("Todoku") has a card "新しいページからカードを作る" (make cards from a new page). Pressing Enter or Space on it moves to a labeled URL field ("ページのURL（http か https で始まるもの）"). Only `http://` and `https://` addresses are accepted. Enter in the field, or the "作り始める" button, starts.
+- The app opens the page, waits until the number of elements stops changing (at most 8 seconds), and collects the same text-free structure as for repairs (`looksTextFree` must pass). Claude receives only that structure: no page text, no URL, no page title. The structure is capped at 2,500 elements by `structure.js` and at 120,000 characters before sending; if it is cut, Claude is told so.
+- Claude returns 4 to 8 cards in the config-file shape (structured output with zod): `role` (heading, main, list, notice, table, menu, search, button, link, other), `action` (`read` / `list` / `click`), `selector`, `container` (list cards only), `titleSelector` (the element whose text should become the card title) and a one-sentence reason.
+- Card titles are made on this computer, never by Claude: the app reads the text of the `titleSelector` element (its `aria-label`, an image's `alt`, or a heading's text). For a `click` card without one, it uses the name of the element to press. If there is no usable text, the title is the role in Japanese with a number, such as "一覧 1". The deck name is the page's `<title>`, also used only on this computer.
+- Each proposed card is tried on the page, and dropped if it does not fit: `read` must match an element with text, `list` at least one item, `click` exactly one element. Duplicates are dropped, and at most 8 cards are kept.
+- The remaining cards are saved as a new config file in the app's user data folder (`generated/<id>.json`) and appear on the first screen at the next start too. While Claude works, the usual progress messages say how many seconds have passed. The whole process times out after 90 seconds. When done, the app opens the new deck and announces once "「{name}」のカードを{N}枚作りました。"; on failure it announces one sentence with the reason and shows the URL field again.
+- The first card of a generated deck has two extra buttons: "設定ファイルとして書き出す（支援者向け）" writes the deck as `todoku-<id>.json` into the Downloads folder, so a supporter can check it and distribute it as a regular config file; "このカードの束を消す" deletes the deck and its local repairs.
+- The first screen is now always shown, even when there is only one config, because it holds this entry point.
+
 ## Config file format (short)
 
 - `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card; keep URLs out of it, because screen readers read them almost character by character), optional `sourceUrl` (the `http(s)://` page of the source; the app's first card gets a "出典のページを開く" button that opens it in the default browser), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
@@ -82,6 +93,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## How Claude is used
 
 - In the app: Claude (default `claude-opus-5-5`) proposes repaired selectors from the page structure, as described above.
+- In the app: Claude also proposes a whole deck of cards for a page that has no config file, from the same text-free structure.
 - In development: the app was built with Claude Code. One Claude Code session on Windows wrote most of the app and tested it with NVDA; another on macOS reviewed the changes, wrote this README and the private local configs, and checked names and personal data before each push.
 
 ## Third-party software
@@ -107,6 +119,7 @@ Todoku（とどく）は、視覚に障害のある方が、カードの簡単�
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをふつうのボタンのカードの画面にします。画面読み上げソフトの利用者は、Tab で移り、Enter か Space で押すと、結果が読み上げられます。
 - `list` のカードは、当たる項目を番号付きで全部読みます。自動で切り替わる画像の帯（カルーセル）の中の隠れたお知らせも、「4件あります。1件目: …」と読めます。文字が画像だけのお知らせは、画像の説明（alt）から読みます。
 - ウェブアプリの画面が変わって設定ファイルの行が当たらなくなると、アプリはどの行が当たらないかだけを知らせます。Claude が、文字を全部落としたページの構造から直したセレクタの案を作り、人が案ごとに「採る／採らない」を選びます。
+- 設定ファイルの無いページでも、カードを作れます。はじめの画面の「新しいページからカードを作る」で URL（http か https）を入れると、アプリがそのページを開き、文字を全部落としたページの作りだけを Claude に送ります。Claude はカードの束の案（4〜8枚）を返し、アプリはその案をページで試して、当たらないカードや中身の空のカードを落とします。カードの題と束の名前は、アプリが手元でページの見出し・aria-label・alt・title から作り、Claude には送りません。作った束はその機械の中に残り、次の起動でも一覧に出ます。束のはじめのカードのボタンで、支援者向けに設定ファイルとして書き出したり、束を消したりできます。待つのは長くて90秒です。
 - 使う人の側でも、その場で直せます。カードが読む所・押す所を見つけられず、鍵（CARDS_ANTHROPIC_API_KEY）があるときは、いま開いているページの構造からそのカードの案だけを作り、ページで試して確からしいときだけ採ります。直しはその機械の中だけに残り、カードの中の「直す前に戻す」ボタンで戻せます。
 - 動かし方・設定・使った部品は、上の英語の節をご覧ください。
 - 練習のページ（みどり市・講座のページ）は作り物で、実在の自治体や人とは関係ありません。
