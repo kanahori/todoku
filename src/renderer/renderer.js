@@ -986,7 +986,7 @@ function appDeck(config, hasParent = true) {
   if (hasParent) {
     texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
     // 基を使い慣れた方は、二枚目に表示設定があると思って探すので、在処と戻り方を言う。
-    texts.push(`表示設定は、はじめの画面の「${SETTINGS_HEADING}」のカードにあります。Escキーで、はじめの画面へ戻れます。`);
+    texts.push(`表示設定は、はじめの画面の「${SETTINGS_HEADING}」のカードにあります。`);
   }
   if (clicks === 0) texts.splice(texts.indexOf('押す所のカードでは、カード内のボタンで押します。'), 1);
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。

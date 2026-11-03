@@ -469,7 +469,7 @@ async function rendererFocusChecks() {
     check('はじめのカードの項目に、出典の文があり、URL は無い',
       firstTexts.includes('出典：作り物のサイトを加工して作成。') && !firstTexts.some((t) => /https?:/.test(t)), firstTexts);
     check('はじめのカードの項目に、表示設定の在処と、Escキーではじめの画面へ戻れることを言う一文がある',
-      firstTexts.includes('表示設定は、はじめの画面の「表示設定」のカードにあります。Escキーで、はじめの画面へ戻れます。'), firstTexts);
+      firstTexts.includes('表示設定は、はじめの画面の「表示設定」のカードにあります。'), firstTexts);
     await key('End');
     const sourceButton = await focusState();
     check('はじめのカードの最後の項目は「出典のページを開く」ボタン', sourceButton.tag === 'BUTTON' && sourceButton.text === '出典のページを開く', sourceButton);
