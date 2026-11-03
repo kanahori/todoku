@@ -582,6 +582,9 @@ async function generateChecks() {
     });
     check('カードを作る: h3 の節も節のカードにし（h2 の前にあるもの）、幾つもの要素に当たる読むカードは最初の一つ（頭の目次）だけと重なりを見る。お問い合わせは束の後ろ',
       multi.ok && JSON.stringify(multi.config.cards.map((c) => c.title)) === JSON.stringify(expectedSections), multi.ok ? multi.config.cards.map((c) => c.title) : multi);
+    const { looksTextFree } = require('../src/main/structure');
+    check('カードを作る: 節のカードの selector に、日本語の id（ページの文字）を使わない',
+      multi.ok && multi.config.cards.every((c) => looksTextFree(c.selector) && looksTextFree(c.until || '')), multi.ok ? multi.config.cards.map((c) => c.selector) : multi);
     if (multi.ok) store.remove(multi.config.id);
     const whole2 = await generateDeck({
       BrowserWindow, url: 'fixture:cycle-guide2.html', callModel: async () => ({ cards: [noTitle('main', 'read', '#contents')] }), store, allowFixtures: true,

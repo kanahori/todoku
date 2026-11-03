@@ -65,7 +65,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## What is sent to Claude
 
 - The app collects only the page structure: element names, id, class, role, aria-* and data-* attributes, and nesting. All page text, links, image sources and form values are removed; elements that contain text are only marked "(has text)". Before sending, the app checks again that the structure contains no page text (`looksTextFree`) and sends nothing if it does.
-- For a repair, Claude also receives the failing line (location in the config, card title, action, old selector) and returns a proposed selector with a short reason (structured output).
+- For a repair, Claude also receives the failing line (location in the config, the card id if it is plain ASCII, action, and the old selector with any non-ASCII text replaced by "…") and returns a proposed selector with a short reason (structured output). Card titles are not sent, because the titles of generated decks come from the page's headings.
+- The whole request text sent to Claude is checked again before sending: if it contains any Japanese character, it is not sent and the card says it could not be repaired. Selectors that the app makes itself never use ids that are not plain ASCII.
 - A supporter decides what is distributed: a fix is written into a config file only from the supporter card (see below), and the previous file is backed up to the app's user data folder (`config-backups`). The earlier screen also had a form to check every card and accept or reject proposals one by one; it is being rebuilt for the card screen.
 
 ## Automatic repair on the user's side
@@ -164,7 +165,7 @@ Claude がしていること（まとめ）
 
 - サイトの画面が変わってカードが当たらなくなったとき、そのカードの直しの案を作ります。アプリが開いているページで試し、合うときだけ採ります。直しはその機械の中だけに残り、戻せます。
 - 設定ファイルの無いページでは、カードの束の案（4〜8枚）を作ります。アプリが案を一枚ずつページで試して合わないものを落とし、題を手元で作り、本文の見出しごとの節のカードを足します。
-- Claude に送るのは、文字を全部落としたページの作りだけです。ページの文字・URL・題・リンク・入力した値は送りません。ページを読み上げるのは、Claude ではなくアプリです。
+- Claude に送るのは、文字を全部落としたページの作りだけです。ページの文字・URL・題・リンク・入力した値は送りません。直しのときも、カードの題は送らず、前のセレクタの中の文字は「…」に伏せ、送る文の全体に日本語の文字が一つでもあれば送りません。ページを読み上げるのは、Claude ではなくアプリです。
 - 鍵（CARDS_ANTHROPIC_API_KEY）が無くても、この二つのほかは全部使えます。
 
 - ウェブアプリごとに、どこを読む・何を押すかを書いた設定ファイルを持ち、それをカードの束の画面にします。上下の矢印でカードを移り、Enter か Space でカードを開いて読み、結果は上下の矢印で一件ずつ読めます（最後の項目で下矢印なら「ここが最後です。」、最初の項目で上矢印なら「ここが一番上です。」と知らせます）。Esc で戻ります。ウェブアプリの窓は、カードの画面の後ろの別の窓にあり、焦点を取りません（ログインのときだけ、使う人が前に出せます）。

@@ -44,7 +44,7 @@ function fakeBrowserWindow(page) {
 
 // ページで動かす文の、最初の引数（selector）を取り出す。
 const argOf = (script) => JSON.parse(script.slice(script.lastIndexOf(')(') + 2).split(', ')[0].replace(/\)$/, ''));
-const SKELETON = 'body\n  div.hero\n    div.vis-track\n      div.vis-item.is-active (文字あり)';
+const SKELETON = 'body\n  div.hero\n    div.vis-track\n      div.vis-item.is-active (has text)';
 
 let seq = 0;
 function makeConfig(cards) {
@@ -133,9 +133,32 @@ test('案を作る: いまのページ（読み込み直さない）の構造だ
     { ...r.repair },
     { cardId: 'carousel', field: 'selector', before: '.hero .slide', after: '.hero .vis-item:not(.is-clone)', reason: '作りが変わったため。', at: at.toISOString(), action: 'list', title: '大きな画像のお知らせを全部読む', matches: 4 },
   );
-  assert.ok(sent.user.includes('cards[0].selector') && sent.user.includes('div.vis-item.is-active (文字あり)'));
+  assert.ok(sent.user.includes('cards[0].selector') && sent.user.includes('div.vis-item.is-active (has text)'));
   assert.ok(sent.signal instanceof AbortSignal);
   assert.equal(scripts.length, 2);
+});
+
+test('案を作る: 日本語の題・日本語の id・文字入りのセレクタのカードでも、Claude に渡る文に日本語の文字が一つも無い（題と日本語の id は送らず、セレクタの文字は伏せる）', async () => {
+  const config = makeConfig([{ id: '地点の選択', title: '地図で東京の地点を選ぶ', action: 'click', selector: '#stationMap .station-marker > div[title^="地点名：東京\\a "]' }]);
+  const { BrowserWindow } = fakeBrowserWindow((script) => {
+    if (script.includes('pageSkeleton')) return { skeleton: 'body\n  div#stationMap\n    div.station-marker\n      div[title] (has text)', nodes: 4, truncated: false };
+    if (script.includes('pageTry')) return { count: 1, hasText: true };
+    throw new Error('想定していない文');
+  });
+  let sent = null;
+  await proposeAutoRepair({ BrowserWindow, config, index: 0, callModel: async (req) => { sent = req; return { proposals: [] }; } });
+  assert.ok(sent, 'Claude を呼んだ');
+  assert.doesNotMatch(sent.user, /[぀-ヿ㐀-鿿　-〿＀-￯]/);
+  assert.ok(!sent.user.includes('地図で東京') && !sent.user.includes('地点の選択'));
+  assert.ok(sent.user.includes('old selector: #stationMap .station-marker > div[title^="…\\a "]'), sent.user);
+  assert.ok(!sent.user.includes('card id:'), '日本語の id は送らない');
+});
+
+test('案を作る: 送る文に日本語の文字が混ざったら（構造の確かめをすり抜けても）Claude を呼ばない', async () => {
+  const { repairRequestTextFree, buildRepairRequest } = require('../src/main/repair-prompt');
+  assert.equal(repairRequestTextFree(buildRepairRequest([{ where: 'cards[0].selector', cardId: 'news', action: 'list', oldSelector: '.news li' }], 'ul.news')), true);
+  assert.equal(repairRequestTextFree(buildRepairRequest([{ where: 'cards[0].selector', cardId: 'news', action: 'list', oldSelector: '.news li' }], 'ul.news ＡＢＣ')), false);
+  assert.match(buildRepairRequest([{ where: 'cards[0].selector', cardId: 'news', action: 'list', oldSelector: '.news li' }], 'ul.news'), /card id: news/);
 });
 
 test('案を作る: 構造に文字が混ざったら Claude を呼ばない', async () => {

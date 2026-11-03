@@ -44,7 +44,7 @@ function fakeBrowserWindow(page, { title = '作り物の町のお知らせ', lan
   return { BrowserWindow: FakeWindow, made };
 }
 
-const SKELETON = 'body\n  header.top\n    nav.menu\n      a (文字あり)\n  main\n    h2.news-title (文字あり)\n    ul.news\n      li (文字あり)';
+const SKELETON = 'body\n  header.top\n    nav.menu\n      a (has text)\n  main\n    h2.news-title (has text)\n    ul.news\n      li (has text)';
 const SETTLE = { stepMs: 1, minMs: 0, stableMs: 0, maxMs: 30 };
 
 // ページで動かす文の種類ごとに答える。inspect は案の数だけの probe を返す。

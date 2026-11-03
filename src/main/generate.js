@@ -430,11 +430,14 @@ function pageSections(taken, maxSections, minChars, maxMust) {
   if (!main) return { sections: [], mainLists: [], whole: [] };
   const order = new Map();
   [...document.querySelectorAll('*')].forEach((e, i) => order.set(e, i));
+  // id は、英数字の名前（文字でないもの）で、ページに一つだけのときだけ使う。日本語などの id を selector に入れると、
+  // その selector が直しのときに Claude へ送られる（見直しで見つけた経路）。
+  const safeId = (n) => Boolean(n.id) && /^[A-Za-z0-9_:\-]{1,40}$/.test(n.id) && document.querySelectorAll(`#${CSS.escape(n.id)}`).length === 1;
   const selectorOf = (el) => {
-    if (el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) return `#${CSS.escape(el.id)}`;
+    if (safeId(el)) return `#${CSS.escape(el.id)}`;
     const parts = [];
     for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
-      if (n !== el && n.id && document.querySelectorAll(`#${CSS.escape(n.id)}`).length === 1) {
+      if (n !== el && safeId(n)) {
         parts.unshift(`#${CSS.escape(n.id)}`);
         break;
       }
@@ -811,9 +814,12 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   if (!looksTextFree(skeleton)) return fail('text-in-structure');
   const limited = limitStructure(skeleton);
   if (signal.aborted) return fail('timeout');
+  const user = buildGenerateRequest(limited.text, { truncated: truncated || limited.cut });
+  // 送る文の全体に日本語の文字があれば送らない（構造の確かめに加えて、送る文そのものも確かめる）。
+  if (!looksTextFree(user)) return fail('text-in-structure');
   let answer;
   try {
-    answer = await callModel({ system: SYSTEM_PROMPT, user: buildGenerateRequest(limited.text, { truncated: truncated || limited.cut }), signal });
+    answer = await callModel({ system: SYSTEM_PROMPT, user, signal });
   } catch (e) {
     return fail(signal.aborted ? 'timeout' : 'model-error', e.message);
   }

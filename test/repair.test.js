@@ -6,7 +6,7 @@ const { SYSTEM_PROMPT, buildRepairRequest } = require('../src/main/repair-prompt
 const { RepairSchema, hasApiKey, applyRepairs, DEFAULT_MODEL } = require('../src/main/repair');
 
 test('構造に日本語の文字が混ざっていたら見つける', () => {
-  assert.equal(looksTextFree('div#main.box (文字あり)\n  ul[data-region=list]'), true);
+  assert.equal(looksTextFree('div#main.box (has text)\n  ul[data-region=list]'), true);
   assert.equal(looksTextFree('div#main.box 締め切り'), false);
 });
 

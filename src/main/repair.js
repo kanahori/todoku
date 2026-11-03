@@ -8,7 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { z } = require('zod');
-const { SYSTEM_PROMPT, buildRepairRequest } = require('./repair-prompt');
+const { SYSTEM_PROMPT, buildRepairRequest, repairRequestTextFree } = require('./repair-prompt');
 const { buildSkeletonScript, looksTextFree } = require('./structure');
 const { resolveUrl, openTarget } = require('./target');
 
@@ -89,7 +89,7 @@ async function proposeRepairs({ BrowserWindow, config, problems, callModel }) {
     const card = config.cards[index];
     const url = resolveUrl(config.url, card.path);
     if (!byUrl.has(url)) byUrl.set(url, []);
-    byUrl.get(url).push({ where: p.where, index, title: card.title, action: card.action, oldSelector: card.selector });
+    byUrl.get(url).push({ where: p.where, index, title: card.title, cardId: card.id, action: card.action, oldSelector: card.selector });
   }
 
   for (const [url, items] of byUrl) {
@@ -99,9 +99,15 @@ async function proposeRepairs({ BrowserWindow, config, problems, callModel }) {
       for (const it of items) errors.push({ where: it.where, message: '構造に文字が混ざったので、送りませんでした' });
       continue;
     }
+    // 送る文の全体に日本語の文字があれば送らない（題は文に入れない。前のセレクタの文字は伏せる。それでも残れば止める）。
+    const user = buildRepairRequest(items, skeleton);
+    if (!repairRequestTextFree(user)) {
+      for (const it of items) errors.push({ where: it.where, message: '送る文にページの文字が混ざったので、送りませんでした' });
+      continue;
+    }
     let answer;
     try {
-      answer = await callModel({ system: SYSTEM_PROMPT, user: buildRepairRequest(items, skeleton), meta: { nodes, truncated } });
+      answer = await callModel({ system: SYSTEM_PROMPT, user, meta: { nodes, truncated } });
     } catch (e) {
       for (const it of items) errors.push({ where: it.where, message: `案を作れませんでした: ${e.message}` });
       continue;

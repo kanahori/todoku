@@ -7,7 +7,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { SYSTEM_PROMPT, buildRepairRequest } = require('./repair-prompt');
+const { SYSTEM_PROMPT, buildRepairRequest, repairRequestTextFree } = require('./repair-prompt');
 const { buildSkeletonScript, looksTextFree } = require('./structure');
 const { resolveUrl, openTarget, runCard } = require('./target');
 
@@ -129,12 +129,15 @@ async function proposeAutoRepair({ BrowserWindow, config, index, callModel, time
   const win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path));
   const { skeleton } = await win.webContents.executeJavaScript(buildSkeletonScript());
   if (!looksTextFree(skeleton)) return { ok: false, reason: 'text-in-structure' };
-  const item = { where, index, title: card.title, action: card.action, oldSelector: card.selector };
+  const item = { where, index, cardId: card.id, action: card.action, oldSelector: card.selector };
+  const user = buildRepairRequest([item], skeleton);
+  // 送る文の全体に日本語の文字があれば送らない（構造・id・前のセレクタのどこかから、ページの文字が混ざりうるため）。
+  if (!repairRequestTextFree(user)) return { ok: false, reason: 'text-in-structure' };
   const controller = new AbortController();
   let answer;
   try {
     answer = await withTimeout(
-      Promise.resolve().then(() => callModel({ system: SYSTEM_PROMPT, user: buildRepairRequest([item], skeleton), signal: controller.signal })),
+      Promise.resolve().then(() => callModel({ system: SYSTEM_PROMPT, user, signal: controller.signal })),
       timeoutMs,
       controller,
     );
