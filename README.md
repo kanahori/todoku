@@ -25,14 +25,16 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Getting started (Windows)
 
-- Requirements: Windows 10/11 (x64 or Arm64), Node.js 22.12 or later (tested with Node 26.13 on Windows 11 Arm64).
-- Install dependencies: `npm ci`
+- Requirements: Windows 10/11 (x64 or Arm64), Git, Node.js 22.12 or later (tested with Node 26.13 on Windows 11 Arm64).
+- Get the code: `git clone <this repository's URL>`, then `cd` into the new folder.
+- In the repository folder, install dependencies: `npm ci`
   - `npm ci` does not download the Electron binary. The first `npm start` (or `npm run smoke`) does, printing "Downloading Electron binary..." (about 120 MB), so the first start takes longer.
   - Behind an HTTP proxy, that download may fail with "fetch failed". Setting `NODE_USE_ENV_PROXY=1` (Node 24.5 or later) together with `HTTPS_PROXY` lets the download use the proxy.
-  - `npm ci` reports moderate vulnerabilities and a deprecated package. They are all in the packaging tool (`electron-builder` and the packages it uses), which is used only to build the installers and is not part of the app.
+  - `npm ci` reports moderate vulnerabilities and a deprecated package, and npm 11 also warns about install scripts (from `electron-winstaller`). They are all in the packaging tool (`electron-builder` and the packages it uses), which is used only to build the installers and is not part of the app.
 - Start the app: `npm start`
   - The first screen ("Todoku") opens. Its cards are the app's introduction, display settings, search, one card per web app, and "新しいページからカードを作る".
   - Results are announced through a `role="status"` live region (errors through `role="alert"`), and the result items are put inside the card so they can be read again with the arrow keys.
+  - The app keeps its data (generated decks, local repairs, display settings, `log.txt`) in `%APPDATA%\Todoku` (measured with `npm start` on Windows 11 on 2026-11-04). The folder used by the installer has not been checked yet.
 - Run the tests:
   - `npm test` runs the unit tests with Node's built-in test runner. It does not need the Electron binary. 5 tests are reported as skipped: they are the scripts that run only inside Electron (`npm run smoke` and the others below).
   - `npm run smoke` runs the end-to-end checks inside Electron against the bundled practice pages in `test/fixtures/` (no network access).
@@ -47,10 +49,10 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Getting started (macOS)
 
-- Requirements: macOS on Apple silicon, Node.js 22.12 or later (tested with Node 22.19).
-- `npm ci`, then `npm start`. As on Windows, the first `npm start` downloads the Electron binary. `npm test` and `npm run smoke` work the same way as on Windows.
+- Requirements: macOS on Apple silicon, Git, Node.js 22.12 or later (tested with Node 22.19).
+- `git clone <this repository's URL>` and `cd` into the new folder. In the repository folder, `npm ci`, then `npm start`. As on Windows, the first `npm start` downloads the Electron binary. `npm test` and `npm run smoke` work the same way as on Windows.
 - Closing the Todoku window quits the app on macOS too (it does not stay in the Dock without a window).
-- Where the app keeps its data (generated decks, local repairs, display settings, `log.txt`): `npm start` and the app built with `npm run dist:mac` both use `~/Library/Application Support/Todoku` (the folder is named after `productName` in `package.json`; measured on macOS on 2026-11-04). The built app's menu is named "Todoku"; with `npm start` the menu is still named "Electron", because the development binary keeps its own name. On Windows, by the same rule, `npm start` is expected to use `%APPDATA%\Todoku`; the Windows folders have not been checked yet.
+- Where the app keeps its data (generated decks, local repairs, display settings, `log.txt`): `npm start` and the app built with `npm run dist:mac` both use `~/Library/Application Support/Todoku` (the folder is named after `productName` in `package.json`; measured on macOS on 2026-11-04). The built app's menu is named "Todoku"; with `npm start` the menu is still named "Electron", because the development binary keeps its own name. On Windows, see "Getting started (Windows)".
 - If the Electron binary download fails behind a proxy, download `electron-v<version>-darwin-arm64.zip` and `SHASUMS256.txt` from the Electron releases page, check the SHA-256, extract the zip into `node_modules/electron/dist`, and write `Electron.app/Contents/MacOS/Electron` into `node_modules/electron/path.txt`.
 - Build a macOS disk image: `npm run dist:mac` produces `dist/Todoku-1.0.0-arm64.dmg` (Apple silicon). It is not signed or notarized, so macOS warns that the developer cannot be verified; open it from the context menu (Open) the first time.
   - Behind a proxy, point `ELECTRON_CACHE` to a folder that already holds the Electron zip and `SHASUMS256.txt`. The same `ELECTRON_CACHE` also works for the first `npm start`.
@@ -61,7 +63,7 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - `CARDS_ANTHROPIC_API_KEY` (optional): the Anthropic API key used to ask Claude for repaired selectors. Without it, the app says it cannot make repair proposals; everything else works. The app deliberately does not read `ANTHROPIC_API_KEY`, so that the key used by the app stays separate from other tools on the same machine.
 - `TODOKU_DUMP_DIR` (optional, for developers): each time a deck is made, the app writes three files there: `<id>-a-structure.txt` (the text-free structure sent to Claude), `<id>-b-proposals.json` (Claude's answer as returned) and `<id>-c-deck.json` (the deck after the app's own guards, with card titles, and every proposal that was dropped with a short reason). Page text (the titles) appears only in the third file, so only the first two may be shared.
 - `CARDS_REPAIR_MODEL` (optional): the Claude model used for repair proposals. Default: `claude-opus-5-5`.
-- `https_proxy` / `HTTPS_PROXY` (optional): passed to Electron as `--proxy-server`, so the app can reach outside pages from a network that needs a proxy. `no_proxy` / `NO_PROXY` (optional) is passed as `--proxy-bypass-list`. Without them, the app uses no proxy switches and follows the system proxy settings. At startup the app tries to reach the proxy it would use (from these variables or from the system settings, 2-second timeout); if it cannot (for example, off campus while the system proxy still points to the campus proxy), it connects directly inside the app only, without changing the system settings, and writes one line to `log.txt` in the app's user data folder.
+- `https_proxy` / `HTTPS_PROXY` (optional): passed to Electron as `--proxy-server`, so the app can reach outside pages from a network that needs a proxy. `no_proxy` / `NO_PROXY` (optional) is passed as `--proxy-bypass-list`. Without them, the app uses no proxy switches and follows the system proxy settings. At startup the app tries to reach the proxy it would use (from these variables or from the system settings, 2-second timeout); if it cannot (for example, off campus while the system proxy still points to the campus proxy), it connects directly inside the app only, without changing the system settings, and writes one line about it to the terminal (when started with `npm start`) and to `log.txt` in the app's user data folder. Each line starts with the computer's local time and its offset from UTC (for example `2026-11-04T09:30:05.123+09:00`).
 
 ## Downloads
 
