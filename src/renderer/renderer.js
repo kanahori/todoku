@@ -1017,9 +1017,11 @@ function goToFound(appId, cardId) {
 // キーの説明は基の書き方（キーには「キー」を付け、カードは「選ぶ」、中は「カード内へ移動する」）で、一文を一つの項目にする。
 // Enter の二つの意味（先へ進む／カード内へ移動する）は、はじめのカードで分けて言い、行き先のカードでは中の一文でも言う。
 const APP_NAME = 'Todoku';
-const NVDA_TEXTS = [
+// 読み上げソフトごとの使い方。VoiceOver のキーの名前は Apple の言い方（クイックナビ・左矢印キーと右矢印キーを同時に押す）に合わせる。
+const READER_TEXTS = [
   'NVDAでは、NVDAキーとスペースキーでフォーカスモードに替えると、上下矢印キーでカードを選べます。',
   '替えなくても、Hキーで見出しを順に読めます。',
+  'MacのVoiceOverでは、左矢印キーと右矢印キーを同時に押してクイックナビをオフにすると、上下矢印キーでカードを選べます。',
 ];
 
 function sentences(texts) { return texts.map((text) => ({ text })); }
@@ -1114,7 +1116,7 @@ function topDeck(configs, problems) {
       'Escキーで、カードの中からカードへ戻ります。',
       `「${SETTINGS_HEADING}」のカードで、読みやすさ、1列リフロー表示、配色を変えられます。`,
       `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、題と説明から探せます。`,
-      ...NVDA_TEXTS,
+      ...READER_TEXTS,
     ]),
   }];
   // 基のカード型ページと同じく、二枚目を表示設定にする。三枚目が探す欄で、見つかったカードはそのすぐ後に並ぶ。

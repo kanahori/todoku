@@ -189,3 +189,11 @@ test('表示設定: 変えたときの知らせは「何をしたか」を一文
   assert.match(source, /`配色を「\$\{SCHEME_LABELS\[scheme\]\}」にしました。`/);
   assert.match(source, /'表示設定を標準に戻しました。続けて文字の大きさも、必要に応じて調整してください。'/);
 });
+
+test('はじめのカードの案内に、NVDA と並べて Mac の VoiceOver の使い方を一文で入れる（キーの名前は Apple の言い方）', () => {
+  const readers = source.slice(source.indexOf('const READER_TEXTS = ['), source.indexOf('function sentences('));
+  assert.match(readers, /'NVDAでは、/);
+  assert.match(readers, /'MacのVoiceOverでは、左矢印キーと右矢印キーを同時に押してクイックナビをオフにすると、上下矢印キーでカードを選べます。'/);
+  const topDeckBody = source.slice(source.indexOf('function topDeck('));
+  assert.match(topDeckBody, /\.\.\.READER_TEXTS,/);
+});
