@@ -18,7 +18,7 @@ function fakeUserData() {
   return dir;
 }
 
-test('userData の置き場は、npm start の hackathon2026 と包んだアプリの Todoku の二つ（OS ごとの appData の下）', () => {
+test('userData の置き場は、前の版の hackathon2026 と、いまの Todoku（npm start も包んだアプリも）の二つ（OS ごとの appData の下）', () => {
   assert.deepEqual(userDataCandidates({ platform: 'win32', env: { APPDATA: 'C:\\\\Users\\\\x\\\\AppData\\\\Roaming' }, home: '/h' }),
     [path.join('C:\\\\Users\\\\x\\\\AppData\\\\Roaming', 'hackathon2026'), path.join('C:\\\\Users\\\\x\\\\AppData\\\\Roaming', 'Todoku')]);
   assert.deepEqual(userDataCandidates({ platform: 'darwin', env: {}, home: '/h' }),

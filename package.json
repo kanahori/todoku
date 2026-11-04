@@ -1,5 +1,6 @@
 {
   "name": "hackathon2026",
+  "productName": "Todoku",
   "version": "1.0.0",
   "description": "Card-based accessible front end for web apps (Electron)",
   "main": "src/main/main.js",
