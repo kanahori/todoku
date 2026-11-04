@@ -726,6 +726,14 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
   for (const x of [firstTable, largest]) {
     if (x && !must.includes(x) && must.length < maxMust) must.push(x);
   }
+  // 表そのものに題のある表（caption か、表の頭の題の行）は、Claude の案に無くても、ページの上からの順に3枚まで足す。
+  // 気象庁の警報のページで、Claude の案の形によって時系列・早期注意・市町村別の表があったり無かったりし、束の枚数が回ごとに揺れた（頼み27）。
+  for (const x of tableItems.slice().sort(byOrder)) {
+    if (must.length >= maxMust + 3) break;
+    if (must.includes(x)) continue;
+    const tt = titlesOf(x.el, true);
+    if (tt.cap || tt.rowTitle) must.push(x);
+  }
   const mainLists = [];
   for (const top of must) {
     if (overlapsTaken(top.el)) continue;

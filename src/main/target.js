@@ -293,10 +293,18 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       // 気象庁の「警戒レベルとの関係」が、表まるごと一件（400字ほど）になった（2026-11-04 の Windows の確かめ）。二つの表の組（joinWith）のときは分けない。
       const overrides = new Map();
       const blanks = new Map();
-      if (items.length > 0 && !joinWith && items.some((it) => it.tagName !== 'TR' && !it.closest('table') && it.querySelector('table'))) {
+      // 表の行のまとまりの見出しの行（td の無い行で、すぐ下に td の行があるもの。二つ目の行から）。二つ以上あれば、まとまりのある表とみる。
+      const hasTd = (r) => Boolean(r.querySelector('td'));
+      const groupRowsOf = (table) => {
+        const rows = [...table.rows].filter((r) => (r.textContent || '').trim() || r.querySelector('td'));
+        const g = rows.filter((r, i) => !hasTd(r) && i > 0 && rows[i + 1] && hasTd(rows[i + 1]));
+        return g.length >= 2 ? g : [];
+      };
+      const asTable = (it) => (it.tagName === 'TABLE' ? [it] : it.tagName !== 'TR' && !it.closest('table') ? [...it.querySelectorAll('table')].filter((t) => !t.parentElement.closest('table')) : []);
+      if (items.length > 0 && !joinWith && items.some((it) => it.tagName === 'TABLE' || (it.tagName !== 'TR' && !it.closest('table') && it.querySelector('table')))) {
         const units = [];
         for (const it of items) {
-          const tables = it.tagName !== 'TR' && !it.closest('table') ? [...it.querySelectorAll('table')].filter((t) => !t.parentElement.closest('table')) : [];
+          const tables = asTable(it);
           const rest = (it.textContent || '').replace(/\s+/g, '').length - tables.reduce((n, t) => n + (t.textContent || '').replace(/\s+/g, '').length, 0);
           if (tables.length !== 1 || rest > 30) {
             units.push(it);
@@ -308,6 +316,11 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           }
           for (const t of tables) {
             const rows = [...t.rows];
+            // まとまりのある表は、行を全部並べ、下で題の行・時刻などの行・まとまりの見出しの行を外す（見出しの行をまとめて一件にしない）。
+            if (groupRowsOf(t).length > 0) {
+              units.push(...rows);
+              continue;
+            }
             const heads = rows.filter((r) => !r.querySelector('td'));
             if (heads.length > 0) {
               units.push(heads[0]);
@@ -318,9 +331,25 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         }
         items = units;
       }
+      // まとまりのある表の行を並べた一覧（Claude の案が表の行を全部指したときなど）では、td の無い行のうち、
+      // 題の行（一行目の升目一つの行）・最初の td の行より前の升目一つの行（更新の時刻など。下で一件目の頭に付ける）・まとまりの見出しの行を、一件にしない。
+      // 気象庁の発表状況の表で、題・時刻・「茨城県北部 警報・注意報」が一件ずつになった（2026-11-04 夜の Windows の確かめ・頼み26）。
+      if (items.length > 0 && !joinWith) {
+        for (const table of new Set(items.filter((it) => it.tagName === 'TR').map((it) => it.closest('table')))) {
+          const groups = groupRowsOf(table);
+          if (groups.length === 0) continue;
+          const rows = [...table.rows];
+          const firstData = rows.findIndex(hasTd);
+          const drop = (r) => !hasTd(r) && !overrides.has(r)
+            && (groups.includes(r) || (r.cells.length === 1 && (rows.indexOf(r) === 0 || rows.indexOf(r) < firstData)));
+          items = items.filter((it) => !(it.tagName === 'TR' && it.closest('table') === table && drop(it)));
+        }
+      }
       // 表の中で、見出しだけの行（地域の名前）が行のまとまりごとに二つ以上あれば、その下の行の頭に、見出しの行の最初の升目を付けて読む。
       // 気象庁の発表状況の表で、地域名の行が抜け、「警報・注意報は発表されていません」の2件だけになった（2026-11-04 の Windows の確かめ）。
       const groupHead = new Map();
+      // 行のまとまり（見出しの行）ごとの、一覧に入っている行。行が二つ以上のまとまりは、一件にまとめて読む（下の texts の後）。
+      const groupRows = new Map();
       const isData = (r) => Boolean(r.querySelector('td'));
       if (items.length > 0 && !joinWith) {
         const cellText = (c) => oneLine(textLines(c, false, 'item'));
@@ -331,7 +360,12 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           let label = '';
           for (const r of rows) {
             if (groups.includes(r)) label = r.cells[0] ? cellText(r.cells[0]) : '';
-            else if (isData(r) && items.includes(r) && label) groupHead.set(r, label);
+            else if (isData(r) && items.includes(r) && label) {
+              groupHead.set(r, label);
+              const g = groups.filter((x) => rows.indexOf(x) < rows.indexOf(r)).pop();
+              if (!groupRows.has(g)) groupRows.set(g, { label, rows: [] });
+              groupRows.get(g).rows.push(r);
+            }
           }
         }
       }
@@ -398,6 +432,31 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           const partner = partners[k] ? oneLine(textLines(partners[k], false, 'item')) : '';
           return `${head}${body}${partner ? ` ${partner}` : none}${tags.length > 0 ? `（${tags.join('、')}）` : ''}`;
         });
+        // 行が二つ以上ある行のまとまりは、「地域名 行1、行2、…」の一件にまとめる。行は升目ごとに空白で区切り、見出しの升目だけに文字があれば「なし」。
+        // 気象庁の発表状況の表は、警報が出ていると地域ごとに特別警報・警報・注意報の三行になり、「茨城県北部 警報 なし」のように地域が細かく割れた
+        // （2026-11-04 夜の Windows の確かめ・頼み26）。
+        const multi = [...groupRows.values()].filter((g) => g.rows.length >= 2);
+        if (multi.length > 0) {
+          const rowText = (r) => {
+            const cells = [...r.cells].map((c) => oneLine(textLines(c, false, 'item'))).filter(Boolean);
+            const empty = [...r.cells].slice(1).every((c) => !(c.textContent || '').trim() && !c.querySelector('img[alt]:not([alt=""]), [aria-label]'));
+            return cells.length === 0 ? '' : `${cells.join(' ')}${empty && r.cells.length > 1 ? ' なし' : ''}`;
+          };
+          const outItems = [];
+          const outTexts = [];
+          items.forEach((it, k) => {
+            const g = multi.find((x) => x.rows.includes(it));
+            if (!g) {
+              outItems.push(it);
+              outTexts.push(texts[k]);
+            } else if (g.rows[0] === it) {
+              outItems.push(it);
+              outTexts.push(`${g.label} ${g.rows.map(rowText).filter(Boolean).join('、')}`);
+            }
+          });
+          items = outItems;
+          texts = outTexts;
+        }
         // 文字の無い一件（表の頭の飾りの空の行など）は読まない（「1件目: 」と空のまま読まれた。気象庁の警報の表）。
         // 全部が空なら、今までどおり項目のまま返す（空の項目として知らせる）。
         if (texts.some((t) => t.trim() !== '')) {

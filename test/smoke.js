@@ -737,6 +737,34 @@ async function generateChecks() {
         levelItems.ok && levelItems.items.length === 2 && levelItems.items[0].startsWith('4日6時00分更新 北部') && levelItems.items[1].startsWith('南部'), levelItems.items);
       store.remove(headDeck.config.id);
     }
+    // 不変条件（頼み27）: 注意報が出ているときの作り物の気象台のページに、本物の Claude の案に出てきた形（区画を丸ごと読む・
+    // 表の写しだけを指す・発表状況の表の行を全部並べる・表そのものを一件にする・案が一枚も無い）を当てても、
+    // 束は6〜8枚で、芯（警戒レベル・発表状況・市町村別・表を替える）が一枚ずつ、番号付きの題が無く、
+    // 発表状況は地域ごとに一件（地域名と特別警報・警報・注意報）で、一件目の頭に更新の時刻が付く（題だけ・時刻だけ・細かく割った件を出さない）。
+    const nightShapes = [
+      ['区画を丸ごと読む', [noTitle('table', 'read', '#summary'), noTitle('table', 'read', '#timeline'), noTitle('menu', 'list', '.bosai-menu li')]],
+      ['写しだけを指す', [{ ...noTitle('table', 'read', '#summary .wide-fix'), titleSelector: '#summary tr.title th' }, noTitle('button', 'click', '#tool .radio-button:nth-of-type(1)')]],
+      ['表の行を全部並べる', [noTitle('table', 'list', '#summary .block:nth-of-type(2) table tr')]],
+      ['表そのものを一件にする', [noTitle('table', 'list', '#summary .block:nth-of-type(2) table')]],
+      ['案が一枚も無い', []],
+    ];
+    const nightCore = ['あおば県の警戒レベル相当情報（発表状況）', 'あおば県の警報・注意報（発表状況）', 'あおば県の警報・注意報（市町村別）', '表を替える（大雨・土砂災害・高潮）'];
+    for (const [label, cardsOf] of nightShapes) {
+      const d = await generateDeck({ BrowserWindow, url: 'fixture:warnings-night.html', store, allowFixtures: true, callModel: async () => ({ cards: cardsOf }) });
+      const titles = d.ok ? d.config.cards.map((c) => c.title) : [];
+      const summaryCard = d.ok ? d.config.cards.find((c) => c.title === 'あおば県の警報・注意報（発表状況）') : null;
+      const read = summaryCard ? await runCard(BrowserWindow, d.config, summaryCard.id, { waitMs: 500 }) : null;
+      const items = read && read.ok ? read.items : [];
+      check(`カードを作る（不変条件・${label}）: 6〜8枚で芯が一枚ずつ、番号付きの題が無く、発表状況は地域ごとに一件で一件目に更新の時刻`,
+        d.ok && titles.length >= 6 && titles.length <= 8 && nightCore.every((t) => titles.filter((x) => x === t).length === 1)
+          && !titles.some((t) => / \d+$/.test(t))
+          && JSON.stringify(items) === JSON.stringify([
+            '4日19時55分更新 北部 特別警報 なし、警報 なし、注意報 強風注意報、雷注意報',
+            '南部 特別警報 なし、警報 なし、注意報 波浪注意報',
+          ]),
+        { titles, items });
+      if (d.ok) store.remove(d.config.id);
+    }
     // メニューの題は Claude の題の元を使わず、aria-label・見出し・最初の項目から取る。項目がほとんど地域の名前なら「地域のメニュー」。
     const menuNamed = await generateDeck({
       BrowserWindow, url: 'fixture:warnings-split.html', store, allowFixtures: true,
