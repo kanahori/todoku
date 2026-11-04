@@ -223,7 +223,7 @@ async function main() {
     })()`);
     const changed = await readItemTarget(BrowserWindow, chat, 'questions', 2, {}, questions.keys[2]);
     check('チャット: 選んだ一件がページに無くなっていたら、一覧を読んだ後に画面が変わった（changed）と返す',
-      !changed.ok && changed.changed === true && changed.message === '一覧を読んだ後に画面が変わりました', changed);
+      !changed.ok && changed.changed === true && changed.message === '一覧を読んだ後に、ページが変わりました', changed);
     const history = await runCard(BrowserWindow, chat, 'history');
     check('チャット: 過去のチャットの一覧を5件読む', history.ok && history.items.length === 5 && history.items[0] === '旅の持ち物の相談', history.items);
     // 読み込み直して、書き終わる前に待つ長さが切れたとき。
@@ -953,9 +953,9 @@ async function autoRepairChecks() {
     reopened.remove(base.id, 'carousel');
     const undone = applyOverrides(base, reopened.load(base.id));
     const third = await runCardWithAutoRepair({ BrowserWindow, config: undone.config, cardId: 'carousel', callModel: null, store: reopened, options: { waitMs: 500 } });
-    check('自動で直す: 元に戻すと、設定ファイルのままの selector になり、読めない（鍵が無いので「自動で直せなかった」の印と「Claude の鍵がありません」）',
+    check('自動で直す: 元に戻すと、設定ファイルのままの selector になり、読めない（鍵が無いので「自動で直せなかった」の印と「Claude の API キーがありません」）',
       undone.config.cards[0].selector === '.hero .slide' && !third.ok && third.autoRepairFailed === true && third.where === 'cards[0].selector'
-        && third.autoRepairReasonText === 'Claude の鍵がありません', third);
+        && third.autoRepairReasonText === 'Claude の API キーがありません', third);
 
     // 確からしくない案（当たる数 0）は採らない。
     const weak = await runCardWithAutoRepair({
@@ -964,7 +964,7 @@ async function autoRepairChecks() {
     });
     check('自動で直す: 当たらない案は採らず、手元にも残さない',
       !weak.ok && weak.autoRepairFailed === true && weak.autoRepairReason === 'not-confident'
-        && weak.autoRepairReasonText === '確かな案がありませんでした' && reopened.load(base.id).length === 0, weak);
+        && weak.autoRepairReasonText === '確かな直しの候補がありませんでした' && reopened.load(base.id).length === 0, weak);
   } finally {
     fs.rmSync(userData, { recursive: true, force: true });
   }
@@ -1042,8 +1042,8 @@ async function rendererItemTargetChecks() {
     await wait(300);
     const missing = await js("document.getElementById('alert').textContent");
     const stay = await active();
-    check('一件を選んで読む: 一覧を読んだ後に画面が変わっていたら「「自分の質問を全部読む」を読んだ後に画面が変わりました。もう一度「自分の質問を全部読む」を読んでください。」と知らせ、その一件に留まる',
-      missing === '「自分の質問を全部読む」を読んだ後に画面が変わりました。もう一度「自分の質問を全部読む」を読んでください。'
+    check('一件を選んで読む: 一覧を読んだ後に画面が変わっていたら「「自分の質問を全部読む」を読んだ後に、ページが変わりました。もう一度「自分の質問を全部読む」を読んでください。」と知らせ、その一件に留まる',
+      missing === '「自分の質問を全部読む」を読んだ後に、ページが変わりました。もう一度「自分の質問を全部読む」を読んでください。'
         && stay.tag === 'LI' && stay.text === '三つ目の質問（画面が変わった後）', { missing, stay });
     // 返事の無い一件（手がかりは合うが、結び付いた所が無い）。偽の一覧の4件目。
     await key('ArrowDown');
@@ -1254,62 +1254,62 @@ async function rendererReviewChecks() {
 
   const t = await open({ fake: 'review' });
   try {
-    const pressed = await t.press('設定ファイルを点検する（支援者向け）');
+    const pressed = await t.press('設定ファイルを確認する（支援者向け）');
     await t.wait(500);
     const first = await t.state();
-    check('点検: はじめのカードのボタンから点検の束へ進み、当たらない行と案の数を一文で知らせ、焦点は一件目の案の見出し',
-      pressed && first.title === 'Todoku - 「作り物の講座（画面が変わった後）」の点検（支援者向け）'
-        && first.heading === '設定ファイルを点検して直す（支援者向け）（案2件）'
-        && first.focus === '1件目（全2件）: 「締め切りを読む」の読む所'
-        && first.said[first.said.length - 1] === '当たらない行が2件あり、直しの案が2件あります。'
-        && first.buttons.includes('「締め切りを読む」の案を受ける（設定ファイルに書く）') && first.buttons.includes('「お知らせを読む」の案を断る'), first);
+    check('確認: アプリの案内のカードのボタンから確認の画面へ進み、読めなくなった場所と直しの候補の数を一文で知らせ、焦点は一つ目の候補の見出し',
+      pressed && first.title === 'Todoku - 「作り物の講座（画面が変わった後）」の設定ファイルの確認（支援者向け）'
+        && first.heading === '設定ファイルを確認して直す（支援者向け）（直しの候補2つ）'
+        && first.focus === '直しの候補 1つ目（全部で2つ）: 「締め切りを読む」の読む場所'
+        && first.said[first.said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2つあります。'
+        && first.buttons.includes('「締め切りを読む」の直しを使う（設定ファイルに書く）') && first.buttons.includes('「お知らせを読む」の直しを使わない'), first);
     // 見出しと値は一つの段落（dl にしない。NVDA が項目ごとに役割の名前を付けて、一件で6回読んだ）。断っても使う人の画面では直す、の一文がある。
     const reviewItems = await t.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.tagName + ' ' + x.textContent)");
-    check('点検: 案の見出しと値は「いまのセレクタ: …」の一つの段落で、dl を使わず、断っても使う人の画面では直す一文がある',
-      reviewItems.includes('P いまのセレクタ: .deadline-list li') && reviewItems.includes('P 案のセレクタ: [data-region="deadline-list"] li（ページの中で3か所に当たります）')
-        && reviewItems.includes('P 理由: 一覧の作りが data-region に変わったためです。') && reviewItems.includes('P 断っても、使う人の画面では、鍵があればその場で直して読みます。')
+    check('確認: 候補の見出しと値は「いまのセレクタ: …」の一つの段落で、dl を使わず、使わなくても使う人の画面では直す一文がある',
+      reviewItems.includes('P いまのセレクタ: .deadline-list li') && reviewItems.includes('P 直しの候補のセレクタ: [data-region="deadline-list"] li（ページの中で3か所が見つかります）')
+        && reviewItems.includes('P 理由: 一覧の作りが data-region に変わったためです。') && reviewItems.includes('P この直しを使わなかった場合も、使う人の画面では、Claude の API キーがあれば、その場で直して読みます。')
         && !reviewItems.some((x) => /^D[TD] /.test(x)), reviewItems);
     await t.js('window.__said.length = 0');
-    await t.press('「締め切りを読む」の案を受ける（設定ファイルに書く）');
-    await t.wait(300);
+    await t.press('「締め切りを読む」の直しを使う（設定ファイルに書く）');
+    await t.wait(1300);
     const accepted = await t.state();
     await t.key('ArrowDown');
     const nextHead = await t.state();
-    check('点検: 案を受けると、その一件だけを書くように頼み、焦点はその案の結果の文（別の知らせは出さない）。下矢印で次の案の見出し',
-      JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector']) && accepted.said.length === 0
-        && accepted.focus === '1件目（全2件）: 「締め切りを読む」の読む所: 受けました。設定ファイルに書き、前の版は控えに残しました。'
-        && nextHead.focus === '2件目（全2件）: 「お知らせを読む」の読む所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
+    check('確認: 直しを使うと、その一件だけを書くように頼み、書くのに 0.5秒を越えたら「書いています。」と一言知らせ、焦点はその候補の結果の文。下矢印で次の候補の見出し',
+      JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector']) && JSON.stringify(accepted.said) === JSON.stringify(['書いています。'])
+        && accepted.focus === '直しの候補 1つ目（全部で2つ）: 「締め切りを読む」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。'
+        && nextHead.focus === '直しの候補 2つ目（全部で2つ）: 「お知らせを読む」の読む場所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
     await t.js('window.__said.length = 0');
-    await t.press('「お知らせを読む」の案を断る');
+    await t.press('「お知らせを読む」の直しを使わない');
     await t.wait(300);
     const rejected = await t.state();
     await t.key('ArrowDown');
     const summary = await t.state();
-    check('点検: 案を断ると書かず、焦点はその案の結果の文。全部見たら、下矢印で受けた数と断った数の一文',
+    check('確認: 直しを使わないと書かず、焦点はその候補の結果の文。全部見たら、下矢印で使った数と使わなかった数の一文',
       JSON.stringify(rejected.applied) === JSON.stringify(['cards[0].selector']) && rejected.said.length === 0
-        && rejected.focus === '2件目（全2件）: 「お知らせを読む」の読む所: 断りました。設定ファイルは変えていません。'
-        && summary.focus === '全部の案を見ました（受けた案1件・断った案1件）。' && rejected.buttons.length === 0, { rejected, summary });
+        && rejected.focus === '直しの候補 2つ目（全部で2つ）: 「お知らせを読む」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。'
+        && summary.focus === 'すべての直しの候補を確認しました。使った直しは1つ、使わなかった直しは1つです。' && rejected.buttons.length === 0, { rejected, summary });
     await t.key('Escape');
     await t.key('Escape');
     const back = await t.state();
-    check('点検: Esc でアプリの束に戻る（窓の題も戻る）', back.title === 'Todoku - 作り物の講座（画面が変わった後）' && back.heading === '作り物の講座（画面が変わった後）', back);
+    check('確認: Esc でアプリのカードに戻る（窓の題も戻る）', back.title === 'Todoku - 作り物の講座（画面が変わった後）' && back.heading === '作り物の講座（画面が変わった後）', back);
   } finally {
     t.win.destroy();
   }
 
   const n = await open({ fake: 'review', nokey: '1' });
   try {
-    await n.press('設定ファイルを点検する（支援者向け）');
+    await n.press('設定ファイルを確認する（支援者向け）');
     await n.wait(500);
     const items = await n.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.textContent)");
     const s = await n.state();
-    check('点検（鍵が無いとき）: 当たらない行の一覧だけを読み、受ける・断るのボタンは出さない',
+    check('確認（API キーが無いとき）: 読めなくなった場所の一覧だけを読み、使う・使わないのボタンは出さない',
       JSON.stringify(items) === JSON.stringify([
-        '当たらない行が2件あります。鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。',
-        '「締め切りを読む」（読む所・押す所）: ページの中に当たる所がありません。',
-        '「お知らせを読む」（読む所・押す所）: ページの中に当たる所がありません。',
+        '読めなくなった場所が2か所あります。Claude の API キーが設定されていないので、直しの候補を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。',
+        '「締め切りを読む」（読む場所・押す場所）: ページの中に読む場所が見つかりません。',
+        '「お知らせを読む」（読む場所・押す場所）: ページの中に読む場所が見つかりません。',
       ]) && s.buttons.length === 0 && s.applied.length === 0
-        && s.said[s.said.length - 1] === '当たらない行が2件あります。鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。', { items, s });
+        && s.said[s.said.length - 1] === '読めなくなった場所が2か所あります。Claude の API キーが設定されていないので、直しの候補を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。', { items, s });
   } finally {
     n.win.destroy();
   }
@@ -1443,15 +1443,15 @@ async function rendererFocusChecks() {
     await wait(900);
     const fixed = await focusState();
     const fixedSaid = await status();
-    check('自動で直した読む所: 焦点が結果の最初の項目にあり、「画面が変わったので、読む所を直しました。」と知らせる',
+    check('自動で直した読む所: 焦点が結果の最初の項目にあり、「ページが変わったので、読む場所を直しました。」と知らせる',
       fixed.connected && fixed.firstResult && fixed.text === '直した所の文'
-        && fixedSaid === '画面が変わったので、読む所を直しました。「画面が変わった読む所」を読みました。', { fixed, fixedSaid });
+        && fixedSaid === 'ページが変わったので、読む場所を直しました。「画面が変わった読む所」を読みました。', { fixed, fixedSaid });
     const fixedItems = await js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + n.textContent)");
     check('自動で直した読む所: カードの中に、直したことの一文と「直す前に戻す」ボタンがある',
-      fixedItems.includes('P:このカードの読む所は、画面が変わったときに自動で直したものです。') && fixedItems[fixedItems.length - 1] === 'BUTTON:直す前に戻す', fixedItems);
+      fixedItems.includes('P:このカードの読む場所は、ページが変わったときに自動で直したものです。') && fixedItems[fixedItems.length - 1] === 'BUTTON:直す前に戻す', fixedItems);
     const headings = await js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
-    check('自動で直したら、束の最後に「自動で直した所（支援者向け）」のカードが足される',
-      headings[headings.length - 1] === '自動で直した所（支援者向け）', headings);
+    check('自動で直したら、束の最後に「自動で直した場所（支援者向け）」のカードが足される',
+      headings[headings.length - 1] === '自動で直した場所（支援者向け）', headings);
     // 二度目に読んだときは、直したことを言わない。
     await key('Escape');
     await key('Enter');
@@ -1466,10 +1466,10 @@ async function rendererFocusChecks() {
     await wait(300);
     const maintTexts = await js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.textContent)");
     check('支援者向けのカードで、カード・直す前と後のセレクタ・理由・日時と、配るボタン・戻すボタンを読める',
-      maintTexts[0] === '自動で直した所が1件あります。手元にだけ効いています。' && maintTexts.includes('画面が変わった読む所')
+      maintTexts[0] === '自動で直した場所が1か所あります。この直しは、このパソコンの中だけで使っています。' && maintTexts.includes('画面が変わった読む所')
         && maintTexts.includes('#d') && maintTexts.includes('#d2') && maintTexts.includes('id が変わったため。')
         && maintTexts.some((t) => /^2026年11月3日 \d+時05分$/.test(t))
-        && maintTexts.includes('「画面が変わった読む所」の直しを設定ファイルに書く（配る）') && maintTexts.includes('「画面が変わった読む所」を直す前に戻す'), maintTexts);
+        && maintTexts.includes('「画面が変わった読む所」の直しを設定ファイルに書く（ほかの人にも配れるようにする）') && maintTexts.includes('「画面が変わった読む所」を直す前に戻す'), maintTexts);
 
     // 直す前に戻す（読む所のカードの中のボタン）。支援者向けのカードから3枚上（直せない押す所・直せない読む所の上）。
     await key('Escape');
@@ -1487,7 +1487,7 @@ async function rendererFocusChecks() {
     const firstItemFocused = await js("(() => { const a = document.activeElement; const c = a.closest('article.card'); return Boolean(c) && c.querySelector('[data-item]') === a; })()");
     check('「直す前に戻す」を押すと、戻すよう頼み、「…読む所を、直す前に戻しました。」と知らせ、ボタンが消えて焦点はカードの中の最初の項目に移る',
       undoButton.text === '直す前に戻す' && JSON.stringify(undoneLog) === JSON.stringify(['fake-app/fixed-read'])
-        && undoSaid === '「画面が変わった読む所」の読む所を、直す前に戻しました。'
+        && undoSaid === '「画面が変わった読む所」の読む場所を、直す前に戻しました。'
         && !leftItems.includes('直す前に戻す') && afterUndo.connected && afterUndo.tag === 'P' && firstItemFocused
         && afterUndo.text === '直した所の文' && afterUndo.heading === '画面が変わった読む所', { undoButton, undoneLog, undoSaid, afterUndo, leftItems, firstItemFocused });
     // 戻した後に Esc を一度押すと、カードの上に戻るだけで、束からは出ない。
@@ -1505,7 +1505,7 @@ async function rendererFocusChecks() {
     const unfixed = await focusState();
     check('直せなかった読む所: 「読めません」の中に、理由つきの「自動で直すこともできませんでした（…）。」が最後に来る',
       unfixed.heading === '直せない読む所（読めません）'
-        && unfixed.text === '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。', unfixed);
+        && unfixed.text === 'ページが変わったため、読む場所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。', unfixed);
 
     // 直せなかった押す所: 押せなかった知らせに、理由つきの一文を足す。
     await key('Escape');
@@ -1517,9 +1517,9 @@ async function rendererFocusChecks() {
     await js('document.activeElement.click()');
     await wait(300);
     const clickSaid = await js("document.getElementById('alert').textContent");
-    check('直せなかった押す所: 「押せませんでした。…。自動で直すこともできませんでした（Claude の鍵がありません）。」と知らせる',
+    check('直せなかった押す所: 「押せませんでした。…。自動で直すこともできませんでした（Claude の API キーがありません）。」と知らせる',
       pressButton.text === '「直せない押す所」を押す'
-        && clickSaid === '「直せない押す所」を押せませんでした。ページの中に当たる所がありません。自動で直すこともできませんでした（Claude の鍵がありません）。',
+        && clickSaid === '「直せない押す所」を押せませんでした。ページの中に読む場所が見つかりません。自動で直すこともできませんでした（Claude の API キーがありません）。',
       { pressButton, clickSaid });
 
     // 支援者向けのカードの「直す前に戻す」: 焦点は支援者向けのカードの中の最初の項目（「いまはありません」）に移る。
@@ -1541,13 +1541,13 @@ async function rendererFocusChecks() {
     const maintFirst = await js("(() => { const a = document.activeElement; const c = a.closest('article.card'); return Boolean(c) && c.querySelector('[data-item]') === a; })()");
     const fixedCardItems = await js("[...document.querySelectorAll('#deck > article.card')[4].querySelectorAll('[data-item]')].map((n) => n.textContent)");
     check('支援者向けのカードで直す前に戻すと、焦点はそのカードの中の最初の項目に移り、読む所のカードから戻すボタンが消える',
-      maintUndo >= 0 && afterMaintUndo.connected && maintFirst && afterMaintUndo.text === '自動で直した所は、いまはありません。'
-        && afterMaintUndo.heading === '自動で直した所（支援者向け）（0件）' && !fixedCardItems.includes('直す前に戻す'),
+      maintUndo >= 0 && afterMaintUndo.connected && maintFirst && afterMaintUndo.text === '自動で直した場所は、いまはありません。'
+        && afterMaintUndo.heading === '自動で直した場所（支援者向け）（0か所）' && !fixedCardItems.includes('直す前に戻す'),
       { maintUndo, afterMaintUndo, maintFirst, fixedCardItems });
     await key('Escape');
     const afterMaintEsc = await focusState();
     check('支援者向けのカードで戻した後に Esc を押すと、そのカードの上に戻る（束からは出ない）',
-      afterMaintEsc.tag === 'ARTICLE' && afterMaintEsc.heading === '自動で直した所（支援者向け）（0件）', afterMaintEsc);
+      afterMaintEsc.tag === 'ARTICLE' && afterMaintEsc.heading === '自動で直した場所（支援者向け）（0か所）', afterMaintEsc);
   } finally {
     win.destroy();
   }
@@ -1630,8 +1630,8 @@ async function rendererGenerateChecks() {
     await wait(150);
     const expSaid = await status();
     check('作った束のはじめのカードに、書き出す（支援者向け）ボタンと消すボタンがあり、書き出すと知らせる',
-      delButton.text === 'このカードの束を消す' && expButton.text === '設定ファイルとして書き出す（支援者向け）'
-        && expSaid === 'ダウンロードのフォルダに「todoku-page-test.json」として書き出しました。支援者が確かめてから、設定ファイルとして配ってください。'
+      delButton.text === 'このアプリのカードを消す' && expButton.text === '設定ファイルとして書き出す（支援者向け）'
+        && expSaid === 'ダウンロードのフォルダに「todoku-page-test.json」として書き出しました。支援者が確認してから、設定ファイルとして配ってください。'
         && JSON.stringify(await js('window.fakeLog.exported()')) === '["page-test"]', { delButton, expButton, expSaid });
 
     await key('Escape');
@@ -1649,8 +1649,8 @@ async function rendererGenerateChecks() {
     const delSaid = await status();
     const afterDel = await active();
     const topAfterDel = await headings();
-    check('消すボタンで、束を消し、はじめの束の作るカードへ戻り、「「作り物の町のページ」のカードの束を消しました。」と知らせる',
-      delSaid === '「作り物の町のページ」のカードの束を消しました。' && afterDel.heading === '新しいページからカードを作る'
+    check('消すボタンで、束を消し、はじめの束の作るカードへ戻り、「「作り物の町のページ」のカードを消しました。」と知らせる',
+      delSaid === '「作り物の町のページ」のカードを消しました。' && afterDel.heading === '新しいページからカードを作る'
         && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
         && JSON.stringify(await js('window.fakeLog.deleted()')) === '["page-test"]', { delSaid, afterDel, topAfterDel });
 
@@ -1897,9 +1897,9 @@ async function rendererSearchChecks(settingsStore) {
     const result = await t.active();
     await t.wait(100);
     const pos = await t.status();
-    check('探す欄: Esc で「カードを探す」のカードへ戻り、下矢印キーで見つかったカードへ移る（「6件中4件目」）',
+    check('探す欄: Esc で「カードを探す」のカードへ戻り、下矢印キーで見つかったカードへ移る（「6枚中4枚目」）',
       out.tag === 'ARTICLE' && out.heading === 'カードを探す' && result.tag === 'ARTICLE'
-        && result.heading === '「試しのアプリ（作り物）」で見つかったカード（2件）' && pos === '6件中4件目', { out, result, pos });
+        && result.heading === '「試しのアプリ（作り物）」で見つかったカード（2件）' && pos === '6枚中4枚目', { out, result, pos });
 
     // 移る: 見つかったカードの中のボタンで、そのアプリの束のそのカードへ。
     await t.key('Enter');
@@ -1912,7 +1912,7 @@ async function rendererSearchChecks(settingsStore) {
     const movedPos = await t.status();
     check('探す欄: 見つかったカードの中は「「アプリの名前」の「〇〇」へ移る」のボタンで、押すとそのアプリの束のそのカードへ移り、位置を知らせる',
       first.text === '「試しのアプリ（作り物）」の「すぐ返る読む所」へ移る' && second.text === '「試しのアプリ（作り物）」の「すぐ返る一覧」へ移る'
-        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '7件中3件目', { first, second, moved, movedPos });
+        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '7枚中3枚目', { first, second, moved, movedPos });
     await t.key('Escape');
     await t.wait(100);
     const backTop = await t.active();
@@ -1955,9 +1955,9 @@ async function rendererSearchChecks(settingsStore) {
     await t.wait(150);
     const jumped = await t.active();
     const saidJump = await t.said();
-    check('探す欄: 欄の中の Enter で、最初の見つかったカードへ移り、「1件見つかりました。6件中4件目」と知らせる',
+    check('探す欄: 欄の中の Enter で、最初の見つかったカードへ移り、「1件見つかりました。6枚中4枚目」と知らせる',
       jumped.tag === 'ARTICLE' && jumped.heading === '「試しのアプリ（作り物）」で見つかったカード（1件）'
-        && JSON.stringify(saidJump) === JSON.stringify(['1件見つかりました。6件中4件目']), { jumped, saidJump });
+        && JSON.stringify(saidJump) === JSON.stringify(['1件見つかりました。6枚中4枚目']), { jumped, saidJump });
 
     // 消す: 欄を空にすると、見つかったカードは消え、数の文は始めの案内に戻る。
     await t.key('ArrowUp');

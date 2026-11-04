@@ -94,11 +94,11 @@ app.whenReady().then(async () => {
   // はじめの束から、画面が変わった後の練習の講座の束へ進む（アプリの名前のカードを押す）。
   await js(`[...document.querySelectorAll('#deck > article.card')].find((a) => a.querySelector('h2').textContent === ${JSON.stringify(NAME)}).click()`);
   await wait(300);
-  check('はじめのカードに「設定ファイルを点検する（支援者向け）」のボタンがあり、押せる', await press('設定ファイルを点検する（支援者向け）'), null);
+  check('はじめのカードに「設定ファイルを確認する（支援者向け）」のボタンがあり、押せる', await press('設定ファイルを確認する（支援者向け）'), null);
   // 点検と案（本物の Claude なら数十秒）が終わり、一件目の案に焦点が来るまで待つ（最長 180 秒）。
-  await until(async () => /^1件目/.test((await focus()) || '') || (await said()).some((t) => /案を作れません|点検できません/.test(t)), 180 * 1000);
+  await until(async () => /^直しの候補 1つ目/.test((await focus()) || '') || (await said()).some((t) => /候補を作れません|確認できません/.test(t)), 180 * 1000);
   // 知らせは焦点を移した少し後に入る作りなので、案の数の一文が入るまで待つ。
-  await until(async () => (await said()).some((t) => /^当たらない行/.test(t)), 5 * 1000);
+  await until(async () => (await said()).some((t) => /^読めなくなった場所/.test(t)), 5 * 1000);
   const afterCheck = await said();
   console.log(`点検の後の知らせ: ${JSON.stringify(afterCheck)}`);
   console.log(`焦点: ${await focus()}`);
@@ -109,15 +109,15 @@ app.whenReady().then(async () => {
     app.exit(0);
     return;
   }
-  check('点検の後、当たらない行と案の数を一文で知らせる', /^当たらない行が\d+件あり、直しの案が2件あります。$/.test(afterCheck[afterCheck.length - 1] || ''), afterCheck);
+  check('確認の後、読めなくなった場所と直しの候補の数を一文で知らせる', /^読めなくなった場所が\d+か所あり、直しの候補が2つあります。$/.test(afterCheck[afterCheck.length - 1] || ''), afterCheck);
 
   const title0 = course.cards[0].title;
   const title1 = course.cards[1].title;
   await wait(300);
   await js('window.__said.length = 0');
-  check('一件目の案を受けるボタンを押せる', await press(`「${title0}」の案を受ける（設定ファイルに書く）`), null);
+  check('一つ目の直しを使うボタンを押せる', await press(`「${title0}」の直しを使う（設定ファイルに書く）`), null);
   // 結果は、焦点の先の文（その案の行）で読む。別の知らせは出さない。
-  await until(async () => ((await focus()) || '').includes('受けました'), 10 * 1000);
+  await until(async () => ((await focus()) || '').includes('この直しを使いました'), 10 * 1000);
   const acceptFocus = await focus();
   const acceptSaid = await said();
   const written = JSON.parse(fs.readFileSync(configFile, 'utf8'));
@@ -126,20 +126,21 @@ app.whenReady().then(async () => {
     written.cards[0].selector === '[data-region="deadline-list"]' && written.cards[1].selector === course.cards[1].selector
       && written.cards.slice(2).every((c, k) => c.selector === course.cards[k + 2].selector), written.cards.map((c) => c.selector));
   check('受けると、前の版を config-backups に一つ残す', backups.length === 1 && /^practice-course-after\..+\.json$/.test(backups[0]), backups);
-  check('受けたことを、焦点の先の文で読む（別の知らせは出さない）',
-    acceptFocus === `1件目（全2件）: 「${title0}」の読む所: 受けました。設定ファイルに書き、前の版は控えに残しました。` && acceptSaid.length === 0, { acceptFocus, acceptSaid });
+  check('使ったことを、焦点の先の文で読む（ほかの知らせは、書くのに 0.5秒を越えたときの「書いています。」だけ）',
+    acceptFocus === `直しの候補 1つ目（全部で2つ）: 「${title0}」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。`
+      && acceptSaid.every((t) => t === '書いています。'), { acceptFocus, acceptSaid });
 
   await wait(300);
   await js('window.__said.length = 0');
-  check('二件目の案を断るボタンを押せる', await press(`「${title1}」の案を断る`), null);
-  await until(async () => ((await focus()) || '').includes('断りました'), 10 * 1000);
+  check('二つ目の直しを使わないボタンを押せる', await press(`「${title1}」の直しを使わない`), null);
+  await until(async () => ((await focus()) || '').includes('この直しは使いませんでした'), 10 * 1000);
   const rejectFocus = await focus();
   const rejectSaid = await said();
   const after = JSON.parse(fs.readFileSync(configFile, 'utf8'));
   const backupsAfter = fs.readdirSync(path.join(userData, 'config-backups'));
   check('断ると、設定ファイルは変えず、控えも増やさない', after.cards[1].selector === course.cards[1].selector && backupsAfter.length === 1, { selector: after.cards[1].selector, backupsAfter });
-  check('断ったことを、焦点の先の文で読む（別の知らせは出さない）',
-    rejectFocus === `2件目（全2件）: 「${title1}」の読む所: 断りました。設定ファイルは変えていません。` && rejectSaid.length === 0, { rejectFocus, rejectSaid });
+  check('使わなかったことを、焦点の先の文で読む（別の知らせは出さない）',
+    rejectFocus === `直しの候補 2つ目（全部で2つ）: 「${title1}」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。` && rejectSaid.length === 0, { rejectFocus, rejectSaid });
 
   console.log(failed === 0 ? '全部通りました。' : `${failed}件が落ちました。`);
   app.exit(failed === 0 ? 0 : 1);

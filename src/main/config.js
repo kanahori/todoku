@@ -53,7 +53,7 @@ const SAVE_AS_PLACEHOLDERS = new Set(['{date}', '{n}']);
 
 // 保存の名前の型（saveAs）を確かめ、誤りの理由を返す（正しければ null）。
 function saveAsProblem(saveAs) {
-  if (typeof saveAs !== 'string' || saveAs.trim() === '') return '空でない文字列が要ります';
+  if (typeof saveAs !== 'string' || saveAs.trim() === '') return '空でない文字列が必要です';
   const unknown = (saveAs.match(/\{[^}]*\}/g) || []).filter((p) => !SAVE_AS_PLACEHOLDERS.has(p));
   if (unknown.length > 0) return `${unknown[0]} は使えません（使えるのは {date} と {n}）`;
   const rest = saveAs.replace(/\{date\}|\{n\}/g, '');
@@ -72,29 +72,29 @@ function validateConfig(config) {
     return errors;
   }
   if (typeof config.id !== 'string' || !ID_PATTERN.test(config.id)) {
-    add('id', '英小文字・数字・ハイフンの文字列が要ります');
+    add('id', '英小文字・数字・ハイフンの文字列が必要です');
   }
   if (typeof config.name !== 'string' || config.name.trim() === '') {
-    add('name', '空でない文字列が要ります');
+    add('name', '空でない文字列が必要です');
   }
   if (typeof config.url !== 'string' || !(/^https?:\/\//.test(config.url) || FIXTURE_PATTERN.test(config.url))) {
-    add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が要ります');
+    add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が必要です');
   }
   if (config.description !== undefined && typeof config.description !== 'string') {
-    add('description', '文字列が要ります');
+    add('description', '文字列が必要です');
   }
   if (config.sourceUrl !== undefined && !externalUrl(config.sourceUrl)) {
-    add('sourceUrl', 'http:// か https:// で始まる、空白の無い文字列が要ります');
+    add('sourceUrl', 'http:// か https:// で始まる、空白の無い文字列が必要です');
   }
   if (config.login !== undefined) {
     if (config.login === null || typeof config.login !== 'object' || typeof config.login.selector !== 'string' || config.login.selector.trim() === '') {
-      add('login.selector', '空でない文字列が要ります');
+      add('login.selector', '空でない文字列が必要です');
     } else if (config.login.path !== undefined && (typeof config.login.path !== 'string' || !/^\/(?!\/)/.test(config.login.path))) {
-      add('login.path', '/ で始まる文字列が要ります（// で始まるものは不可）');
+      add('login.path', '/ で始まる文字列が必要です（// で始まるものは不可）');
     }
   }
   if (!Array.isArray(config.cards) || config.cards.length === 0) {
-    add('cards', '1枚以上のカードの配列が要ります');
+    add('cards', '1枚以上のカードの配列が必要です');
     return errors;
   }
 
@@ -106,34 +106,34 @@ function validateConfig(config) {
       return;
     }
     if (typeof card.id !== 'string' || !ID_PATTERN.test(card.id)) {
-      add(`${at}.id`, '英小文字・数字・ハイフンの文字列が要ります');
+      add(`${at}.id`, '英小文字・数字・ハイフンの文字列が必要です');
     } else if (seen.has(card.id)) {
       add(`${at}.id`, `「${card.id}」が重なっています`);
     } else {
       seen.add(card.id);
     }
     if (typeof card.title !== 'string' || card.title.trim() === '') {
-      add(`${at}.title`, '空でない文字列が要ります');
+      add(`${at}.title`, '空でない文字列が必要です');
     }
     if (!ACTIONS.has(card.action)) {
-      add(`${at}.action`, '"read"・"click"・"list" のどれかが要ります');
+      add(`${at}.action`, '"read"・"click"・"list" のどれかが必要です');
     }
     if (typeof card.selector !== 'string' || card.selector.trim() === '') {
-      add(`${at}.selector`, '空でない文字列が要ります');
+      add(`${at}.selector`, '空でない文字列が必要です');
     }
     if (card.path !== undefined && (typeof card.path !== 'string' || !/^\/(?!\/)/.test(card.path))) {
-      add(`${at}.path`, '/ で始まる文字列が要ります（// で始まるものは不可）');
+      add(`${at}.path`, '/ で始まる文字列が必要です（// で始まるものは不可）');
     }
     if (card.container !== undefined) {
       if (typeof card.container !== 'string' || card.container.trim() === '') {
-        add(`${at}.container`, '空でない文字列が要ります');
+        add(`${at}.container`, '空でない文字列が必要です');
       } else if (card.action !== 'list') {
         add(`${at}.container`, 'action が "list" のカードにだけ使えます');
       }
     }
     if (card.dateSelector !== undefined) {
       if (typeof card.dateSelector !== 'string' || card.dateSelector.trim() === '') {
-        add(`${at}.dateSelector`, '空でない文字列が要ります');
+        add(`${at}.dateSelector`, '空でない文字列が必要です');
       } else if (card.action !== 'list') {
         add(`${at}.dateSelector`, 'action が "list" のカードにだけ使えます');
       }
@@ -144,32 +144,32 @@ function validateConfig(config) {
       if (card.action !== 'list') {
         add(`${at}.itemTarget`, 'action が "list" のカードにだけ使えます');
       } else if (!t || typeof t !== 'object' || Array.isArray(t)) {
-        add(`${at}.itemTarget`, 'label と、closest・next・find のどれかを持つものが要ります');
+        add(`${at}.itemTarget`, 'label と、closest・next・find のどれかを持つものが必要です');
       } else {
-        if (!str(t.label)) add(`${at}.itemTarget.label`, '空でない文字列が要ります');
+        if (!str(t.label)) add(`${at}.itemTarget.label`, '空でない文字列が必要です');
         for (const key of ['closest', 'next', 'find']) {
-          if (t[key] !== undefined && !str(t[key])) add(`${at}.itemTarget.${key}`, '空でない文字列が要ります');
+          if (t[key] !== undefined && !str(t[key])) add(`${at}.itemTarget.${key}`, '空でない文字列が必要です');
         }
-        if (![t.closest, t.next, t.find].some(str)) add(`${at}.itemTarget`, 'closest・next・find のどれか一つが要ります');
+        if (![t.closest, t.next, t.find].some(str)) add(`${at}.itemTarget`, 'closest・next・find のどれか一つが必要です');
       }
     }
     if (card.joinWith !== undefined) {
       if (typeof card.joinWith !== 'string' || card.joinWith.trim() === '') {
-        add(`${at}.joinWith`, '空でない文字列が要ります');
+        add(`${at}.joinWith`, '空でない文字列が必要です');
       } else if (card.action !== 'list') {
         add(`${at}.joinWith`, 'action が "list" のカードにだけ使えます');
       }
     }
     if (card.tagSelector !== undefined) {
       if (typeof card.tagSelector !== 'string' || card.tagSelector.trim() === '') {
-        add(`${at}.tagSelector`, '空でない文字列が要ります');
+        add(`${at}.tagSelector`, '空でない文字列が必要です');
       } else if (card.action !== 'list') {
         add(`${at}.tagSelector`, 'action が "list" のカードにだけ使えます');
       }
     }
     if (card.until !== undefined) {
       if (typeof card.until !== 'string' || card.until.trim() === '') {
-        add(`${at}.until`, '空でない文字列が要ります');
+        add(`${at}.until`, '空でない文字列が必要です');
       } else if (card.action !== 'read') {
         add(`${at}.until`, 'action が "read" のカードにだけ使えます');
       }
@@ -180,7 +180,7 @@ function validateConfig(config) {
       else if (card.action !== 'click') add(`${at}.saveAs`, 'action が "click" のカードにだけ使えます');
     }
     if (card.description !== undefined && typeof card.description !== 'string') {
-      add(`${at}.description`, '文字列が要ります');
+      add(`${at}.description`, '文字列が必要です');
     }
   });
   return errors;

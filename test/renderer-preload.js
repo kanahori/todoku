@@ -68,8 +68,8 @@ const reviewConfig = {
   ],
 };
 const reviewProblems = [
-  { where: 'cards[0].selector', message: 'ページの中に当たる所がありません', title: '締め切りを読む' },
-  { where: 'cards[1].selector', message: 'ページの中に当たる所がありません', title: 'お知らせを読む' },
+  { where: 'cards[0].selector', message: 'ページの中に読む場所が見つかりません', title: '締め切りを読む' },
+  { where: 'cards[1].selector', message: 'ページの中に読む場所が見つかりません', title: 'お知らせを読む' },
 ];
 const applied = [];
 
@@ -83,7 +83,7 @@ const madeDeck = {
   id: 'page-test',
   name: '作り物の町のページ',
   url: 'https://example.com/town',
-  description: 'このカードの束は、Claude がページの作りから作ったものです。この機械の中だけにあります。',
+  description: 'このカードは、Claude がページの構造から作ったものです。このパソコンの中だけにあります。',
   cards: [
     { id: 'list-1', title: '新着', action: 'list', selector: '#n li' },
     { id: 'main-2', title: '本文 1', action: 'read', selector: 'main' },
@@ -97,10 +97,10 @@ const answers = {
   'fast-read': { delay: 20, result: { ok: true, action: 'read', text: 'すぐ返った一つ目\nすぐ返った二つ目' } },
   'fast-list': { delay: 20, result: { ok: true, action: 'list', items: ['一覧の一件目', '一覧の二件目'] } },
   'slow-read': { delay: 1200, result: { ok: true, action: 'read', text: '遅れて返った一つ目' } },
-  'unfixed-read': { delay: 20, result: { ok: false, where: 'cards[4].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReason: 'timeout', autoRepairReasonText: '時間内に終わりませんでした' } },
+  'unfixed-read': { delay: 20, result: { ok: false, where: 'cards[4].selector', message: 'ページの中に読む場所が見つかりません', autoRepairFailed: true, autoRepairReason: 'timeout', autoRepairReasonText: '時間内に終わりませんでした' } },
   'fast-click': { delay: 20, result: { ok: true, action: 'click' } },
   'slow-click': { delay: 1200, result: { ok: true, action: 'click' } },
-  'unfixed-click': { delay: 20, result: { ok: false, where: 'cards[5].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReason: 'no-key', autoRepairReasonText: 'Claude の鍵がありません' } },
+  'unfixed-click': { delay: 20, result: { ok: false, where: 'cards[5].selector', message: 'ページの中に読む場所が見つかりません', autoRepairFailed: true, autoRepairReason: 'no-key', autoRepairReasonText: 'Claude の API キーがありません' } },
 };
 
 contextBridge.exposeInMainWorld('cardsApi', {
@@ -115,8 +115,8 @@ contextBridge.exposeInMainWorld('cardsApi', {
     itemTargets.push(`${appId}/${cardId}/${index}/${key}`);
     const replies = ['一つ目の返事の一行目\n一つ目の返事の二行目', '二つ目の返事の一行目\n二つ目の返事の二行目'];
     if (index < replies.length) return { ok: true, action: 'read', text: replies[index] };
-    if (key === 'k3') return { ok: false, where: 'cards[1].selector', message: '一覧を読んだ後に画面が変わりました', changed: true };
-    return { ok: false, where: 'cards[1].itemTarget', message: '選んだ項目に結び付いた所がありません', notFound: true };
+    if (key === 'k3') return { ok: false, where: 'cards[1].selector', message: '一覧を読んだ後に、ページが変わりました', changed: true };
+    return { ok: false, where: 'cards[1].itemTarget', message: '選んだ項目に結び付いた場所がありません', notFound: true };
   },
   runCard: (appId, cardId) => new Promise((resolve) => {
     // 主の処理で例外が起きたときの答え（main.js の card:run の catch と同じ形）。
@@ -166,11 +166,11 @@ contextBridge.exposeInMainWorld('cardsApi', {
   }),
   exportGenerated: async (appId) => {
     exported.push(appId);
-    return { ok: true, message: 'ダウンロードのフォルダに「todoku-page-test.json」として書き出しました。支援者が確かめてから、設定ファイルとして配ってください。' };
+    return { ok: true, message: 'ダウンロードのフォルダに「todoku-page-test.json」として書き出しました。支援者が確認してから、設定ファイルとして配ってください。' };
   },
   deleteGenerated: async (appId) => {
     deleted.push(appId);
-    return { ok: true, message: `「${madeDeck.name}」のカードの束を消しました。` };
+    return { ok: true, message: `「${madeDeck.name}」のカードを消しました。` };
   },
   // 点検と直しの案（支援者向け）: 点検は当たらない行を二つ返す。案は二つ（鍵が無いときは、案を作れない理由）。受けると書いたことにする。
   checkCards: async () => {
@@ -179,7 +179,7 @@ contextBridge.exposeInMainWorld('cardsApi', {
   },
   proposeRepairs: async () => {
     await new Promise((r) => setTimeout(r, 50));
-    if (reviewNoKey) return { ok: false, message: '鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）' };
+    if (reviewNoKey) return { ok: false, message: 'Claude の API キーが設定されていないので、直しの候補を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）' };
     return {
       ok: true,
       errors: [],
@@ -189,7 +189,9 @@ contextBridge.exposeInMainWorld('cardsApi', {
       ],
     };
   },
+  // 書くのに 0.8秒かかったことにする（0.5秒を越えたら「書いています。」と知らせるかの試し）。
   applyRepairs: async (appId, wheres) => {
+    await new Promise((r) => setTimeout(r, 800));
     applied.push(...wheres);
     return { ok: true, written: wheres.length, problems: [] };
   },

@@ -38,7 +38,7 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ROLES = Object.keys(ROLE_LABELS);
 
 // 作った束の頭の説明（アプリのはじめのカードの最後の項目として読まれる）。
-const GENERATED_DESCRIPTION = 'このカードの束は、Claude がページの作りから作ったものです。この機械の中だけにあります。';
+const GENERATED_DESCRIPTION = 'このカードは、Claude がページの構造から作ったものです。このパソコンの中だけにあります。';
 
 // Claude に返させる形。題の文字は返させない（題の元になる要素のセレクタと、役目の種類だけ）。
 // 使わない欄は空の文字列にさせる（構造化出力では文字の長さの決まりを使えないため、空かどうかは手元で見る）。
@@ -58,14 +58,14 @@ const GenerateSchema = z.object({
 // 作れなかったときの理由（一文）。画面はこの文をそのまま知らせる。
 const FAILURE_MESSAGES = {
   'bad-url': 'URL が http:// か https:// で始まっていないので、カードを作れませんでした。',
-  'no-key': '鍵が設定されていないので、カードを作れませんでした。',
+  'no-key': 'Claude の API キーが設定されていないので、カードを作れませんでした。',
   'open-failed': 'ページを開けなかったので、カードを作れませんでした。',
-  'text-in-structure': 'ページの作りに文字が混ざったので、Claude に送らず、カードを作りませんでした。',
+  'text-in-structure': 'ページの構造に文字が混ざっていたので、Claude に送らず、カードを作りませんでした。',
   timeout: '90秒たっても終わらなかったので、カードを作るのをやめました。',
-  'model-error': 'Claude が案を作れなかったので、カードを作れませんでした。',
-  'no-cards': 'このページで読める所・押せる所が見つからなかったので、カードを作れませんでした。',
+  'model-error': 'Claude がカードの候補を作れなかったので、カードを作れませんでした。',
+  'no-cards': 'このページでは、読める場所も押せる場所も見つからなかったので、カードを作れませんでした。',
   'save-failed': '作ったカードを保存できなかったので、カードを作れませんでした。',
-  busy: 'いまは別のカードの束を作っているので、終わってからもう一度押してください。',
+  busy: 'いまは別のページのカードを作っているので、作り終わってから、もう一度押してください。',
   error: 'うまく動かなかったので、カードを作れませんでした。',
 };
 
@@ -87,7 +87,7 @@ function doneMessage(config) {
 // 形は cards/*.json と同じなので、読むのは config.js の loadConfigDir で読める。
 function createGeneratedStore(dir) {
   const fileOf = (id) => {
-    if (!ID_PATTERN.test(String(id))) throw new Error(`束の id が正しくありません: ${id}`);
+    if (!ID_PATTERN.test(String(id))) throw new Error(`作ったカードの id が正しくありません: ${id}`);
     return path.join(dir, `${id}.json`);
   };
   return {
@@ -1431,7 +1431,7 @@ function exportDeck(config, dir) {
 }
 
 function exportedMessage(name) {
-  return `ダウンロードのフォルダに「${name}」として書き出しました。支援者が確かめてから、設定ファイルとして配ってください。`;
+  return `ダウンロードのフォルダに「${name}」として書き出しました。支援者が確認してから、設定ファイルとして配ってください。`;
 }
 
 module.exports = {

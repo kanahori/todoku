@@ -750,13 +750,13 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
       }
     }
     showQuietly(win);
-    return { ok: false, needLogin: true, message: 'ログインが要ります。ウェブアプリの窓でログインしてから、もう一度カードを押してください' };
+    return { ok: false, needLogin: true, message: 'ログインが必要です。ウェブアプリの窓でログインしてから、もう一度カードを押してください' };
   }
   if (!result.found) {
     if (result.field === 'container') return { ok: false, where: `cards[${index}].container`, message: 'container の書き方が正しくありません' };
     if (result.field === 'joinWith') return { ok: false, where: `cards[${index}].joinWith`, message: 'joinWith の書き方が正しくありません' };
     if (result.field === 'until') return { ok: false, where: `cards[${index}].until`, message: 'until の書き方が正しくありません' };
-    const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に当たる所がありません';
+    const message = result.reason === 'invalid' ? 'selector の書き方が正しくありません' : 'ページの中に読む場所が見つかりません';
     return { ok: false, where, message };
   }
   if (card.action === 'click') {
@@ -820,7 +820,7 @@ async function readItemTarget(BrowserWindow, config, cardId, index, options = {}
   const k = config.cards.findIndex((c) => c.id === cardId);
   if (k < 0) return { ok: false, where: '(なし)', message: `カード「${cardId}」が設定ファイルにありません` };
   const card = config.cards[k];
-  if (card.action !== 'list' || !card.itemTarget) return { ok: false, where: `cards[${k}].itemTarget`, message: 'このカードには、項目を選んで読む所がありません' };
+  if (card.action !== 'list' || !card.itemTarget) return { ok: false, where: `cards[${k}].itemTarget`, message: 'このカードには、項目を選んで読む場所がありません' };
   let win;
   try {
     win = await openTarget(BrowserWindow, config, resolveUrl(config.url, card.path), options);
@@ -831,8 +831,8 @@ async function readItemTarget(BrowserWindow, config, cardId, index, options = {}
   const args = [card.selector, card.itemTarget, Number(index), ITEM_TARGET_ATTR, token, key || null].map((v) => JSON.stringify(v)).join(', ');
   const mark = await win.webContents.executeJavaScript(`(${pageMarkItemTarget.toString()})(${args})`);
   if (!mark.found) {
-    if (mark.reason === 'changed') return { ok: false, where: `cards[${k}].selector`, message: '一覧を読んだ後に画面が変わりました', changed: true };
-    const message = mark.reason === 'invalid' ? 'itemTarget の書き方が正しくありません' : '選んだ項目に結び付いた所がありません';
+    if (mark.reason === 'changed') return { ok: false, where: `cards[${k}].selector`, message: '一覧を読んだ後に、ページが変わりました', changed: true };
+    const message = mark.reason === 'invalid' ? 'itemTarget の書き方が正しくありません' : '選んだ項目に結び付いた場所がありません';
     return { ok: false, where: `cards[${k}].itemTarget`, message, notFound: mark.reason !== 'invalid' };
   }
   let result;
@@ -842,7 +842,7 @@ async function readItemTarget(BrowserWindow, config, cardId, index, options = {}
     await win.webContents.executeJavaScript(`document.querySelectorAll('[${ITEM_TARGET_ATTR}]').forEach((e) => e.removeAttribute('${ITEM_TARGET_ATTR}'))`);
   }
   keepBehindHome(win);
-  if (!result.found) return { ok: false, where: `cards[${k}].itemTarget`, message: '選んだ項目に結び付いた所がありません', notFound: true };
+  if (!result.found) return { ok: false, where: `cards[${k}].itemTarget`, message: '選んだ項目に結び付いた場所がありません', notFound: true };
   return { ok: true, action: 'read', text: result.text, truncated: result.truncated, ...(result.partial ? { partial: true } : {}) };
 }
 
@@ -890,7 +890,7 @@ async function checkCards(BrowserWindow, config, options = {}) {
     const states = await win.webContents.executeJavaScript(`(${pageProbe.toString()})(${JSON.stringify(selectors)}, ${JSON.stringify(containers)})`);
     items.forEach(({ index }, k) => {
       if (states[k] === 'invalid-container') problems.push({ where: `cards[${index}].container`, message: 'container の書き方が正しくありません' });
-      if (states[k] === 'none') problems.push({ where: `cards[${index}].selector`, message: 'ページの中に当たる所がありません' });
+      if (states[k] === 'none') problems.push({ where: `cards[${index}].selector`, message: 'ページの中に読む場所が見つかりません' });
       if (states[k] === 'invalid') problems.push({ where: `cards[${index}].selector`, message: 'selector の書き方が正しくありません' });
     });
   }

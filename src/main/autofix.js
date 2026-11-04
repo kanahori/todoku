@@ -168,15 +168,15 @@ async function proposeAutoRepair({ BrowserWindow, config, index, callModel, time
 
 // 自動で直せなかった理由（autoRepairReason）を、使う人に聞かせる短い言い方にする。知らない理由は空（理由を添えない）。
 const AUTO_REPAIR_REASON_TEXTS = {
-  'no-key': 'Claude の鍵がありません',
+  'no-key': 'Claude の API キーがありません',
   timeout: '時間内に終わりませんでした',
-  'no-proposal': '確かな案がありませんでした',
-  'same-selector': '確かな案がありませんでした',
-  'not-confident': '確かな案がありませんでした',
-  'reread-failed': '確かな案がありませんでした',
-  'model-error': 'Claude が案を作れませんでした',
+  'no-proposal': '確かな直しの候補がありませんでした',
+  'same-selector': '確かな直しの候補がありませんでした',
+  'not-confident': '確かな直しの候補がありませんでした',
+  'reread-failed': '確かな直しの候補がありませんでした',
+  'model-error': 'Claude が直しの候補を作れませんでした',
   'text-in-structure': 'ページの文字を除けなかったので、Claude に頼みませんでした',
-  error: '直す途中で誤りが起きました',
+  error: '直す途中でエラーが起きました',
 };
 function autoRepairReasonText(reason) {
   return Object.prototype.hasOwnProperty.call(AUTO_REPAIR_REASON_TEXTS, reason) ? AUTO_REPAIR_REASON_TEXTS[reason] : '';
@@ -199,7 +199,7 @@ async function runCardWithAutoRepair({ BrowserWindow, config, cardId, callModel,
   const first = await runCard(BrowserWindow, config, cardId, options);
   const index = config.cards.findIndex((c) => c.id === cardId);
   // 自動で直すのは「ページの中に当たる所がありません」のときだけ（ログイン・書き方の誤り・ページを開けないときは直さない）。
-  if (first.ok || first.needLogin || index < 0 || first.where !== `cards[${index}].selector` || first.message !== 'ページの中に当たる所がありません') return first;
+  if (first.ok || first.needLogin || index < 0 || first.where !== `cards[${index}].selector` || first.message !== 'ページの中に読む場所が見つかりません') return first;
   if (typeof callModel !== 'function') return failed(first, 'no-key');
   if (onRepairing) onRepairing();
   let proposed;

@@ -63,8 +63,8 @@ test('押した結果のダウンロードは、保存したか（できなか�
 });
 
 test('押すカードを自動で直したときは押し直さず、もう一度押すかを使う人に任せる知らせを出す', () => {
-  assert.match(source, /画面が変わったので、押す所を直しました。もう一度押すときは、「\$\{card\.title\}」を押すボタンを押してください。/);
-  assert.match(source, /画面が変わったので、押す所を直しています。少しお待ちください。/);
+  assert.match(source, /ページが変わったので、押す場所を直しました。もう一度押すときは、「\$\{card\.title\}」を押すボタンを押してください。/);
+  assert.match(source, /ページが変わったので、押す場所を直しています。少しお待ちください。/);
   // 押せなかったときも、読めないときと同じ一文（理由つき）を足す。
   assert.match(source, /r\.autoRepairFailed \? `。\$\{notFixedSentence\(r\)\}` : ''/);
   assert.doesNotMatch(source, /自動で直せませんでした。/);
@@ -80,19 +80,19 @@ function loadTextFunctions() {
 
 test('読めないときの文: 見つからない → 0件のことも → 自動で直すこともできなかった（理由）、の順にする', () => {
   const { unreadableText } = loadTextFunctions();
-  const failed = { ok: false, message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReasonText: 'Claude の鍵がありません' };
+  const failed = { ok: false, message: 'ページの中に読む場所が見つかりません', autoRepairFailed: true, autoRepairReasonText: 'Claude の API キーがありません' };
   assert.equal(unreadableText({ action: 'list' }, failed),
-    '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。\n自動で直すこともできませんでした（Claude の鍵がありません）。');
+    'ページが変わったため、読む場所が見つかりませんでした。\n本当に0件の場合もあります。\n自動で直すこともできませんでした（Claude の API キーがありません）。');
   assert.equal(unreadableText({ action: 'read' }, { ...failed, autoRepairReasonText: '時間内に終わりませんでした' }),
-    '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。');
+    'ページが変わったため、読む場所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。');
   // 理由の言い方が無ければ、括弧を付けない。
   assert.equal(unreadableText({ action: 'read' }, { ...failed, autoRepairReasonText: '' }),
-    '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした。');
+    'ページが変わったため、読む場所が見つかりませんでした。\n自動で直すこともできませんでした。');
   // 自動で直そうとしなかったときは、今までどおり。
-  assert.equal(unreadableText({ action: 'list' }, { ok: false, message: 'ページの中に当たる所がありません' }),
-    '画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。');
+  assert.equal(unreadableText({ action: 'list' }, { ok: false, message: 'ページの中に読む場所が見つかりません' }),
+    'ページが変わったため、読む場所が見つかりませんでした。\n本当に0件の場合もあります。');
   assert.equal(unreadableText({ action: 'list', hasContainer: true }, failed),
-    '画面が変わったため、読む所が見つかりませんでした。\n自動で直すこともできませんでした（Claude の鍵がありません）。');
+    'ページが変わったため、読む場所が見つかりませんでした。\n自動で直すこともできませんでした（Claude の API キーがありません）。');
 });
 
 test('「直す前に戻す」の後は、焦点をカードの中の最初の項目に置く（カードの上に戻さない）', () => {

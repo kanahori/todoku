@@ -462,7 +462,7 @@ test('書き出す: ダウンロードのフォルダに todoku-<id>.json とし
     assert.equal(exportDeck(config, dir), 'todoku-page-abc.json');
     assert.equal(exportDeck(config, dir), 'todoku-page-abc (1).json');
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'todoku-page-abc.json'), 'utf8')), config);
-    assert.equal(exportedMessage('todoku-page-abc.json'), 'ダウンロードのフォルダに「todoku-page-abc.json」として書き出しました。支援者が確かめてから、設定ファイルとして配ってください。');
+    assert.equal(exportedMessage('todoku-page-abc.json'), 'ダウンロードのフォルダに「todoku-page-abc.json」として書き出しました。支援者が確認してから、設定ファイルとして配ってください。');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

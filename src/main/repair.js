@@ -52,10 +52,10 @@ function createClaudeCaller({ model = process.env.CARDS_REPAIR_MODEL || DEFAULT_
       messages: [{ role: 'user', content: user }],
     }, signal ? { signal } : undefined);
     if (response.stop_reason === 'refusal') {
-      throw new Error('Claude が案を作るのを断りました');
+      throw new Error('Claude が直しの候補を作りませんでした');
     }
     if (!response.parsed_output) {
-      throw new Error(`案を読み取れませんでした（stop_reason: ${response.stop_reason}）`);
+      throw new Error(`直しの候補を読み取れませんでした（stop_reason: ${response.stop_reason}）`);
     }
     return response.parsed_output;
   };
@@ -82,7 +82,7 @@ async function proposeRepairs({ BrowserWindow, config, problems, callModel }) {
   for (const p of problems) {
     const m = /^cards\[(\d+)\]\.selector$/.exec(p.where);
     if (!m) {
-      errors.push({ where: p.where, message: 'この行は案の対象にしていません' });
+      errors.push({ where: p.where, message: 'この場所は、直しの候補を作る対象ではありません' });
       continue;
     }
     const index = Number(m[1]);
@@ -96,24 +96,24 @@ async function proposeRepairs({ BrowserWindow, config, problems, callModel }) {
     const win = await openTarget(BrowserWindow, config, url);
     const { skeleton, nodes, truncated } = await win.webContents.executeJavaScript(buildSkeletonScript());
     if (!looksTextFree(skeleton)) {
-      for (const it of items) errors.push({ where: it.where, message: '構造に文字が混ざったので、送りませんでした' });
+      for (const it of items) errors.push({ where: it.where, message: 'ページの構造に文字が混ざっていたので、送りませんでした' });
       continue;
     }
     // 送る文の全体に日本語の文字があれば送らない（題は文に入れない。前のセレクタの文字は伏せる。それでも残れば止める）。
     const user = buildRepairRequest(items, skeleton);
     if (!repairRequestTextFree(user)) {
-      for (const it of items) errors.push({ where: it.where, message: '送る文にページの文字が混ざったので、送りませんでした' });
+      for (const it of items) errors.push({ where: it.where, message: '送る文にページの文字が混ざっていたので、送りませんでした' });
       continue;
     }
     let answer;
     try {
       answer = await callModel({ system: SYSTEM_PROMPT, user, meta: { nodes, truncated } });
     } catch (e) {
-      for (const it of items) errors.push({ where: it.where, message: `案を作れませんでした: ${e.message}` });
+      for (const it of items) errors.push({ where: it.where, message: `直しの候補を作れませんでした: ${e.message}` });
       continue;
     }
     const byWhere = new Map((answer.proposals || []).map((p) => [p.where, p]));
-    const candidates = items.map((it) => ({ ...it, newSelector: (byWhere.get(it.where)?.selector || '').trim(), reason: byWhere.get(it.where)?.reason || '案がありませんでした' }));
+    const candidates = items.map((it) => ({ ...it, newSelector: (byWhere.get(it.where)?.selector || '').trim(), reason: byWhere.get(it.where)?.reason || '直しの候補がありませんでした' }));
     // 案をページで試し、当たる数を添える（人が採るかを決める手がかり）。
     const counts = await win.webContents.executeJavaScript(`(${pageCount.toString()})(${JSON.stringify(candidates.map((c) => c.newSelector || ':not(*)'))})`);
     candidates.forEach((c, k) => proposals.push({ ...c, matches: c.newSelector ? counts[k] : 0 }));

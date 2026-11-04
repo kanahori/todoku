@@ -49,14 +49,14 @@ function repairsOf(appId) {
 }
 
 // 読む所か押す所か（知らせの言い回しで使う）。
-function placeWord(action) { return action === 'click' ? '押す所' : '読む所'; }
+function placeWord(action) { return action === 'click' ? '押す場所' : '読む場所'; }
 
 // 直したカードの中に足す項目: 直したことの一文と「直す前に戻す」ボタン。
 function repairItems(card) {
   const r = repairsOf(card.appId).get(card.cardId);
   if (!r) return [];
   return [
-    { text: `このカードの${placeWord(card.action)}は、画面が変わったときに自動で直したものです。`, repairItem: true },
+    { text: `このカードの${placeWord(card.action)}は、ページが変わったときに自動で直したものです。`, repairItem: true },
     { button: '直す前に戻す', repairItem: true, onPress: () => undoRepair(card) },
   ];
 }
@@ -128,7 +128,7 @@ function selectCard(i, { announcePosition = true } = {}) {
   nodes.forEach((n, k) => { n.tabIndex = k === next ? 0 : -1; });
   deck.index = next;
   nodes[next].focus();
-  if (announcePosition) announce(`${nodes.length}件中${next + 1}件目`);
+  if (announcePosition) announce(`${nodes.length}枚中${next + 1}枚目`);
 }
 
 function renderCard(card) {
@@ -271,7 +271,7 @@ async function openItemTarget(card, i) {
   }
   const name = `${i + 1}件目の${card.itemTarget.label}`;
   if (!r.ok) {
-    if (r.changed) announce(`「${card.title}」を読んだ後に画面が変わりました。もう一度「${card.title}」を読んでください。`, true);
+    if (r.changed) announce(`「${card.title}」を読んだ後に、ページが変わりました。もう一度「${card.title}」を読んでください。`, true);
     else announce(r.notFound ? `「${card.title}」の${name}が見つかりませんでした。` : `「${card.title}」の${name}を読めませんでした。${r.message}`, true);
     return;
   }
@@ -369,7 +369,7 @@ async function readCard(card) {
   // 読み込み中は出さずに結果へ焦点を移す。待つ間、焦点はカードの上のまま。
   const showLoading = () => {
     card.heading = `${card.title}（読んでいます）`;
-    card.items = [{ text: '読んでいます。\n終わると、ここに読んだ1件ずつが出ます。', result: true, loading: true }];
+    card.items = [{ text: '読んでいます。\n読み終わると、ここに1件ずつ出ます。', result: true, loading: true }];
     const shown = card.node && card.node.isConnected && card.node.contains(document.activeElement);
     const n = refreshCard(card, { focusResult: shown });
     if (n) n.setAttribute('aria-busy', 'true');
@@ -387,10 +387,10 @@ async function readCard(card) {
     const item = card.node && card.node.isConnected ? card.node.querySelector('[data-loading]') : null;
     if (item) {
       item.textContent = repairing
-        ? `画面が変わったので、読む所を直しています。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`
-        : `読んでいます。${sec}秒たちました。\n終わると、ここに読んだ1件ずつが出ます。`;
+        ? `ページが変わったので、読む場所を直しています。${sec}秒たちました。\n読み終わると、ここに1件ずつ出ます。`
+        : `読んでいます。${sec}秒たちました。\n読み終わると、ここに1件ずつ出ます。`;
     }
-    announce(repairing ? `「${card.title}」の読む所を直しています。${sec}秒たちました。` : `「${card.title}」を読み始めて、${sec}秒たちました。`);
+    announce(repairing ? `「${card.title}」の読む場所を直しています。${sec}秒たちました。` : `「${card.title}」を読み始めて、${sec}秒たちました。`);
   }, PROGRESS_EVERY_MS);
   let result;
   try {
@@ -428,7 +428,7 @@ async function readCard(card) {
     // ページがまだ書いている途中だった（チャットの返事など）。待っても書き終わらなかったので、ここまでを読んだ。
     if (result.partial) card.items.push({ text: 'まだ書いている途中でした。ここまでを読みました。もう一度読むと、続きが読めます。' });
   } else if (result.needLogin) {
-    card.heading = `${card.title}（ログインが要ります）`;
+    card.heading = `${card.title}（ログインが必要です）`;
     card.items = [
       {
         button: 'ログインの窓を前に出す',
@@ -454,7 +454,7 @@ async function readCard(card) {
   if (result.repaired) {
     ensureMaintCard(card.appId);
     // 直したことは、読んだ知らせの前に一度だけ言う。
-    const fixed = '画面が変わったので、読む所を直しました。';
+    const fixed = 'ページが変わったので、読む場所を直しました。';
     if (result.action === 'list') announce(fixed + (count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`));
     else announce(`${fixed}「${card.title}」を読みました。`);
     return;
@@ -463,23 +463,23 @@ async function readCard(card) {
   const midway = result.ok && result.partial ? 'まだ書いている途中です。' : '';
   if (result.ok && result.action === 'list') announce((count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`) + midway);
   else if (result.ok) announce(`「${card.title}」を読みました。${midway}`);
-  else if (result.needLogin) announce(`「${card.title}」は、ログインが要ります。`);
+  else if (result.needLogin) announce(`「${card.title}」は、ログインが必要です。`);
   else announce(`「${card.title}」を読めませんでした。`);
 }
 
 // 読めなかったときの文。理由ごとに分け、黙らない。
 function unreadableText(card, result) {
   const message = String(result.message || '');
-  if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確かめてください。\nネットワークの場所が変わったときは、Todoku を起こし直してください。';
+  if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確認してください。\nネットワークの場所が変わったときは、Todoku を起動し直してください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
-  if (message.startsWith('ログインの画面を開けませんでした')) return 'ログインの画面を開けませんでした。\nネットワークを確かめてから、もう一度押してください。';
+  if (message.startsWith('ログインの画面を開けませんでした')) return 'ログインの画面を開けませんでした。\nネットワークを確認してから、もう一度押してください。';
   // 主の処理で例外が起きたとき（窓が閉じられていた・ページの中の処理が落ちた など）。画面が変わったのではないので、そう言わない（見直しの6）。
   if (result.where === '(なし)' || message.startsWith('動かせませんでした')) return 'うまく動きませんでした。\nもう一度押してください。';
   // 自動で直そうとして直せなかったときは、最後に理由つきの一文を足す（見つからない → 0件のことも → 直すこともできなかった、の順）。
   const notFixed = result.autoRepairFailed ? `\n${notFixedSentence(result)}` : '';
   // 入れ物（container）のあるカードは、0件なら「（0件）」と出るので、ここに来るのは本当に見つからないときだけ。
-  if (card.action === 'list' && !card.hasContainer) return `画面が変わったため、読む所が見つかりませんでした。\n本当に0件のこともあります。${notFixed}`;
-  return `画面が変わったため、読む所が見つかりませんでした。${notFixed}`;
+  if (card.action === 'list' && !card.hasContainer) return `ページが変わったため、読む場所が見つかりませんでした。\n本当に0件の場合もあります。${notFixed}`;
+  return `ページが変わったため、読む場所が見つかりませんでした。${notFixed}`;
 }
 
 // 自動で直せなかったときの一文。理由（鍵が無い・時間切れ・確かな案が無い・Claude が失敗した）があれば括弧で添える。
@@ -523,7 +523,7 @@ function showClickConfirm(card, node) {
           // 押すボタンは作り直されるので、焦点は「「〇〇」を押します。」の項目へ移す（下矢印キーで押すボタンへ）。
           refreshCard(card, { focusResult: true });
           ensureMaintCard(card.appId);
-          announce(`画面が変わったので、押す所を直しました。もう一度押すときは、「${card.title}」を押すボタンを押してください。`);
+          announce(`ページが変わったので、押す場所を直しました。もう一度押すときは、「${card.title}」を押すボタンを押してください。`);
           return;
         }
         // 押した結果ダウンロードが始まったときは、保存したか（できなかったか）を知らせる。
@@ -540,9 +540,9 @@ function showClickConfirm(card, node) {
 // ---- 設定ファイルの点検と直しの案（支援者向けのカード）----
 // 全部のカードを点検し、当たらない行ごとに Claude の案（鍵があるとき）を一件ずつ見て、「受ける」（設定ファイルに書き、前の版を控えに残す）か
 // 「断る」を選ぶ。鍵が無いときは、当たらない行の一覧だけを読む。Claude に送るものは、主の処理の今の決まり（文字を落とした構造だけ）のまま。
-const REVIEW_HEADING = '設定ファイルを点検して直す（支援者向け）';
+const REVIEW_HEADING = '設定ファイルを確認して直す（支援者向け）';
 
-const REVIEW_BUTTON = '設定ファイルを点検する（支援者向け）';
+const REVIEW_BUTTON = '設定ファイルを確認する（支援者向け）';
 
 function reviewCard(appId) {
   return { kind: 'review', appId, heading: REVIEW_HEADING, items: [] };
@@ -555,18 +555,18 @@ async function openReviewDeck(config) {
     return;
   }
   const card = reviewCard(config.id);
-  pushDeck({ name: `「${config.name}」の点検（支援者向け）`, appId: config.id, cards: [card] }, { announcePosition: false });
+  pushDeck({ name: `「${config.name}」の設定ファイルの確認（支援者向け）`, appId: config.id, cards: [card] }, { announcePosition: false });
   await openReview(card);
 }
 
 function placeOf(where) {
   const m = /^cards\[(\d+)\]\.(\w+)$/.exec(String(where || ''));
   if (!m) return String(where || '');
-  return { selector: '読む所・押す所', container: '入れ物', path: 'ページ' }[m[2]] || m[2];
+  return { selector: '読む場所・押す場所', container: '項目を囲む部分', path: 'ページ' }[m[2]] || m[2];
 }
 
 // 断っても、使う人の画面では、鍵があればその場で直して読む（autofix）。支援者が迷わないように、案の一覧の頭で言う。
-const REVIEW_REJECT_NOTE = '断っても、使う人の画面では、鍵があればその場で直して読みます。';
+const REVIEW_REJECT_NOTE = 'この直しを使わなかった場合も、使う人の画面では、Claude の API キーがあれば、その場で直して読みます。';
 
 // 案の一覧（card.review）から、カードの項目を作る。焦点の行き先（result）は、決めたばかりの案の行（結果の文を含む）か、
 // まだ決めていなければ最初の案の見出し。決めた結果を先に読み、次の案の見出しは下矢印で読む（知らせと焦点の移動が重なって、
@@ -579,41 +579,41 @@ function reviewItems(card, justDecided = null) {
   for (const e of r.errors) items.push({ text: `「${e.title || e.where}」（${placeOf(e.where)}）: ${e.message}` });
   const pending = r.proposals.findIndex((p) => !p.decided);
   r.proposals.forEach((p, k) => {
-    const head = `${k + 1}件目（全${r.proposals.length}件）: 「${p.title}」の${placeWord(p.action)}`;
+    const head = `直しの候補 ${k + 1}つ目（全部で${r.proposals.length}つ）: 「${p.title}」の${placeWord(p.action)}`;
     if (p.decided) {
-      const done = p.decided === 'accepted' ? '受けました。設定ファイルに書き、前の版は控えに残しました。' : '断りました。設定ファイルは変えていません。';
+      const done = p.decided === 'accepted' ? 'この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。' : 'この直しは使いませんでした。設定ファイルは変えていません。';
       items.push({ text: `${head}: ${done}`, result: p === justDecided });
       return;
     }
     items.push(
       { text: head, result: !justDecided && k === pending },
       { text: `いまのセレクタ: ${p.oldSelector}` },
-      { text: `案のセレクタ: ${p.newSelector}（ページの中で${p.matches}か所に当たります）` },
+      { text: `直しの候補のセレクタ: ${p.newSelector}（ページの中で${p.matches}か所が見つかります）` },
       { text: `理由: ${p.reason || '（理由はありません）'}` },
-      { button: `「${p.title}」の案を受ける（設定ファイルに書く）`, onPress: () => decideProposal(card, p, true) },
-      { button: `「${p.title}」の案を断る`, onPress: () => decideProposal(card, p, false) },
+      { button: `「${p.title}」の直しを使う（設定ファイルに書く）`, onPress: () => decideProposal(card, p, true) },
+      { button: `「${p.title}」の直しを使わない`, onPress: () => decideProposal(card, p, false) },
     );
   });
   if (r.proposals.length > 0 && pending < 0) {
     const accepted = r.proposals.filter((p) => p.decided === 'accepted').length;
-    items.push({ text: `全部の案を見ました（受けた案${accepted}件・断った案${r.proposals.length - accepted}件）。`, result: !justDecided });
+    items.push({ text: `すべての直しの候補を確認しました。使った直しは${accepted}つ、使わなかった直しは${r.proposals.length - accepted}つです。`, result: !justDecided });
   }
   return items;
 }
 
 async function openReview(card) {
   busy = true;
-  card.heading = `${REVIEW_HEADING}（点検しています）`;
-  card.items = [{ text: '点検しています。\n終わると、ここに当たらない行と直しの案が出ます。', result: true, loading: true }];
+  card.heading = `${REVIEW_HEADING}（確認しています）`;
+  card.items = [{ text: '確認しています。\n終わると、ここに読めなくなった場所と直しの候補が出ます。', result: true, loading: true }];
   refreshCard(card, { focusResult: true });
-  announce('点検しています。');
+  announce('確認しています。');
   let summary;
   try {
     let checked;
     try {
       checked = await window.cardsApi.checkCards(card.appId);
     } catch (e) {
-      checked = { ok: false, message: `点検できませんでした: ${e.message}` };
+      checked = { ok: false, message: `確認できませんでした: ${e.message}` };
     }
     if (!checked.ok) {
       card.review = null;
@@ -621,26 +621,26 @@ async function openReview(card) {
       summary = endSentence(checked.message);
     } else if (checked.problems.length === 0) {
       card.review = null;
-      card.items = [{ text: '当たらない行はありません。', result: true }];
-      summary = '当たらない行はありません。';
+      card.items = [{ text: '読めなくなった場所はありません。', result: true }];
+      summary = '読めなくなった場所はありません。';
     } else {
       const n = checked.problems.length;
       let proposed;
       try {
         proposed = await window.cardsApi.proposeRepairs(card.appId);
       } catch (e) {
-        proposed = { ok: false, message: `案を作れませんでした: ${e.message}` };
+        proposed = { ok: false, message: `直しの候補を作れませんでした: ${e.message}` };
       }
       if (!proposed.ok) {
         // 鍵が無いとき（案を作れないとき）は、当たらない行の一覧だけを読む。
         card.review = null;
-        summary = `当たらない行が${n}件あります。${endSentence(proposed.message)}`;
+        summary = `読めなくなった場所が${n}か所あります。${endSentence(proposed.message)}`;
         card.items = [{ text: summary, result: true }, ...checked.problems.map((p) => ({ text: `「${p.title || p.where}」（${placeOf(p.where)}）: ${endSentence(p.message)}` }))];
       } else {
         const proposals = (proposed.proposals || []).filter((p) => p.newSelector).map((p) => ({ ...p, decided: null }));
-        const noIdea = (proposed.proposals || []).filter((p) => !p.newSelector).map((p) => ({ where: p.where, title: p.title, message: '案がありませんでした' }));
+        const noIdea = (proposed.proposals || []).filter((p) => !p.newSelector).map((p) => ({ where: p.where, title: p.title, message: '直しの候補がありませんでした' }));
         const errors = [...noIdea, ...(proposed.errors || []).map((e) => ({ ...e, title: (checked.problems.find((p) => p.where === e.where) || {}).title }))];
-        summary = `当たらない行が${n}件あり、直しの案が${proposals.length}件あります。`;
+        summary = `読めなくなった場所が${n}か所あり、直しの候補が${proposals.length}つあります。`;
         card.review = { summary, proposals, errors };
         card.items = reviewItems(card);
       }
@@ -648,7 +648,7 @@ async function openReview(card) {
   } finally {
     busy = false;
   }
-  card.heading = card.review ? `${REVIEW_HEADING}（案${card.review.proposals.length}件）` : REVIEW_HEADING;
+  card.heading = card.review ? `${REVIEW_HEADING}（直しの候補${card.review.proposals.length}つ）` : REVIEW_HEADING;
   refreshCard(card, { focusResult: true });
   announce(summary);
 }
@@ -657,16 +657,19 @@ async function decideProposal(card, p, accept) {
   if (busy || p.decided) return;
   if (accept) {
     busy = true;
+    // 書くのに時間がかかる（Windows で3秒ほど無音だった）ので、0.5秒を越えたら「書いています。」と一言知らせる（押すカードの「押しています。」と同じ形）。
+    const writingTimer = setTimeout(() => announce('書いています。'), LOADING_DELAY_MS);
     let r;
     try {
       r = await window.cardsApi.applyRepairs(card.appId, [p.where]);
     } catch (e) {
       r = { ok: false, message: `設定ファイルに書けませんでした: ${e.message}` };
     } finally {
+      clearTimeout(writingTimer);
       busy = false;
     }
     if (!r.ok) {
-      announce(`「${p.title}」の案を書けませんでした。${endSentence(r.message)}`, true);
+      announce(`「${p.title}」の直しを設定ファイルに書けませんでした。${endSentence(r.message)}`, true);
       return;
     }
     p.decided = 'accepted';
@@ -680,7 +683,7 @@ async function decideProposal(card, p, accept) {
 
 // ---- 自動で直した所（支援者向けのカード）----
 // どのカード・前と後のセレクタ・理由・日時を読み、設定ファイルに書く（配る）か、直す前に戻すかを選ぶ。
-const MAINT_HEADING = '自動で直した所（支援者向け）';
+const MAINT_HEADING = '自動で直した場所（支援者向け）';
 
 function formatAt(iso) {
   const d = new Date(iso);
@@ -714,7 +717,7 @@ async function openMaint(card) {
   try {
     r = await window.cardsApi.listRepairs(card.appId);
   } catch (e) {
-    r = { ok: false, message: '自動で直した所を読めませんでした。' };
+    r = { ok: false, message: '自動で直した場所の一覧を読めませんでした。' };
   }
   const repairs = r.ok ? r.repairs : [];
   repairsOf(card.appId).clear();
@@ -722,9 +725,9 @@ async function openMaint(card) {
   if (!r.ok) {
     card.items = [{ text: r.message, result: true }];
   } else if (repairs.length === 0) {
-    card.items = [{ text: '自動で直した所は、いまはありません。', result: true }];
+    card.items = [{ text: '自動で直した場所は、いまはありません。', result: true }];
   } else {
-    card.items = [{ text: `自動で直した所が${repairs.length}件あります。手元にだけ効いています。`, result: true }];
+    card.items = [{ text: `自動で直した場所が${repairs.length}か所あります。この直しは、このパソコンの中だけで使っています。`, result: true }];
     for (const x of repairs) {
       card.items.push(
         { label: 'カード', text: x.title },
@@ -733,7 +736,7 @@ async function openMaint(card) {
         { label: '理由', text: x.reason || '（理由はありません）' },
         { label: '日時', text: formatAt(x.at) },
         {
-          button: `「${x.title}」の直しを設定ファイルに書く（配る）`,
+          button: `「${x.title}」の直しを設定ファイルに書く（ほかの人にも配れるようにする）`,
           onPress: async () => {
             let p;
             try {
@@ -768,7 +771,7 @@ async function openMaint(card) {
       );
     }
   }
-  card.heading = `${MAINT_HEADING}（${repairs.length}件）`;
+  card.heading = `${MAINT_HEADING}（${repairs.length}か所）`;
   const node = refreshCard(card, { focusResult: true });
   return node;
 }
@@ -786,7 +789,7 @@ let appConfigs = [];
 function createItems(card) {
   return [
     { text: 'ページのURLを入れて、Enterキーを押すと、Claude がそのページのカードを作ります。', describe: true },
-    { text: 'Claude に送るのはページの作りだけで、ページの文字は送りません。作るのに、長くて90秒ほどかかります。' },
+    { text: 'Claude に送るのはページの構造だけで、ページの文字は送りません。作り終わるまで、長いときは90秒ほどかかります。' },
     {
       input: 'ページのURL（http か https で始まるもの）',
       // 描き直したときも、入れた途中の URL を残す。
@@ -807,7 +810,7 @@ function createCard() {
 // 作った束（と、読めた束）の行き先のカード。
 function gotoCard(config) {
   const items = [{ text: `スペースキーまたはEnterキーで、「${config.name}」のカードへ進みます。`, describe: true }];
-  if (generatedApps.has(config.id)) items.push({ text: 'Claude がページの作りから作ったカードの束です。' });
+  if (generatedApps.has(config.id)) items.push({ text: 'Claude がページの構造から作ったカードです。' });
   return { kind: 'goto', heading: config.name, appId: config.id, items, open: () => pushDeck(appDeck(config, true)) };
 }
 
@@ -821,14 +824,14 @@ async function startGenerate(card) {
   busy = true;
   const started = Date.now();
   card.heading = `${CREATE_HEADING}（作っています）`;
-  card.items = [{ text: 'カードを作っています。長くて90秒ほどかかります。\n終わると、作ったカードの束を開きます。', result: true, loading: true }];
+  card.items = [{ text: 'カードを作っています。長いときは90秒ほどかかります。\n作り終わると、作ったカードを開きます。', result: true, loading: true }];
   // 焦点を入力欄から「カードを作っています。」の項目へ移してから、入力欄を外す（refreshCard の中）。
   const node = refreshCard(card, { focusResult: true });
   if (node) node.setAttribute('aria-busy', 'true');
   const timer = setInterval(() => {
     const sec = Math.round((Date.now() - started) / 1000);
     const item = card.node && card.node.isConnected ? card.node.querySelector('[data-loading]') : null;
-    if (item) item.textContent = `カードを作っています。${sec}秒たちました。\n終わると、作ったカードの束を開きます。`;
+    if (item) item.textContent = `カードを作っています。${sec}秒たちました。\n作り終わると、作ったカードを開きます。`;
     announce(`カードを作り始めて、${sec}秒たちました。`);
   }, PROGRESS_EVERY_MS);
   let r;
@@ -874,7 +877,7 @@ function refreshTopIntro() {
 }
 
 function topIntroText(n) {
-  return `ウェブアプリの画面を、カードで読めます（アプリ${n}件）。`;
+  return `ウェブアプリの画面を、カードで読めます。アプリは${n}つあります。`;
 }
 
 // 作った束を消す。消したら、はじめの束へ戻り、その束の行き先のカードを外す。
@@ -883,7 +886,7 @@ async function deleteGenerated(config) {
   try {
     r = await window.cardsApi.deleteGenerated(config.id);
   } catch (e) {
-    r = { ok: false, message: 'カードの束を消せませんでした。' };
+    r = { ok: false, message: 'カードを消せませんでした。' };
   }
   if (!r.ok) {
     announce(r.message, true);
@@ -1150,7 +1153,7 @@ function toFirstResult() {
   }
   // 見つかった数と位置を、一つの文で言う（続けて二つ入れると、前の文が読まれないことがある）。
   selectCard(at, { announcePosition: false });
-  announce(`${searchCountText(search.query, search.total)}${cardNodes().length}件中${at + 1}件目`);
+  announce(`${searchCountText(search.query, search.total)}${cardNodes().length}枚中${at + 1}枚目`);
 }
 
 // 見つかったカードへ移る: そのアプリの束を開き、そのカードを選ぶ。Escキーで、はじめの束の見つかったカードに戻る。
@@ -1189,16 +1192,16 @@ function endSentence(text) {
 function appDeck(config, hasParent = true) {
   const reads = config.cards.filter((c) => c.action !== 'click').length;
   const clicks = config.cards.length - reads;
-  const counts = [reads > 0 ? `読む所${reads}件` : '', clicks > 0 ? `押す所${clicks}件` : ''].filter(Boolean).join('・');
+  const counts = [reads > 0 ? `読むカード${reads}枚` : '', clicks > 0 ? `押すカード${clicks}枚` : ''].filter(Boolean).join('、');
   const texts = [
-    `「${config.name}」の画面を、カードで読めます（${counts || 'カード0件'}）。`,
+    `「${config.name}」の画面を、カードで読めます（${counts || 'カードはありません'}）。`,
     '上下矢印キーでカードを選びます。',
     'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
-    'スペースキーまたはEnterキーで、カード内へ移動します。',
-    '読む所のカードでは、カード内へ移動するときに、ウェブアプリのその所を読みます。',
-    '読む所のカードの上で、もう一度スペースキーまたはEnterキーを押すと、読み直します。',
-    '押す所のカードでは、カード内のボタンで押します。',
-    'カード内では、上下矢印キーで項目を一つずつ選びます。',
+    'スペースキーまたはEnterキーで、カードの中に入ります。',
+    '読むカードでは、カードの中に入るときに、ウェブアプリのその場所を読みます。',
+    '読むカードの上で、もう一度スペースキーまたはEnterキーを押すと、読み直します。',
+    '押すカードでは、カードの中のボタンで押します。',
+    'カードの中では、上下矢印キーで項目を一つずつ選びます。',
     'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
   ];
@@ -1207,7 +1210,7 @@ function appDeck(config, hasParent = true) {
     // 基を使い慣れた方は、二枚目に表示設定があると思って探すので、在処と戻り方を言う。
     texts.push(`表示設定は、はじめの画面の「${SETTINGS_HEADING}」のカードにあります。`);
   }
-  if (clicks === 0) texts.splice(texts.indexOf('押す所のカードでは、カード内のボタンで押します。'), 1);
+  if (clicks === 0) texts.splice(texts.indexOf('押すカードでは、カードの中のボタンで押します。'), 1);
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);
@@ -1232,7 +1235,7 @@ function appDeck(config, hasParent = true) {
   if (generatedApps.has(config.id)) {
     items.push(
       { button: '設定ファイルとして書き出す（支援者向け）', onPress: () => exportGenerated(config) },
-      { button: 'このカードの束を消す', onPress: () => deleteGenerated(config) },
+      { button: 'このアプリのカードを消す', onPress: () => deleteGenerated(config) },
     );
   }
   const cards = [{ kind: 'info', heading: config.name, items }];
@@ -1263,10 +1266,10 @@ function topDeck(configs, problems) {
       topIntroText(configs.length),
       '上下矢印キーでカードを選びます。',
       'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
-      'スペースキーまたはEnterキーで、カード内へ移動します。',
+      'スペースキーまたはEnterキーで、カードの中に入ります。',
       'ただし、アプリの名前のカードでは、スペースキーまたはEnterキーで、そのアプリのカードへ進みます。',
       `「${CREATE_HEADING}」のカードでは、スペースキーまたはEnterキーで、ページのURLを入れる欄へ移ります。`,
-      'カード内では、上下矢印キーで項目を一つずつ選びます。',
+      'カードの中では、上下矢印キーで項目を一つずつ選びます。',
       'Homeキーで最初、Endキーで最後の項目へ移動します。',
       'Escキーで、カードの中からカードへ戻ります。',
       `「${SETTINGS_HEADING}」のカードで、読みやすさ、1列リフロー表示、配色を変えられます。`,
@@ -1368,7 +1371,7 @@ if (window.cardsApi.onRepairing) {
   window.cardsApi.onRepairing(({ appId, cardId }) => {
     repairingNow.add(`${appId}/${cardId}`);
     const card = stack.flatMap((d) => d.cards).find((c) => c.appId === appId && c.cardId === cardId);
-    if (card && card.kind === 'click') announce('画面が変わったので、押す所を直しています。少しお待ちください。');
+    if (card && card.kind === 'click') announce('ページが変わったので、押す場所を直しています。少しお待ちください。');
   });
 }
 

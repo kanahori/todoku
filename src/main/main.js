@@ -113,7 +113,7 @@ function createWindow() {
 ipcMain.handle('configs:load', () => {
   // 読めたものと、当たらない所の一覧の両方を返す。
   const sources = [{ dir: CARDS_DIR, label: 'cards' }];
-  if (CARDS_LOCAL_DIR) sources.push({ dir: CARDS_LOCAL_DIR, label: '手元' });
+  if (CARDS_LOCAL_DIR) sources.push({ dir: CARDS_LOCAL_DIR, label: 'このパソコン' });
   sources.push({ dir: generatedStore().dir, label: GENERATED_LABEL });
   const results = loadConfigSources(sources).map((r) => ({ ...r, generated: r.file.startsWith(`${GENERATED_LABEL}/`) }));
   configs.clear();
@@ -145,7 +145,7 @@ ipcMain.handle('cards:check', async (_event, appId) => {
     });
     return { ok: true, problems: withTitles };
   } catch (e) {
-    return { ok: false, message: `点検できませんでした: ${e.message}` };
+    return { ok: false, message: `確認できませんでした: ${e.message}` };
   }
 });
 
@@ -153,7 +153,7 @@ ipcMain.handle('cards:check', async (_event, appId) => {
 ipcMain.handle('repair:propose', async (_event, appId) => {
   const config = configs.get(appId);
   if (!config) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
-  if (!hasApiKey()) return { ok: false, message: '鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）' };
+  if (!hasApiKey()) return { ok: false, message: 'Claude の API キーが設定されていないので、直しの候補を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）' };
   try {
     const problems = await checkCards(BrowserWindow, config);
     if (problems.length === 0) return { ok: true, proposals: [], errors: [] };
@@ -167,7 +167,7 @@ ipcMain.handle('repair:propose', async (_event, appId) => {
     lastProposals.set(appId, result.proposals);
     return { ok: true, ...result };
   } catch (e) {
-    return { ok: false, message: `案を作れませんでした: ${e.message}` };
+    return { ok: false, message: `直しの候補を作れませんでした: ${e.message}` };
   }
 });
 
@@ -179,7 +179,7 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
   if (!config || !file) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
   const wanted = new Set((Array.isArray(acceptedWheres) ? acceptedWheres : []).map(String));
   const accepted = proposals.filter((p) => wanted.has(p.where) && p.newSelector);
-  if (accepted.length === 0) return { ok: false, message: '採った案がありません' };
+  if (accepted.length === 0) return { ok: false, message: '使う直しの候補がありません' };
   // 書く・読み直す・点検し直すの途中で失敗しても、画面に理由を返す（前は try が無く、画面の側は例外だけを受けた。見直しの10）。
   try {
     const next = applyRepairs(config, accepted);
@@ -199,7 +199,7 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
     const problems = await checkCards(BrowserWindow, configs.get(appId));
     return { ok: true, written: accepted.length, problems };
   } catch (e) {
-    return { ok: true, written: accepted.length, problems: [], message: `書きましたが、点検し直せませんでした: ${e.message}` };
+    return { ok: true, written: accepted.length, problems: [], message: `書きましたが、もう一度確認できませんでした: ${e.message}` };
   }
 });
 
@@ -234,11 +234,11 @@ ipcMain.handle('generate:start', async (_event, url) => {
 // 作った束を消す（置き場の設定ファイル・手元の自動の直し・開いている窓）。作った束にだけ効く。
 ipcMain.handle('generate:delete', (_event, appId) => {
   const base = baseConfigs.get(appId);
-  if (!base || !generatedIds.has(appId)) return { ok: false, message: 'この束は、作ったカードの束ではないので消せません。' };
+  if (!base || !generatedIds.has(appId)) return { ok: false, message: 'これは Claude が作ったカードではないので、消せません。' };
   try {
     generatedStore().remove(appId);
   } catch (e) {
-    return { ok: false, message: 'カードの束を消せませんでした。' };
+    return { ok: false, message: 'カードを消せませんでした。' };
   }
   for (const r of store().load(appId)) store().remove(appId, r.cardId);
   closeTarget(appId);
@@ -246,13 +246,13 @@ ipcMain.handle('generate:delete', (_event, appId) => {
   baseConfigs.delete(appId);
   configPaths.delete(appId);
   generatedIds.delete(appId);
-  return { ok: true, message: `「${base.name}」のカードの束を消しました。` };
+  return { ok: true, message: `「${base.name}」のカードを消しました。` };
 });
 
 // 作った束を、支援者が確かめて配れるように、ダウンロードのフォルダへ設定ファイルとして書き出す。
 ipcMain.handle('generate:export', (_event, appId) => {
   const base = baseConfigs.get(appId);
-  if (!base || !generatedIds.has(appId)) return { ok: false, message: 'この束は、作ったカードの束ではないので書き出せません。' };
+  if (!base || !generatedIds.has(appId)) return { ok: false, message: 'これは Claude が作ったカードではないので、書き出せません。' };
   try {
     // 自動で直した所があれば、それも当てた中身を書き出す。
     return { ok: true, message: exportedMessage(exportDeck(configs.get(appId) || base, app.getPath('downloads'))) };
@@ -311,7 +311,7 @@ ipcMain.handle('repair:publish', (_event, appId, cardId) => {
   try {
     saveConfigFile(file, applyRepairs(base, [{ index, newSelector: r.after }]), path.join(app.getPath('userData'), 'config-backups'));
   } catch (e) {
-    return { ok: false, message: '設定ファイルに書けませんでした。書いてよい置き場の設定ファイルか、確かめてください。' };
+    return { ok: false, message: '設定ファイルに書けませんでした。書き込める場所にある設定ファイルか、確認してください。' };
   }
   const reloaded = loadConfigFile(file);
   if (!reloaded.config) return { ok: false, message: '書き直した設定ファイルが読めません。' };
@@ -375,7 +375,7 @@ app.whenReady().then(async () => {
       log: logLine,
     });
   } catch (e) {
-    logLine(`プロキシの確かめが止まりました: ${e.message}`);
+    logLine(`プロキシの確認が途中で止まりました: ${e.message}`);
   }
   registerSettingsHandlers(ipcMain, settingsStore());
   // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
