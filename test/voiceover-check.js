@@ -61,22 +61,46 @@ const focusName = async () => {
     const p = Application('System Events').processes.byName('${PROCESS}');
     try {
       const f = p.attributes.byName('AXFocusedUIElement').value();
-      const a = (n) => { try { const v = f.attributes.byName(n).value(); return v == null ? '' : String(v); } catch (e) { return ''; } };
-      return a('AXTitle') || a('AXDescription') || a('AXValue');
-    } catch (e) { return ''; }
+      const a = (x, n) => { try { const v = x.attributes.byName(n).value(); return v == null ? '' : String(v); } catch (e) { return ''; } };
+      const own = a(f, 'AXTitle') || a(f, 'AXDescription') || a(f, 'AXValue');
+      // 一覧の一件（li）は、AX では題を持たない要素で、文字は中の子（AXStaticText）にある。題が無ければ、子の文字を3段までつなぐ。
+      const texts = [];
+      const walk = (x, d) => {
+        if (d > 3 || texts.length > 20) return;
+        let kids = [];
+        try { kids = x.uiElements(); } catch (e) { kids = []; }
+        for (const k of kids) {
+          const v = a(k, 'AXValue') || a(k, 'AXTitle') || a(k, 'AXDescription');
+          if (v) texts.push(v);
+          else walk(k, d + 1);
+        }
+      };
+      if (!own) walk(f, 0);
+      return JSON.stringify({ name: own || texts.join(' '), role: a(f, 'AXRole') + (a(f, 'AXSubrole') ? '/' + a(f, 'AXSubrole') : '') });
+    } catch (e) { return JSON.stringify({ name: '', role: '' }); }
   })()`, { js: true });
-  return r.out;
+  try {
+    return JSON.parse(r.out);
+  } catch (e) {
+    return { name: '', role: '' };
+  }
 };
 // キーを押した後、VoiceOver の最後の文を少しずつ取り、変わった文を順に集める（一つのキーで幾つも読むことがあるため）。
+// 取れなかった回（命令が誤りか時間切れで返った回）と、問い合わせた回も数える。読んだ文が空のとき、黙っていたのか、取れなかったのかを分けるため
+// （2026-11-05 の二度目: Enter の直後の6秒と次の下矢印で、文も焦点も空だった）。
 const collect = async (ms) => {
   const seen = [];
+  let asked = 0;
+  let failed = 0;
   const end = Date.now() + ms;
   while (Date.now() < end) {
+    asked++;
     const p = await lastPhrase();
+    if (p === null) failed++;
     if (p && seen[seen.length - 1] !== p) seen.push(p);
-    await sleep(250);
+    await sleep(100);
   }
-  return seen;
+  return { seen, asked, failed };
 };
 
 let app = null;
@@ -117,11 +141,11 @@ const watchdog = setTimeout(() => {
 const record = { started: new Date().toString(), steps: [], checks: [], notes: [] };
 const step = async (label, key, waitMs) => {
   if (key) await keyCode(KEYS[key]);
-  const phrases = await collect(waitMs);
-  const focus = await focusName();
-  const s = { label, key, focus, phrases };
+  const { seen: phrases, asked, failed } = await collect(waitMs);
+  const { name: focus, role } = await focusName();
+  const s = { label, key, focus, role, phrases, asked, failed };
   record.steps.push(s);
-  console.log(`${label}: 焦点「${focus}」 読んだ文 ${JSON.stringify(phrases)}`);
+  console.log(`${label}: 焦点「${focus}」（${role}） 読んだ文 ${JSON.stringify(phrases)}（最後の文を ${asked}回問い合わせ、${failed}回取れず）`);
   return s;
 };
 const check = (name, ok, detail) => {
@@ -196,13 +220,18 @@ const check = (name, ok, detail) => {
     return;
   }
   const read = await step(`「${LIST_CARD}」を読む`, 'enter', 6000);
-  const item1 = read.focus;
-  const item2 = await step('一覧の次の項目', 'down', 2500);
-  const all = [...read.phrases, ...item2.phrases];
+  // 一件ずつ移る手を四つ。知らせ（role=status）の文が項目の文の後に読まれて、最後の文が知らせに置き換わることがあるので、
+  // 知らせの出ない上下矢印の往復でも見る（一件目→二件目→一件目→二件目）。
+  const itemMoves = [read];
+  itemMoves.push(await step('一覧の次の項目', 'down', 2500));
+  itemMoves.push(await step('一覧の前の項目', 'up', 2500));
+  itemMoves.push(await step('一覧の次の項目（二度目）', 'down', 2500));
+  const all = itemMoves.flatMap((m) => m.phrases);
   check('一覧のカードで、件数が読まれる', all.some((p) => /\d+件/.test(p)), all);
-  check('一覧のカードで、項目が読まれる（一件目と二件目）',
-    Boolean(item1) && Boolean(item2.focus) && read.phrases.some((p) => p.includes(item1.slice(0, 10))) && item2.phrases.some((p) => p.includes(item2.focus.slice(0, 10))),
-    { item1, item2: item2.focus, phrases: all });
+  const heard = (m) => Boolean(m.focus) && m.phrases.some((p) => p.includes(m.focus.slice(0, 10)));
+  const perMove = itemMoves.map((m) => ({ label: m.label, focus: m.focus, role: m.role, heard: heard(m), phrases: m.phrases }));
+  check('一覧のカードで、焦点が一件に移る（焦点の一件の文字が取れる）', itemMoves.every((m) => Boolean(m.focus)), perMove);
+  check('一覧のカードで、焦点の移った一件が読まれる（四つの手の全部）', itemMoves.every(heard), perMove);
   check('結果の知らせ（role=status）が読まれる', all.some((p) => p.includes(`「${LIST_CARD}」から`) && p.includes('件読みました')), all);
   await step('戻る', 'esc', 1000);
   await step('戻る', 'esc', 1000);
