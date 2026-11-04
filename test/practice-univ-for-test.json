@@ -1,0 +1,28 @@
+{
+  "id": "practice-univ",
+  "name": "みどり技術大学（作り物）",
+  "description": "出典：作り物の大学のページ。大学のトップの作りをまねた練習です。",
+  "url": "fixture:univ-top.html",
+  "cards": [
+    {
+      "id": "pickup",
+      "title": "ピックアップニュースを全部読む",
+      "action": "list",
+      "selector": ".pc-header section.slider .swiper-slide:not(.swiper-slide-duplicate) .box"
+    },
+    {
+      "id": "announcements",
+      "title": "お知らせを読む",
+      "action": "list",
+      "selector": "section.event .wrap > .box",
+      "container": "section.event .wrap"
+    },
+    {
+      "id": "topics",
+      "title": "トピックスを読む",
+      "action": "list",
+      "selector": "section.information .container > .row > div > .box .col-8",
+      "container": "section.information .container > .row"
+    }
+  ]
+}

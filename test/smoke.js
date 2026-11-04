@@ -148,6 +148,23 @@ async function main() {
   const loginUrl = BrowserWindow.getAllWindows()[0].webContents.getURL();
   check('ログインが要るときは login.path の画面を開く', loginUrl.endsWith('/practice-login.html'), loginUrl);
 
+  // 大学のトップの作り（作り物の「みどり技術大学」）: 本学の三つのサイトの設定ファイル（手元の置き場）と同じ selector の形で読めること。
+  // 切り替えのための同じニュースの写しは読まない。トピックスは写真の説明を読まず、日付・分類・題を読む。入試の案内へのリンクは、カードにしない。
+  const univ = loadConfigFile(path.join(__dirname, 'practice-univ-for-test.json')).config;
+  const univPickup = await runCard(BrowserWindow, univ, 'pickup');
+  check('大学のトップ: ピックアップニュースを、写しを除いて4件読む',
+    univPickup.ok && JSON.stringify(univPickup.items) === JSON.stringify([
+      'みどり学部 学部紹介、みどり学部の概要の動画です。', '【保健の学科】来年に新しいコースができます、新しいコースの案内です。', '見学の日の案内', '町の会社と組む授業']), univPickup.items);
+  const univAnn = await runCard(BrowserWindow, univ, 'announcements');
+  check('大学のトップ: お知らせを、日付・分類・題の一件ずつで読む',
+    univAnn.ok && univAnn.items.length === 3 && univAnn.items[0] === '2026年11月02日、イベント、11月7日 体を動かす教室のご案内', univAnn.items);
+  const univTopics = await runCard(BrowserWindow, univ, 'topics');
+  check('大学のトップ: トピックスを、写真の説明を読まずに、日付（無ければ印）・分類・題で読む',
+    univTopics.ok && JSON.stringify(univTopics.items) === JSON.stringify([
+      '＼Hot!／学生・卒業生の活躍、卒業生が大会で金メダルを取りました', '2026年11月04日、学生・卒業生の活躍、情報の学科の学生が大会で優勝しました']), univTopics.items);
+  check('大学のトップ: 入試の案内へのリンクを読むカードは無い（ピックアップのリンクはカードにしない）',
+    !univ.cards.some((c) => /入試|pickuplink|admission/.test(`${c.title} ${c.selector} ${c.container || ''}`)), univ.cards.map((c) => c.selector));
+
   // 自治体風のページ: 自動で切り替わるカルーセルの、隠れているスライドも全部読める。
   const city = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-city.json')).config;
   const carousel = await runCard(BrowserWindow, city, 'carousel');
