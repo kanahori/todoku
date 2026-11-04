@@ -40,9 +40,11 @@ function resolveUrl(url, cardPath) {
 // 待っても外れなければ、そこまでを読み、partial: true を返す（画面が「書いている途中です」と知らせる）。
 // joinWith（list のカードだけ・任意）は、二つ目の表の行の selector。一覧の n 件目の後ろに、joinWith の n 件目を空白でつないで読む
 // （横に長い表を、名前の列の表と値の列の表に分けて描くページのため）。
+// skipItems（list のカードだけ・任意）は、読まない項目の決まり（正規表現の文字列）。項目の文がこれに当たれば、その一件を読まず、件数にも入れない。
+// 大学のお知らせの一覧に、入試の案内の件が混ざるため（入試の材料はカードにしない決まり・2026-11-05）。
 // until（read のカードだけ・任意）は、節の終わりの selector。当たった要素から、後に続く兄弟の要素を、until に当たる要素の手前まで読む
 // （見出しから次の同じ段の見出しの手前までの節。作った束の、本文の節を読むカード）。
-async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until, tagSelector, joinWith) {
+async function pageAction(selector, action, loginSelector, limit, waitMs, container, dateSelector, until, tagSelector, joinWith, skipItems) {
   // 読む文を、行の並びとして取り出す。画面読み上げが読む文に近づける。
   // - 中の文字に加えて、画像の説明（alt）と aria-label も読む。aria-hidden="true" の中と script・style は読まない。
   //   当たった要素そのものに付いた aria-hidden は見ない（カルーセルの部品は、見えないスライドに aria-hidden="true" を付けるため）。
@@ -457,6 +459,21 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           items = outItems;
           texts = outTexts;
         }
+        // 読まない決まり（skipItems）に当たる一件は外す。全部が外れたら「0件です。」。
+        if (skipItems) {
+          let skip = null;
+          try {
+            skip = new RegExp(skipItems);
+          } catch (e) {
+            skip = null;
+          }
+          if (skip) {
+            const keep = texts.map((t, i) => (skip.test(t) ? -1 : i)).filter((i) => i >= 0);
+            items = keep.map((i) => items[i]);
+            texts = keep.map((i) => texts[i]);
+            if (texts.length === 0) return { found: true, text: '0件です。', truncated: false, items: [], keys: [], ...(busy ? { partial: true } : {}) };
+          }
+        }
         // 文字の無い一件（表の頭の飾りの空の行など）は読まない（「1件目: 」と空のまま読まれた。気象庁の警報の表）。
         // 全部が空なら、今までどおり項目のまま返す（空の項目として知らせる）。
         if (texts.some((t) => t.trim() !== '')) {
@@ -553,8 +570,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
 
 // ページで動かす文を作る。selector は JSON にして埋め込み、文として解釈されないようにする。
 function buildScript(selector, action, loginSelector = null, waitMs = WAIT_MS, container = null, dateSelector = null, until = null, tagSelector = null,
-  joinWith = null) {
-  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until, tagSelector, joinWith].map((v) => JSON.stringify(v)).join(', ');
+  joinWith = null, skipItems = null) {
+  const args = [selector, action, loginSelector, READ_LIMIT, waitMs, container, dateSelector, until, tagSelector, joinWith, skipItems].map((v) => JSON.stringify(v)).join(', ');
   return `(${pageAction.toString()})(${args})`;
 }
 
@@ -724,12 +741,13 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
   const until = card.action === 'read' && card.until ? card.until : null;
   const tagSelector = card.action === 'list' && card.tagSelector ? card.tagSelector : null;
   const joinWith = card.action === 'list' && card.joinWith ? card.joinWith : null;
+  const skipItems = card.action === 'list' && card.skipItemsMatching ? card.skipItemsMatching : null;
   // 押すカードは、押す前からダウンロードを待ち受ける。
   // 保存の名前の型（saveAs）があれば、始まったダウンロードをその名前で保存する。
   const watch = card.action === 'click' ? watchDownload({ saveAs: card.saveAs || null }) : null;
   let result;
   try {
-    result = await runWithLimit(win, buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector, joinWith), options.waitMs);
+    result = await runWithLimit(win, buildScript(card.selector, card.action, loginSelector, options.waitMs, container, dateSelector, until, tagSelector, joinWith, skipItems), options.waitMs);
   } catch (e) {
     if (watch) watch.cancel();
     throw e;

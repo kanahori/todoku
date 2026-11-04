@@ -15,7 +15,8 @@
       "title": "お知らせを読む",
       "action": "list",
       "selector": "section.event .wrap > .box",
-      "container": "section.event .wrap"
+      "container": "section.event .wrap",
+      "skipItemsMatching": "入試|入学者選抜|募集要項"
     },
     {
       "id": "topics",

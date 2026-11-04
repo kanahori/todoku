@@ -1119,8 +1119,9 @@ function refreshTopIntro() {
   intro.items[0] = { text: topIntroText(appConfigs.length) };
 }
 
+// 数は「〇個」で言う（「〇つ」は10を越えると「14つ」になる。2026-11-05 の Windows の確かめ）。
 function topIntroText(n) {
-  return `ウェブアプリの画面を、カードで読めます。アプリは${n}つあります。`;
+  return `ウェブアプリの画面を、カードで読めます。アプリは${n}個あります。`;
 }
 
 // 作った束を消す。消したら、はじめの束へ戻り、その束の行き先のカードを外す。

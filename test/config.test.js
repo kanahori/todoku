@@ -218,3 +218,16 @@ test('試しのための古い行の写しは、つくば市の設定ファイ�
   assert.notEqual(news.selector, city.cards.find((c) => c.id === 'news').selector);
   assert.equal(news.container, undefined);
 });
+
+test('skipItemsMatching は list のカードにだけ、空でない正規表現の文字列で書ける', () => {
+  const c = {
+    id: 'x', name: 'X', url: 'https://example.com/',
+    cards: [
+      { id: 'a', title: 'A', action: 'list', selector: '.ev', skipItemsMatching: '入試|募集要項' },
+      { id: 'b', title: 'B', action: 'read', selector: 'main', skipItemsMatching: '入試' },
+      { id: 'c', title: 'C', action: 'list', selector: '.ev', skipItemsMatching: '' },
+      { id: 'd', title: 'D', action: 'list', selector: '.ev', skipItemsMatching: '(入試' },
+    ],
+  };
+  assert.deepEqual(validateConfig(c).map((e) => e.where), ['cards[1].skipItemsMatching', 'cards[2].skipItemsMatching', 'cards[3].skipItemsMatching']);
+});

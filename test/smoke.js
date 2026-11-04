@@ -158,6 +158,8 @@ async function main() {
   const univAnn = await runCard(BrowserWindow, univ, 'announcements');
   check('大学のトップ: お知らせを、日付・分類・題の一件ずつで読む',
     univAnn.ok && univAnn.items.length === 3 && univAnn.items[0] === '2026年11月02日、イベント、11月7日 体を動かす教室のご案内', univAnn.items);
+  check('作り物の大学: 読まない決まり（skipItemsMatching）に当たる入試案内の一件は読まず、件数にも入れない',
+    univAnn.ok && univAnn.text.startsWith('3件あります。') && !univAnn.items.some((t) => t.includes('入試')) && !univAnn.text.includes('入試'), univAnn);
   const univTopics = await runCard(BrowserWindow, univ, 'topics');
   check('大学のトップ: トピックスを、写真の説明を読まずに、日付（無ければ印）・分類・題で読む',
     univTopics.ok && JSON.stringify(univTopics.items) === JSON.stringify([
@@ -1107,6 +1109,10 @@ async function rendererDeckFocusChecks() {
     const wait = pageWait(win);
     for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
     const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    // はじめの一枚目のアプリの数は「〇個」で読む（「14つ」と読まれた。2026-11-05 の Windows の確かめ）。
+    const intro = await js("document.querySelector('#deck > article.card [data-item]').textContent");
+    check('はじめの一枚目: アプリの数を「アプリは〇個あります。」と読む（10を越えても「〇つ」にしない）',
+      /^ウェブアプリの画面を、カードで読めます。アプリは\d+個あります。$/.test(intro), intro);
     // 見張り: 焦点のある要素（か、それを含む要素）を DOM から外した回数と、焦点が body に落ちた回数。
     await js(`(() => {
       const t = { removedWithFocus: 0, bodyFocus: 0 };

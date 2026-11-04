@@ -26,6 +26,7 @@
 //                                        // 書かれた年・月・日（2026-11-06・2026_11_6 の形）から「11月6日」と読む（日だけの表のため）
 //       "joinWith": ".values tr",         // 任意・list のカードだけ。二つ目の表の行。一覧の n 件目の後ろに、その n 件目をつないで読む
 //       "tagSelector": ".tag",           // 任意・list のカードだけ。項目の中の分類の言葉の要素。題の後ろに括弧で読む
+//       "skipItemsMatching": "入試|募集要項", // 任意・list のカードだけ。項目の文がこの正規表現に当たれば、その一件を読まず、件数にも入れない
 //       "itemTarget": {                  // 任意・list のカードだけ。一覧の一件を選んで Enter を押すと読む、その項目に結び付いた所。
 //         "label": "返事",               //   読む所の呼び名（「3件目の返事」と言う）。要る
 //         "closest": "li.turn",          //   任意。項目から上へたどる要素。無ければ項目そのもの
@@ -197,6 +198,18 @@ function validateConfig(config) {
       } else if (card.action !== 'list') {
         add(`${at}.joinWith`, 'action が "list" のカードにだけ使えます');
       }
+    }
+    if (card.skipItemsMatching !== undefined) {
+      let ok = typeof card.skipItemsMatching === 'string' && card.skipItemsMatching.trim() !== '';
+      if (ok) {
+        try {
+          new RegExp(card.skipItemsMatching);
+        } catch (e) {
+          ok = false;
+        }
+      }
+      if (!ok) add(`${at}.skipItemsMatching`, '空でない正規表現の文字列が必要です');
+      else if (card.action !== 'list') add(`${at}.skipItemsMatching`, 'action が "list" のカードにだけ使えます');
     }
     if (card.tagSelector !== undefined) {
       if (typeof card.tagSelector !== 'string' || card.tagSelector.trim() === '') {
