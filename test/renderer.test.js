@@ -197,3 +197,9 @@ test('はじめのカードの案内に、NVDA と並べて Mac の VoiceOver �
   const topDeckBody = source.slice(source.indexOf('function topDeck('));
   assert.match(topDeckBody, /\.\.\.READER_TEXTS,/);
 });
+
+test('束に入ったら窓の題を「Todoku - 束の題」にし、一番上の束では「Todoku」に戻す（h1 は変えない）', () => {
+  const body = source.slice(source.indexOf('function renderDeck('), source.indexOf('function cardNodes('));
+  assert.match(body, /document\.title = stack\.length > 1 && deck\.name \? `\$\{APP_NAME\} - \$\{deck\.name\}` : APP_NAME;/);
+  assert.doesNotMatch(body, /page-title/);
+});

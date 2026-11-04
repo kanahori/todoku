@@ -107,6 +107,9 @@ function popDeck() {
 // smoke で、Enter で先へ・Esc で戻るの二回とも、焦点のあるカードを先に外していたことを確かめた）。
 function renderDeck({ announcePosition = true } = {}) {
   const deck = current();
+  // 束に入ったら、窓の題を「Todoku - 束の題」にする（h1 は変えない）。一番上の束に戻ったら「Todoku」に戻す。
+  // Mac のアクセシビリティの木で、束に入っても窓の題が「Todoku」のままで、いまどの束にいるかが焦点のカードの名前でしか分からなかった。
+  document.title = stack.length > 1 && deck.name ? `${APP_NAME} - ${deck.name}` : APP_NAME;
   const nodes = deck.cards.map((card) => renderCard(card));
   const old = [...deckEl.children];
   for (const n of old) n.setAttribute('data-leaving', '');
