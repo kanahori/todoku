@@ -1260,14 +1260,14 @@ async function rendererReviewChecks() {
     check('確認: アプリの案内のカードのボタンから確認の画面へ進み、読めなくなった場所と直しの候補の数を一文で知らせ、焦点は一つ目の候補の見出し',
       pressed && first.title === 'Todoku - 「作り物の講座（画面が変わった後）」の設定ファイルの確認（支援者向け）'
         && first.heading === '設定ファイルを確認して直す（支援者向け）（直しの候補2つ）'
-        && first.focus === '直しの候補 1つ目（全部で2つ）: 「締め切りを読む」の読む場所'
+        && first.focus === '直しの候補1（全部で2つ）: 「締め切りを読む」の読む場所'
         && first.said[first.said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2つあります。'
         && first.buttons.includes('「締め切りを読む」の直しを使う（設定ファイルに書く）') && first.buttons.includes('「お知らせを読む」の直しを使わない'), first);
     // 見出しと値は一つの段落（dl にしない。NVDA が項目ごとに役割の名前を付けて、一件で6回読んだ）。断っても使う人の画面では直す、の一文がある。
     const reviewItems = await t.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.tagName + ' ' + x.textContent)");
     check('確認: 候補の見出しと値は「いまのセレクタ: …」の一つの段落で、dl を使わず、使わなくても使う人の画面では直す一文がある',
       reviewItems.includes('P いまのセレクタ: .deadline-list li') && reviewItems.includes('P 直しの候補のセレクタ: [data-region="deadline-list"] li（ページの中で3か所が見つかります）')
-        && reviewItems.includes('P 理由: 一覧の作りが data-region に変わったためです。') && reviewItems.includes('P この直しを使わなかった場合も、使う人の画面では、Claude の API キーがあれば、その場で直して読みます。')
+        && reviewItems.includes('P 理由: 一覧の作りが data-region に変わったためです。') && reviewItems.includes('P この直しを使わなくても、使う人の画面では、その場で直して読みます。Claude の API キーがあるときです。')
         && !reviewItems.some((x) => /^D[TD] /.test(x)), reviewItems);
     await t.js('window.__said.length = 0');
     await t.press('「締め切りを読む」の直しを使う（設定ファイルに書く）');
@@ -1277,8 +1277,8 @@ async function rendererReviewChecks() {
     const nextHead = await t.state();
     check('確認: 直しを使うと、その一件だけを書くように頼み、書くのに 0.5秒を越えたら「書いています。」と一言知らせ、焦点はその候補の結果の文。下矢印で次の候補の見出し',
       JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector']) && JSON.stringify(accepted.said) === JSON.stringify(['書いています。'])
-        && accepted.focus === '直しの候補 1つ目（全部で2つ）: 「締め切りを読む」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。'
-        && nextHead.focus === '直しの候補 2つ目（全部で2つ）: 「お知らせを読む」の読む場所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
+        && accepted.focus === '直しの候補1（全部で2つ）: 「締め切りを読む」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。'
+        && nextHead.focus === '直しの候補2（全部で2つ）: 「お知らせを読む」の読む場所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
     await t.js('window.__said.length = 0');
     await t.press('「お知らせを読む」の直しを使わない');
     await t.wait(300);
@@ -1287,7 +1287,7 @@ async function rendererReviewChecks() {
     const summary = await t.state();
     check('確認: 直しを使わないと書かず、焦点はその候補の結果の文。全部見たら、下矢印で使った数と使わなかった数の一文',
       JSON.stringify(rejected.applied) === JSON.stringify(['cards[0].selector']) && rejected.said.length === 0
-        && rejected.focus === '直しの候補 2つ目（全部で2つ）: 「お知らせを読む」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。'
+        && rejected.focus === '直しの候補2（全部で2つ）: 「お知らせを読む」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。'
         && summary.focus === 'すべての直しの候補を確認しました。使った直しは1つ、使わなかった直しは1つです。' && rejected.buttons.length === 0, { rejected, summary });
     await t.key('Escape');
     await t.key('Escape');

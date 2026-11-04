@@ -96,7 +96,7 @@ app.whenReady().then(async () => {
   await wait(300);
   check('はじめのカードに「設定ファイルを確認する（支援者向け）」のボタンがあり、押せる', await press('設定ファイルを確認する（支援者向け）'), null);
   // 点検と案（本物の Claude なら数十秒）が終わり、一件目の案に焦点が来るまで待つ（最長 180 秒）。
-  await until(async () => /^直しの候補 1つ目/.test((await focus()) || '') || (await said()).some((t) => /候補を作れません|確認できません/.test(t)), 180 * 1000);
+  await until(async () => /^直しの候補1（/.test((await focus()) || '') || (await said()).some((t) => /候補を作れません|確認できません/.test(t)), 180 * 1000);
   // 知らせは焦点を移した少し後に入る作りなので、案の数の一文が入るまで待つ。
   await until(async () => (await said()).some((t) => /^読めなくなった場所/.test(t)), 5 * 1000);
   const afterCheck = await said();
@@ -127,7 +127,7 @@ app.whenReady().then(async () => {
       && written.cards.slice(2).every((c, k) => c.selector === course.cards[k + 2].selector), written.cards.map((c) => c.selector));
   check('受けると、前の版を config-backups に一つ残す', backups.length === 1 && /^practice-course-after\..+\.json$/.test(backups[0]), backups);
   check('使ったことを、焦点の先の文で読む（ほかの知らせは、書くのに 0.5秒を越えたときの「書いています。」だけ）',
-    acceptFocus === `直しの候補 1つ目（全部で2つ）: 「${title0}」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。`
+    acceptFocus === `直しの候補1（全部で2つ）: 「${title0}」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。`
       && acceptSaid.every((t) => t === '書いています。'), { acceptFocus, acceptSaid });
 
   await wait(300);
@@ -140,7 +140,7 @@ app.whenReady().then(async () => {
   const backupsAfter = fs.readdirSync(path.join(userData, 'config-backups'));
   check('断ると、設定ファイルは変えず、控えも増やさない', after.cards[1].selector === course.cards[1].selector && backupsAfter.length === 1, { selector: after.cards[1].selector, backupsAfter });
   check('使わなかったことを、焦点の先の文で読む（別の知らせは出さない）',
-    rejectFocus === `直しの候補 2つ目（全部で2つ）: 「${title1}」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。` && rejectSaid.length === 0, { rejectFocus, rejectSaid });
+    rejectFocus === `直しの候補2（全部で2つ）: 「${title1}」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。` && rejectSaid.length === 0, { rejectFocus, rejectSaid });
 
   console.log(failed === 0 ? '全部通りました。' : `${failed}件が落ちました。`);
   app.exit(failed === 0 ? 0 : 1);

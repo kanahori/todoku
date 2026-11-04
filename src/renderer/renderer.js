@@ -566,7 +566,7 @@ function placeOf(where) {
 }
 
 // 断っても、使う人の画面では、鍵があればその場で直して読む（autofix）。支援者が迷わないように、案の一覧の頭で言う。
-const REVIEW_REJECT_NOTE = 'この直しを使わなかった場合も、使う人の画面では、Claude の API キーがあれば、その場で直して読みます。';
+const REVIEW_REJECT_NOTE = 'この直しを使わなくても、使う人の画面では、その場で直して読みます。Claude の API キーがあるときです。';
 
 // 案の一覧（card.review）から、カードの項目を作る。焦点の行き先（result）は、決めたばかりの案の行（結果の文を含む）か、
 // まだ決めていなければ最初の案の見出し。決めた結果を先に読み、次の案の見出しは下矢印で読む（知らせと焦点の移動が重なって、
@@ -579,7 +579,7 @@ function reviewItems(card, justDecided = null) {
   for (const e of r.errors) items.push({ text: `「${e.title || e.where}」（${placeOf(e.where)}）: ${e.message}` });
   const pending = r.proposals.findIndex((p) => !p.decided);
   r.proposals.forEach((p, k) => {
-    const head = `直しの候補 ${k + 1}つ目（全部で${r.proposals.length}つ）: 「${p.title}」の${placeWord(p.action)}`;
+    const head = `直しの候補${k + 1}（全部で${r.proposals.length}つ）: 「${p.title}」の${placeWord(p.action)}`;
     if (p.decided) {
       const done = p.decided === 'accepted' ? 'この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。' : 'この直しは使いませんでした。設定ファイルは変えていません。';
       items.push({ text: `${head}: ${done}`, result: p === justDecided });
