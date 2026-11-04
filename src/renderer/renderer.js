@@ -493,8 +493,12 @@ function showClickConfirm(card, node) {
       onPress: async (button) => {
         if (busy) return;
         busy = true;
-        button.textContent = `「${card.title}」を押す（押しています）`;
-        announce(`「${card.title}」を押しています。`);
+        // 「押しています。」は、読み込み中の知らせと同じく、0.5秒たっても終わらないときだけ出す（すぐ終われば「押しました。」だけ）。
+        // 押す9枚の束で、一枚ごとに「押します。」「押す ボタン」「押しています。」「押しました。」の4つが読まれ、長かった（Windows の通し稽古・押して約1.0秒）。
+        const pressingTimer = setTimeout(() => {
+          button.textContent = `「${card.title}」を押す（押しています）`;
+          announce(`「${card.title}」を押しています。`);
+        }, LOADING_DELAY_MS);
         const key = `${card.appId}/${card.cardId}`;
         repairingNow.delete(key);
         let r;
@@ -503,6 +507,7 @@ function showClickConfirm(card, node) {
         } catch (e) {
           r = { ok: false, message: e.message };
         } finally {
+          clearTimeout(pressingTimer);
           repairingNow.delete(key);
           busy = false;
           button.textContent = `「${card.title}」を押す`;

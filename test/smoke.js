@@ -372,6 +372,7 @@ async function main() {
     await rendererErrorTextChecks();
     await rendererDeckFocusChecks();
     await rendererFocusChecks();
+    await rendererClickAnnounceChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
     await rendererSearchChecks(settingsStore);
@@ -1116,6 +1117,64 @@ async function rendererBusyChecks() {
     check('読んでいる最中: 別のカードをクリックしても読み始めず、「読み込み中です。少しお待ちください。」と知らせ、先のカードだけを読み終える',
       said === '読み込み中です。少しお待ちください。' && during[1] === 'すぐ返る読む所' && after[1] === 'すぐ返る読む所' && after[3] === '時間のかかる読む所',
       { said, during, after });
+  } finally {
+    win.destroy();
+  }
+}
+
+// 押すカードの知らせ: 「押しています。」は 0.5秒たっても終わらないときだけ出す（すぐ終われば「押しました。」だけ）。
+// 押す9枚の束で、一枚ごとに4つの知らせが読まれて長かった（2026-11-04 の Windows の通し稽古）。cardsApi は偽物（?fake=click）。
+async function rendererClickAnnounceChecks() {
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+  });
+  try {
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), { query: { fake: 'click' } });
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = pageWait(win);
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    // 知らせの欄（status・alert）に出た文を、出た順に控える。
+    await js(`(() => {
+      window.__said = [];
+      for (const id of ['status', 'alert']) {
+        const el = document.getElementById(id);
+        new MutationObserver(() => { if (el.textContent) window.__said.push(el.textContent); }).observe(el, { childList: true, characterData: true, subtree: true });
+      }
+      return true;
+    })()`);
+    const press = async () => {
+      await key('ArrowDown');
+      await key('Enter');
+      await wait(100);
+      await key('ArrowDown');
+      const button = await js('document.activeElement.textContent');
+      await js('window.__said.length = 0; document.activeElement.click()');
+      return button;
+    };
+    const fastButton = await press();
+    await wait(900);
+    const fastSaid = await js('window.__said.slice()');
+    check('すぐ終わる押す所: 「押しています。」を出さず、「押しました。」だけを知らせる',
+      fastButton === '「すぐ終わる押す所」を押す' && JSON.stringify(fastSaid) === JSON.stringify(['「すぐ終わる押す所」を押しました。']), { fastButton, fastSaid });
+    await key('Escape');
+    const slowButton = await press();
+    await wait(800);
+    const slowDuring = await js('window.__said.slice()');
+    const buttonDuring = await js('document.activeElement.textContent');
+    await wait(1000);
+    const slowSaid = await js('window.__said.slice()');
+    const buttonAfter = await js('document.activeElement.textContent');
+    check('時間のかかる押す所: 0.5秒たっても終わらなければ「押しています。」を出し（ボタンも「（押しています）」）、終わったら「押しました。」',
+      slowButton === '「時間のかかる押す所」を押す' && JSON.stringify(slowDuring) === JSON.stringify(['「時間のかかる押す所」を押しています。'])
+        && buttonDuring === '「時間のかかる押す所」を押す（押しています）'
+        && JSON.stringify(slowSaid) === JSON.stringify(['「時間のかかる押す所」を押しています。', '「時間のかかる押す所」を押しました。'])
+        && buttonAfter === '「時間のかかる押す所」を押す',
+      { slowButton, slowDuring, buttonDuring, slowSaid, buttonAfter });
   } finally {
     win.destroy();
   }

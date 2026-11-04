@@ -203,3 +203,17 @@ test('束に入ったら窓の題を「Todoku - 束の題」にし、一番上�
   assert.match(body, /document\.title = stack\.length > 1 && deck\.name \? `\$\{APP_NAME\} - \$\{deck\.name\}` : APP_NAME;/);
   assert.doesNotMatch(body, /page-title/);
 });
+
+test('押すカード: 「押しています。」は 0.5秒（読み込み中と同じ待ち）たっても終わらないときだけ出し、終わったら出さない', () => {
+  const body = source.slice(source.indexOf('function showClickConfirm('), source.indexOf("const MAINT_HEADING"));
+  const timer = body.match(/const pressingTimer = setTimeout\(\(\) => \{([\s\S]*?)\}, LOADING_DELAY_MS\);/);
+  assert.ok(timer, '押しているの知らせが、待ちの中に無い');
+  assert.match(timer[1], /announce\(`「\$\{card\.title\}」を押しています。`\);/);
+  assert.match(timer[1], /button\.textContent = `「\$\{card\.title\}」を押す（押しています）`;/);
+  // 待ちの外では「押しています。」を出さない。
+  assert.equal(body.split('を押しています。').length - 1, 1);
+  assert.match(body, /\} finally \{\s+clearTimeout\(pressingTimer\);/);
+  // 言い回しは変えない。
+  assert.match(body, /`「\$\{card\.title\}」を押しました。`/);
+  assert.match(body, /text: `「\$\{card\.title\}」を押します。`/);
+});

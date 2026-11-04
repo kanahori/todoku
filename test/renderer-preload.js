@@ -40,6 +40,19 @@ const chatConfig = {
 };
 const itemTargets = [];
 
+// ?fake=click で開いたときは、押すカードが二枚だけの作り物のアプリにする（押すときの知らせの試し）。
+// すぐ終わる押す所は 20ミリ秒、時間のかかる押す所は 1.2秒で「押した」を返す。
+const clickMode = typeof location !== 'undefined' && /(^|[?&])fake=click(&|$)/.test(location.search);
+const clickConfig = {
+  id: 'fake-click',
+  name: '作り物の押す所',
+  url: 'fixture:practice.html',
+  cards: [
+    { id: 'fast-click', title: 'すぐ終わる押す所', action: 'click', selector: '#g' },
+    { id: 'slow-click', title: '時間のかかる押す所', action: 'click', selector: '#h' },
+  ],
+};
+
 const opened = [];
 const undone = [];
 const generated = [];
@@ -65,11 +78,17 @@ const answers = {
   'fast-list': { delay: 20, result: { ok: true, action: 'list', items: ['一覧の一件目', '一覧の二件目'] } },
   'slow-read': { delay: 1200, result: { ok: true, action: 'read', text: '遅れて返った一つ目' } },
   'unfixed-read': { delay: 20, result: { ok: false, where: 'cards[4].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReason: 'timeout', autoRepairReasonText: '時間内に終わりませんでした' } },
+  'fast-click': { delay: 20, result: { ok: true, action: 'click' } },
+  'slow-click': { delay: 1200, result: { ok: true, action: 'click' } },
   'unfixed-click': { delay: 20, result: { ok: false, where: 'cards[5].selector', message: 'ページの中に当たる所がありません', autoRepairFailed: true, autoRepairReason: 'no-key', autoRepairReasonText: 'Claude の鍵がありません' } },
 };
 
 contextBridge.exposeInMainWorld('cardsApi', {
-  loadConfigs: async () => (chatMode ? [{ file: 'fake-chat.json', config: chatConfig, errors: [] }] : [{ file: 'fake-app.json', config, errors: [] }]),
+  loadConfigs: async () => {
+    if (chatMode) return [{ file: 'fake-chat.json', config: chatConfig, errors: [] }];
+    if (clickMode) return [{ file: 'fake-click.json', config: clickConfig, errors: [] }];
+    return [{ file: 'fake-app.json', config, errors: [] }];
+  },
   // 一件に結び付いた所: 1件目と2件目は返事があり、3件目は一覧を読んだ後に画面が変わっていて、4件目は返事がまだ無い。
   readItemTarget: async (appId, cardId, index, key) => {
     itemTargets.push(`${appId}/${cardId}/${index}/${key}`);
