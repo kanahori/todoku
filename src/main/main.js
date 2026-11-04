@@ -188,7 +188,10 @@ ipcMain.handle('repair:apply', async (_event, appId, acceptedWheres) => {
     if (!reloaded.config) return { ok: false, message: '書き直した設定ファイルが読めません' };
     baseConfigs.set(appId, reloaded.config);
     refreshEffective(appId);
-    lastProposals.delete(appId);
+    // 受けた案だけを除き、残りの案は残す（支援者が一件ずつ受ける・断るため。全部を捨てると、二件目から「採った案がありません」になった）。
+    const rest = proposals.filter((p) => !accepted.includes(p));
+    if (rest.length > 0) lastProposals.set(appId, rest);
+    else lastProposals.delete(appId);
   } catch (e) {
     return { ok: false, message: `設定ファイルに書けませんでした: ${e.message}` };
   }

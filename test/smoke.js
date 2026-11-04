@@ -373,6 +373,7 @@ async function main() {
     await rendererDeckFocusChecks();
     await rendererFocusChecks();
     await rendererClickAnnounceChecks();
+    await rendererReviewChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
     await rendererSearchChecks(settingsStore);
@@ -1211,6 +1212,93 @@ async function rendererClickAnnounceChecks() {
       { slowButton, slowDuring, buttonDuring, slowSaid, buttonAfter });
   } finally {
     win.destroy();
+  }
+}
+
+// 支援者向けの点検と直しの案: はじめのカードのボタンから点検の束へ進み、当たらない行の案を一件ずつ受ける・断る。
+// 鍵が無いときは、当たらない行の一覧だけを読む。cardsApi は偽物（?fake=review。偽の Claude の案が二件）。
+async function rendererReviewChecks() {
+  const open = async (query) => {
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+    });
+    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), { query });
+    const js = (code) => win.webContents.executeJavaScript(code);
+    const wait = pageWait(win);
+    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
+    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
+    for (let k = 0; k < 3; k++) await key('ArrowDown');
+    await key('Enter');
+    await wait(100);
+    await js(`(() => {
+      window.__said = [];
+      for (const id of ['status', 'alert']) {
+        const el = document.getElementById(id);
+        new MutationObserver(() => { if (el.textContent) window.__said.push(el.textContent); }).observe(el, { childList: true, characterData: true, subtree: true });
+      }
+      return true;
+    })()`);
+    const press = (text) => js(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent === ${JSON.stringify(text)}); if (!b) return false; b.click(); return true; })()`);
+    const state = () => js(`(() => {
+      const a = document.activeElement;
+      const card = a && a.closest ? a.closest('article.card') : null;
+      return { focus: a ? a.textContent : null, heading: card ? card.querySelector('h2').textContent : null, title: document.title,
+        buttons: card ? [...card.querySelectorAll('button')].map((b) => b.textContent) : [], said: window.__said.slice(), applied: window.fakeLog.applied() };
+    })()`);
+    return { win, js, wait, key, press, state };
+  };
+
+  const t = await open({ fake: 'review' });
+  try {
+    const pressed = await t.press('設定ファイルを点検する（支援者向け）');
+    await t.wait(500);
+    const first = await t.state();
+    check('点検: はじめのカードのボタンから点検の束へ進み、当たらない行と案の数を一文で知らせ、焦点は一件目の案の見出し',
+      pressed && first.title === 'Todoku - 「作り物の講座（画面が変わった後）」の点検（支援者向け）'
+        && first.heading === '設定ファイルを点検して直す（支援者向け）（案2件）'
+        && first.focus === '1件目（全2件）: 「締め切りを読む」の読む所'
+        && first.said[first.said.length - 1] === '当たらない行が2件あり、直しの案が2件あります。'
+        && first.buttons.includes('「締め切りを読む」の案を受ける（設定ファイルに書く）') && first.buttons.includes('「お知らせを読む」の案を断る'), first);
+    await t.js('window.__said.length = 0');
+    await t.press('「締め切りを読む」の案を受ける（設定ファイルに書く）');
+    await t.wait(300);
+    const accepted = await t.state();
+    check('点検: 案を受けると、その一件だけを書くように頼み、一文で知らせ、焦点は次の案の見出しへ',
+      JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector'])
+        && JSON.stringify(accepted.said) === JSON.stringify(['「締め切りを読む」の案を受け、設定ファイルに書きました。前の版は控えに残しました。'])
+        && accepted.focus === '2件目（全2件）: 「お知らせを読む」の読む所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), accepted);
+    await t.js('window.__said.length = 0');
+    await t.press('「お知らせを読む」の案を断る');
+    await t.wait(300);
+    const rejected = await t.state();
+    check('点検: 案を断ると書かず、一文で知らせ、全部見たら受けた数と断った数の一文に焦点を移す',
+      JSON.stringify(rejected.applied) === JSON.stringify(['cards[0].selector'])
+        && JSON.stringify(rejected.said) === JSON.stringify(['「お知らせを読む」の案を断りました。全部の案を見ました。'])
+        && rejected.focus === '全部の案を見ました（受けた案1件・断った案1件）。' && rejected.buttons.length === 0, rejected);
+    await t.key('Escape');
+    await t.key('Escape');
+    const back = await t.state();
+    check('点検: Esc でアプリの束に戻る（窓の題も戻る）', back.title === 'Todoku - 作り物の講座（画面が変わった後）' && back.heading === '作り物の講座（画面が変わった後）', back);
+  } finally {
+    t.win.destroy();
+  }
+
+  const n = await open({ fake: 'review', nokey: '1' });
+  try {
+    await n.press('設定ファイルを点検する（支援者向け）');
+    await n.wait(500);
+    const items = await n.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.textContent)");
+    const s = await n.state();
+    check('点検（鍵が無いとき）: 当たらない行の一覧だけを読み、受ける・断るのボタンは出さない',
+      JSON.stringify(items) === JSON.stringify([
+        '当たらない行が2件あります。鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。',
+        '「締め切りを読む」（読む所・押す所）: ページの中に当たる所がありません。',
+        '「お知らせを読む」（読む所・押す所）: ページの中に当たる所がありません。',
+      ]) && s.buttons.length === 0 && s.applied.length === 0
+        && s.said[s.said.length - 1] === '当たらない行が2件あります。鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。', { items, s });
+  } finally {
+    n.win.destroy();
   }
 }
 

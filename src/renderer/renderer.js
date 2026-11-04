@@ -309,6 +309,10 @@ async function activateCard(card, node) {
     await openMaint(card);
     return;
   }
+  if (card.kind === 'review') {
+    await openReview(card);
+    return;
+  }
   if (card.kind === 'create') {
     // 入力欄へ移る（入れる所がすぐ分かるように）。
     const input = node.querySelector('[data-input]');
@@ -531,6 +535,141 @@ function showClickConfirm(card, node) {
   ];
   const fresh = refreshCard(card);
   if (fresh) enterCard(fresh, true);
+}
+
+// ---- 設定ファイルの点検と直しの案（支援者向けのカード）----
+// 全部のカードを点検し、当たらない行ごとに Claude の案（鍵があるとき）を一件ずつ見て、「受ける」（設定ファイルに書き、前の版を控えに残す）か
+// 「断る」を選ぶ。鍵が無いときは、当たらない行の一覧だけを読む。Claude に送るものは、主の処理の今の決まり（文字を落とした構造だけ）のまま。
+const REVIEW_HEADING = '設定ファイルを点検して直す（支援者向け）';
+
+const REVIEW_BUTTON = '設定ファイルを点検する（支援者向け）';
+
+function reviewCard(appId) {
+  return { kind: 'review', appId, heading: REVIEW_HEADING, items: [] };
+}
+
+// はじめのカードのボタンから、点検の束（カード一枚）へ進み、すぐ点検を始める。Esc でアプリの束へ戻る。
+async function openReviewDeck(config) {
+  if (busy) {
+    announce('読み込み中です。少しお待ちください。');
+    return;
+  }
+  const card = reviewCard(config.id);
+  pushDeck({ name: `「${config.name}」の点検（支援者向け）`, appId: config.id, cards: [card] }, { announcePosition: false });
+  await openReview(card);
+}
+
+function placeOf(where) {
+  const m = /^cards\[(\d+)\]\.(\w+)$/.exec(String(where || ''));
+  if (!m) return String(where || '');
+  return { selector: '読む所・押す所', container: '入れ物', path: 'ページ' }[m[2]] || m[2];
+}
+
+// 案の一覧（card.review）から、カードの項目を作る。まだ決めていない最初の案の見出しに焦点が行くように、そこだけ result にする。
+function reviewItems(card) {
+  const r = card.review;
+  const items = [{ text: r.summary }];
+  for (const e of r.errors) items.push({ text: `「${e.title || e.where}」（${placeOf(e.where)}）: ${e.message}` });
+  const pending = r.proposals.findIndex((p) => !p.decided);
+  r.proposals.forEach((p, k) => {
+    const head = `${k + 1}件目（全${r.proposals.length}件）: 「${p.title}」の${placeWord(p.action)}`;
+    if (p.decided) {
+      items.push({ text: `${head}: ${p.decided === 'accepted' ? '受けました（設定ファイルに書きました）' : '断りました（設定ファイルは変えていません）'}。` });
+      return;
+    }
+    items.push(
+      { text: head, result: k === pending },
+      { label: 'いまのセレクタ', text: p.oldSelector },
+      { label: '案のセレクタ', text: `${p.newSelector}（ページの中で${p.matches}か所に当たります）` },
+      { label: '理由', text: p.reason || '（理由はありません）' },
+      { button: `「${p.title}」の案を受ける（設定ファイルに書く）`, onPress: () => decideProposal(card, p, true) },
+      { button: `「${p.title}」の案を断る`, onPress: () => decideProposal(card, p, false) },
+    );
+  });
+  if (r.proposals.length > 0 && pending < 0) {
+    const accepted = r.proposals.filter((p) => p.decided === 'accepted').length;
+    items.push({ text: `全部の案を見ました（受けた案${accepted}件・断った案${r.proposals.length - accepted}件）。`, result: true });
+  }
+  return items;
+}
+
+async function openReview(card) {
+  busy = true;
+  card.heading = `${REVIEW_HEADING}（点検しています）`;
+  card.items = [{ text: '点検しています。\n終わると、ここに当たらない行と直しの案が出ます。', result: true, loading: true }];
+  refreshCard(card, { focusResult: true });
+  announce('点検しています。');
+  let summary;
+  try {
+    let checked;
+    try {
+      checked = await window.cardsApi.checkCards(card.appId);
+    } catch (e) {
+      checked = { ok: false, message: `点検できませんでした: ${e.message}` };
+    }
+    if (!checked.ok) {
+      card.review = null;
+      card.items = [{ text: endSentence(checked.message), result: true }];
+      summary = endSentence(checked.message);
+    } else if (checked.problems.length === 0) {
+      card.review = null;
+      card.items = [{ text: '当たらない行はありません。', result: true }];
+      summary = '当たらない行はありません。';
+    } else {
+      const n = checked.problems.length;
+      let proposed;
+      try {
+        proposed = await window.cardsApi.proposeRepairs(card.appId);
+      } catch (e) {
+        proposed = { ok: false, message: `案を作れませんでした: ${e.message}` };
+      }
+      if (!proposed.ok) {
+        // 鍵が無いとき（案を作れないとき）は、当たらない行の一覧だけを読む。
+        card.review = null;
+        summary = `当たらない行が${n}件あります。${endSentence(proposed.message)}`;
+        card.items = [{ text: summary, result: true }, ...checked.problems.map((p) => ({ text: `「${p.title || p.where}」（${placeOf(p.where)}）: ${endSentence(p.message)}` }))];
+      } else {
+        const proposals = (proposed.proposals || []).filter((p) => p.newSelector).map((p) => ({ ...p, decided: null }));
+        const noIdea = (proposed.proposals || []).filter((p) => !p.newSelector).map((p) => ({ where: p.where, title: p.title, message: '案がありませんでした' }));
+        const errors = [...noIdea, ...(proposed.errors || []).map((e) => ({ ...e, title: (checked.problems.find((p) => p.where === e.where) || {}).title }))];
+        summary = `当たらない行が${n}件あり、直しの案が${proposals.length}件あります。`;
+        card.review = { summary, proposals, errors };
+        card.items = reviewItems(card);
+      }
+    }
+  } finally {
+    busy = false;
+  }
+  card.heading = card.review ? `${REVIEW_HEADING}（案${card.review.proposals.length}件）` : REVIEW_HEADING;
+  refreshCard(card, { focusResult: true });
+  announce(summary);
+}
+
+async function decideProposal(card, p, accept) {
+  if (busy || p.decided) return;
+  if (accept) {
+    busy = true;
+    let r;
+    try {
+      r = await window.cardsApi.applyRepairs(card.appId, [p.where]);
+    } catch (e) {
+      r = { ok: false, message: `設定ファイルに書けませんでした: ${e.message}` };
+    } finally {
+      busy = false;
+    }
+    if (!r.ok) {
+      announce(`「${p.title}」の案を書けませんでした。${endSentence(r.message)}`, true);
+      return;
+    }
+    p.decided = 'accepted';
+  } else {
+    p.decided = 'rejected';
+  }
+  card.items = reviewItems(card);
+  refreshCard(card, { focusResult: true });
+  const rest = card.review.proposals.filter((x) => !x.decided).length;
+  const said = accept ? `「${p.title}」の案を受け、設定ファイルに書きました。前の版は控えに残しました。` : `「${p.title}」の案を断りました。`;
+  announce(rest > 0 ? said : `${said}全部の案を見ました。`);
 }
 
 // ---- 自動で直した所（支援者向けのカード）----
@@ -1066,6 +1205,8 @@ function appDeck(config, hasParent = true) {
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);
+  // 支援者向け: 設定ファイルを点検し、当たらない行の直しの案を一件ずつ受ける・断る束へ進む（使う人の束にカードを増やさないため、ボタンにする）。
+  items.push({ button: REVIEW_BUTTON, onPress: () => openReviewDeck(config) });
   // 出典のページ（sourceUrl）があれば、URL は読ませずに、開くボタンを最後の項目にする（既定のブラウザで開く）。
   if (typeof config.sourceUrl === 'string' && config.sourceUrl !== '') {
     items.push({

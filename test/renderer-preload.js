@@ -53,6 +53,26 @@ const clickConfig = {
   ],
 };
 
+// ?fake=review で開いたときは、当たらない行が二つある作り物のアプリにする（支援者向けの点検と直しの案の試し）。
+// &nokey=1 を足すと、鍵が無いときの答え（案を作れない）を返す。受けた案の場所は applied に控える。
+const reviewMode = typeof location !== 'undefined' && /(^|[?&])fake=review(&|$)/.test(location.search);
+const reviewNoKey = typeof location !== 'undefined' && /(^|[?&])nokey=1(&|$)/.test(location.search);
+const reviewConfig = {
+  id: 'fake-review',
+  name: '作り物の講座（画面が変わった後）',
+  url: 'fixture:course-after.html',
+  cards: [
+    { id: 'deadlines', title: '締め切りを読む', action: 'list', selector: '.deadline-list li' },
+    { id: 'notices', title: 'お知らせを読む', action: 'read', selector: '.announcement' },
+    { id: 'courses', title: '講座の一覧を読む', action: 'list', selector: '#courses li' },
+  ],
+};
+const reviewProblems = [
+  { where: 'cards[0].selector', message: 'ページの中に当たる所がありません', title: '締め切りを読む' },
+  { where: 'cards[1].selector', message: 'ページの中に当たる所がありません', title: 'お知らせを読む' },
+];
+const applied = [];
+
 const opened = [];
 const undone = [];
 const generated = [];
@@ -87,6 +107,7 @@ contextBridge.exposeInMainWorld('cardsApi', {
   loadConfigs: async () => {
     if (chatMode) return [{ file: 'fake-chat.json', config: chatConfig, errors: [] }];
     if (clickMode) return [{ file: 'fake-click.json', config: clickConfig, errors: [] }];
+    if (reviewMode) return [{ file: 'fake-review.json', config: reviewConfig, errors: [] }];
     return [{ file: 'fake-app.json', config, errors: [] }];
   },
   // 一件に結び付いた所: 1件目と2件目は返事があり、3件目は一覧を読んだ後に画面が変わっていて、4件目は返事がまだ無い。
@@ -151,6 +172,27 @@ contextBridge.exposeInMainWorld('cardsApi', {
     deleted.push(appId);
     return { ok: true, message: `「${madeDeck.name}」のカードの束を消しました。` };
   },
+  // 点検と直しの案（支援者向け）: 点検は当たらない行を二つ返す。案は二つ（鍵が無いときは、案を作れない理由）。受けると書いたことにする。
+  checkCards: async () => {
+    await new Promise((r) => setTimeout(r, 50));
+    return { ok: true, problems: reviewProblems.filter((p) => !applied.includes(p.where)) };
+  },
+  proposeRepairs: async () => {
+    await new Promise((r) => setTimeout(r, 50));
+    if (reviewNoKey) return { ok: false, message: '鍵が無いので案を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）' };
+    return {
+      ok: true,
+      errors: [],
+      proposals: [
+        { where: 'cards[0].selector', index: 0, title: '締め切りを読む', action: 'list', oldSelector: '.deadline-list li', newSelector: '[data-region="deadline-list"] li', reason: '一覧の作りが data-region に変わったためです。', matches: 3 },
+        { where: 'cards[1].selector', index: 1, title: 'お知らせを読む', action: 'read', oldSelector: '.announcement', newSelector: '[data-region="announcement"]', reason: 'お知らせの作りが data-region に変わったためです。', matches: 1 },
+      ],
+    };
+  },
+  applyRepairs: async (appId, wheres) => {
+    applied.push(...wheres);
+    return { ok: true, written: wheres.length, problems: [] };
+  },
   publishRepair: async () => ({ ok: true, message: '「画面が変わった読む所」の直しを、設定ファイルに書きました。' }),
   // 表示設定は偽物にせず、smoke が本物の settings.js の口（一時のフォルダの settings.json）につなぐ。
   loadSettings: () => ipcRenderer.invoke('settings:load'),
@@ -168,4 +210,5 @@ contextBridge.exposeInMainWorld('fakeLog', {
   exported: () => exported.slice(),
   deleted: () => deleted.slice(),
   itemTargets: () => itemTargets.slice(),
+  applied: () => applied.slice(),
 });
