@@ -752,22 +752,41 @@ async function generateChecks() {
       ['表の頭だけを読む', [{ ...noTitle('table', 'read', '#prob .wide > table.head'), titleSelector: '#prob tr.title th' }, noTitle('table', 'read', '#timeline table')]],
       ['表の升目の一覧', [{ ...noTitle('list', 'list', '#summary td.sentence'), titleSelector: '#summary tr.header th' }, noTitle('menu', 'list', '.bosai-menu li')]],
       ['二つの表の升目', [{ ...noTitle('list', 'list', '#summary td'), titleSelector: '#summary tr.header th' }, noTitle('menu', 'list', '.bosai-menu li')]],
-      ['題の元が別の表', [{ ...noTitle('notice', 'list', '#summary tr:has(td.sentence)'), titleSelector: '#summary tr.title th' }]],
+      ['題の元が別の表', [{ ...noTitle('notice', 'list', '#summary tr:has(td.sentence)', '#summary'), titleSelector: '#summary tr.title th' }]],
       // 本物の案の10・11の形: 開くまで畳まれている説明を読む（見出しと表の頭の行だけを読むカードになった）。
       ['畳まれた説明を読む', [noTitle('other', 'read', '#explain .contents-explain'), noTitle('list', 'list', '#explain ul.asterisk > li'), noTitle('menu', 'list', '.bosai-menu li')]],
     ];
     const nightCore = ['あおば県の警戒レベル相当情報（発表状況）', 'あおば県の警報・注意報（発表状況）', 'あおば県の警報・注意報（市町村別）', '表を替える（大雨・土砂災害・高潮）'];
-    for (const [label, cardsOf] of nightShapes) {
-      const d = await generateDeck({ BrowserWindow, url: 'fixture:warnings-night.html', store, allowFixtures: true, callModel: async () => ({ cards: cardsOf }) });
+    // ページの上からの芯の表の並び（作り物のページの並び）。どの案の形でも、この順に並ぶ。
+    const nightOrder = ['あおば県の警戒レベル相当情報（発表状況）', 'あおば県の警報・注意報（発表状況）', '表を替える（大雨・土砂災害・高潮）', 'あおば県の時系列情報（明日までの見通し）', 'あおば県の早期注意情報（警報級の可能性）', 'あおば県の警報・注意報（市町村別）'];
+    // 案を試した後、節や必ず作る表を探す前に、ページの上の方に要素が増える窓（気象庁の警報のページは、読み込んだ後も上の方を書き換える）。
+    // 並びの番号を別々の時点で数えると、芯の表の並びが入れ替わった（頼み34）。
+    class ShiftingWindow extends BrowserWindow {
+      constructor(opts) {
+        super(opts);
+        const wc = this.webContents;
+        const orig = wc.executeJavaScript.bind(wc);
+        wc.executeJavaScript = async (code, ...rest) => {
+          const r = await orig(code, ...rest);
+          if (String(code).includes('menuNames')) {
+            await orig('(() => { for (let i = 0; i < 300; i++) { const d = document.createElement("div"); d.hidden = true; document.body.prepend(d); } return true; })()');
+          }
+          return r;
+        };
+      }
+    }
+    for (const [label, cardsOf, Win] of [...nightShapes, ['表の行を全部並べる・途中で上に要素が増える', [noTitle('table', 'list', '#summary .block:nth-of-type(2) table tr')], ShiftingWindow]]) {
+      const d = await generateDeck({ BrowserWindow: Win || BrowserWindow, url: 'fixture:warnings-night.html', store, allowFixtures: true, callModel: async () => ({ cards: cardsOf }) });
       const titles = d.ok ? d.config.cards.map((c) => c.title) : [];
       const summaryCard = d.ok ? d.config.cards.find((c) => c.title === 'あおば県の警報・注意報（発表状況）') : null;
       const read = summaryCard ? await runCard(BrowserWindow, d.config, summaryCard.id, { waitMs: 500 }) : null;
       const items = read && read.ok ? read.items : [];
-      check(`カードを作る（不変条件・${label}）: 6〜8枚で芯が一枚ずつ、番号付きの題・時刻だけの題・同じ題・表の升目だけのカード・畳まれた説明のカードが無く、発表状況は地域ごとに一件で一件目にその表の更新の時刻`,
+      check(`カードを作る（不変条件・${label}）: 6〜8枚で芯が一枚ずつ、番号付きの題・時刻だけの題・同じ題・表の升目だけのカード・畳まれた説明のカードが無く、表はページの上からの順で、発表状況は地域ごとに一件で一件目にその表の更新の時刻`,
         d.ok && titles.length >= 6 && titles.length <= 8 && nightCore.every((t) => titles.filter((x) => x === t).length === 1)
           && !titles.some((t) => / \d+$/.test(t) || /更新$|発表$/.test(t)) && new Set(titles).size === titles.length
           && d.config.cards.every((c) => !/^td\b/.test(String(c.selector).trim().split(/\s+/).pop()))
           && !titles.some((t) => /警戒レベルとの関係|とるべき行動|説明を表示する/.test(t) || /^[▲▼△▽■□●○◆◇►▶※＊*・]/.test(t))
+          && JSON.stringify(titles.filter((t) => nightOrder.includes(t))) === JSON.stringify(nightOrder.filter((t) => titles.includes(t)))
           && JSON.stringify(items) === JSON.stringify([
             '4日19時55分更新 北部 特別警報 なし、警報 なし、注意報 強風注意報、雷注意報',
             '南部 特別警報 なし、警報 なし、注意報 波浪注意報',

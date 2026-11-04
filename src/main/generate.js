@@ -1266,6 +1266,59 @@ function isPartsOnly(body) {
   return text.length > 0 && text.length <= 120 && PARTS_KEY.test(text) && text.replace(PARTS_WORDS, '').length < 6;
 }
 
+// ページの中の、いまの並びの番号（カードの selector の最初の要素。無ければ入れ物）。見つからなければ null。ページの中で動く関数。
+// 入れ物を先に見ると、Claude の案の入れ物が区画を丸ごと指していたとき（#warning_summary）、その区画の後ろの表のカードが前の表より先に並んだ。
+function pagePositions(pairs) {
+  const index = new Map();
+  [...document.querySelectorAll('*')].forEach((e, i) => index.set(e, i));
+  const one = (s) => {
+    try {
+      return s ? document.querySelector(s) : null;
+    } catch (err) {
+      return null;
+    }
+  };
+  return pairs.map(([sel, box]) => {
+    const e = one(sel) || one(box);
+    return e ? index.get(e) : null;
+  });
+}
+
+function buildPositionsScript(selectors) {
+  return `(${pagePositions.toString()})(${JSON.stringify(selectors)})`;
+}
+
+// カードの並びの番号（pos）を、カードを作り終えた時点のページで数え直す。
+// pos は、Claude の案を試す台本と、本文の節や必ず作る表を探す台本の二つで、別々の時点に数えていた。その間にページの上の方に要素が増えると
+// （気象庁の警報のページは、読み込んだ後も上の方を書き換える）、後で数えた方の番号だけが大きくなり、芯の表の並びが回ごとに入れ替わった
+// （「警報・注意報（発表状況）」と「警戒レベル相当情報（発表状況）」が入れ替わった。頼み34）。
+// 見つからないカードは、元の並びで一つ前のカードの番号のすぐ後に置く。
+function withFreshPositions(cards, fresh) {
+  const byOld = cards.map((c, i) => ({ c, i, f: Array.isArray(fresh) ? fresh[i] : null })).sort((a, b) => (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i);
+  let last = -1;
+  let step = 0;
+  const pos = new Map();
+  for (const x of byOld) {
+    if (typeof x.f === 'number') {
+      last = x.f;
+      step = 0;
+      pos.set(x.c, x.f);
+    } else {
+      step += 0.001;
+      pos.set(x.c, last + step);
+    }
+  }
+  return cards.map((c) => {
+    const card = { ...c };
+    for (const k of Object.getOwnPropertyNames(c)) {
+      if (k === 'pos' || Object.prototype.propertyIsEnumerable.call(c, k)) continue;
+      Object.defineProperty(card, k, { value: c[k], enumerable: false });
+    }
+    Object.defineProperty(card, 'pos', { value: pos.get(c), enumerable: false });
+    return card;
+  });
+}
+
 function orderCards(cards) {
   const sorted = cards.map((c, i) => ({ c, i }))
     .sort((a, b) => backRank(a.c) - backRank(b.c) || (a.c.pos ?? 0) - (b.c.pos ?? 0) || a.i - b.i).map((x) => x.c);
@@ -1352,7 +1405,15 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const kept = applySplits(picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector)) && !(c.action === 'list' && fragments.has(c.selector))), extras && extras.splits);
   const withMain = addToggleCards(addMainListCards(retitleCards(kept, extras && extras.retitles), extras && extras.mainLists), extras && extras.toggles);
   const sectionList = extras && Array.isArray(extras.sections) ? extras.sections : [];
-  const cards = orderCards(renamePageTitled(addSectionCards(withMain, sectionList), sectionList.length));
+  const built = renamePageTitled(addSectionCards(withMain, sectionList), sectionList.length);
+  // 並びは、作り終えた時点のページで、全部のカードの位置を一度に数え直してから決める（withFreshPositions）。
+  let fresh = null;
+  try {
+    fresh = await win.webContents.executeJavaScript(buildPositionsScript(built.map((c) => [c.selector, c.container || ''])));
+  } catch (e) {
+    fresh = null;
+  }
+  const cards = orderCards(withFreshPositions(built, fresh));
   dumpFile(id, 'c-deck.json', {
     url,
     cards,
@@ -1447,6 +1508,7 @@ module.exports = {
   acceptUrl,
   limitStructure,
   isTimeOnly,
+  withFreshPositions,
   waitForSettle,
   pageSettleProbe,
   normalizeCandidates,
