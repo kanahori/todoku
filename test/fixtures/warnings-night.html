@@ -2,7 +2,7 @@
 <!-- 作り物の練習のページ（架空の「あおば気象台」の警報）。注意報が出ているときの気象台のページで見た作り: -->
 <!-- 発表状況の表は、地域の見出しの行の下に、特別警報・警報・注意報の三行が続き、注意報の升目に名前の箱が並ぶ。 -->
 <!-- 警戒レベル相当情報の表は、題と更新の時刻だけの頭の表と、同じ中身を二つ描いた表（固定の列の写しは隠れている）に分かれる。 -->
-<!-- ほかに、題の行のある時系列・早期注意・市町村別の表と、表を替える div の並び、リンクだけのメニューがある。 -->
+<!-- ほかに、題の行のある時系列・市町村別の表と、頭の表に題のある早期注意の表、表を替える div の並び、リンクだけのメニューがある。 -->
 <!-- Claude の案の形が違っても、束の枚数が同じ範囲に収まり、発表状況が地域ごとに一件で読まれるかの試し（頼み27）。 -->
 <!-- 対比の最小: 文字 21:1（#ffffff と #000）。2026-11-04 に WCAG の式で計算。 -->
 <html lang="ja">
@@ -35,7 +35,7 @@
   </div>
   <div id="tool"><div><span>表示</span><div class="radio-button" data-type="rain">大雨・土砂災害・高潮</div><div class="radio-button" data-type="wind">暴風・波浪</div><div class="radio-button" data-type="thunder">雷</div></div></div>
   <div id="timeline"><table class="warning-table"><tr class="title"><th colspan="3">あおば県の時系列情報（明日までの見通し）</th></tr><tr><th>市町村</th><th>今夜</th><th>明日</th></tr><tr><th>あおば市</th><td>注意報</td><td></td></tr><tr><th>みどり市</th><td></td><td></td></tr><tr><th>さくら町</th><td></td><td></td></tr><tr><th>やまなみ町</th><td>注意報</td><td></td></tr><tr><th>かわべ村</th><td></td><td></td></tr><tr><th>うみべ町</th><td></td><td></td></tr></table></div>
-  <div id="prob"><table class="warning-table"><tr class="title"><th colspan="3">あおば県の早期注意情報（警報級の可能性）</th></tr><tr><th>市町村</th><th>明日</th><th>明後日</th></tr><tr><th>あおば市</th><td>低</td><td>中</td></tr><tr><th>みどり市</th><td>低</td><td>中</td></tr><tr><th>さくら町</th><td>低</td><td>中</td></tr><tr><th>やまなみ町</th><td>低</td><td>中</td></tr></table></div>
+  <div id="prob"><div class="wide"><table class="warning-table head"><tr class="title"><th>あおば県の早期注意情報（警報級の可能性）</th></tr><tr class="header"><th>4日17時00分発表</th></tr></table><div class="wide-body"><table class="warning-table"><tr><th>市町村</th><th>明日</th><th>明後日</th></tr><tr><th>あおば市</th><td>低</td><td>中</td></tr><tr><th>みどり市</th><td>低</td><td>中</td></tr><tr><th>さくら町</th><td>低</td><td>中</td></tr><tr><th>やまなみ町</th><td>低</td><td>中</td></tr></table></div></div></div>
   <div id="office"><table class="warning-table"><tr class="title"><th colspan="2">あおば県の警報・注意報（市町村別）</th></tr><tr><th>市町村</th><th>発表中</th></tr><tr><th>あおば市</th><td>強風注意報</td></tr><tr><th>みどり市</th><td>発表なし</td></tr><tr><th>さくら町</th><td>強風注意報</td></tr><tr><th>やまなみ町</th><td>発表なし</td></tr><tr><th>かわべ村</th><td>強風注意報</td></tr><tr><th>うみべ町</th><td>発表なし</td></tr><tr><th>おかの市</th><td>強風注意報</td></tr><tr><th>もりの町</th><td>発表なし</td></tr><tr><th>ひかり市</th><td>強風注意報</td></tr><tr><th>そよかぜ町</th><td>発表なし</td></tr><tr><th>つばさ村</th><td>強風注意報</td></tr><tr><th>いずみ市</th><td>発表なし</td></tr></table></div>
 </body>
 </html>

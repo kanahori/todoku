@@ -9,7 +9,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   GenerateSchema, failureMessage, doneMessage, createGeneratedStore, newDeckId, acceptUrl, limitStructure,
-  normalizeCandidates, pickCards, deckName, generateDeck, exportDeck, exportedMessage, MAX_CARDS, waitForSettle,
+  normalizeCandidates, pickCards, deckName, generateDeck, exportDeck, exportedMessage, MAX_CARDS, waitForSettle, isTimeOnly,
 } = require('../src/main/generate');
 const { validateConfig, loadConfigDir } = require('../src/main/config');
 
@@ -501,4 +501,9 @@ test('落ち着くまで待つ: ずっと変わり続けるページでも、上
   const started = Date.now();
   await waitForSettle(win, { stepMs: 5, minMs: 0, stableMs: 50, maxMs: 60 });
   assert.ok(Date.now() - started < 1000);
+});
+
+test('日時だけの題（「〇年〇月〇日〇時〇分更新」など）を見分ける（そういう題のカードは作らない）', () => {
+  for (const t of ['2026年10月16日06時38分更新', '4日19時55分更新', '4日17時00分発表', '2026/11/04 現在']) assert.equal(isTimeOnly(t), true, t);
+  for (const t of ['あおば県の警報・注意報（発表状況）', '12月の予定', '更新日：4月1日', '更新']) assert.equal(isTimeOnly(t), false, t);
 });

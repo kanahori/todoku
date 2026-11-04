@@ -682,6 +682,40 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
   // Claude の読むカードが、表を読むためのもの（中の文字の6割以上が表）なら、表ごとの一覧のカードにする（splits）。
   // 表が二つ以上なら、表ごとに分ける。読むカードのままだと表をまるごと読み、二つの表が一枚の題にまとまった
   // （気象庁の警報のページで、「〇〇の警報・注意報（発表状況）」のカードが無くなった。本物の Claude の案を本物のページに当てて確かめた）。
+  // 表のかけらを並べる一覧のカード（項目が表の升目か、二つ以上の表にまたがる行）は作らない。その表は、表ごとのカード（必ず作る表）で読む。
+  // 気象庁の警報のページで、発表状況と警戒レベルの表の升目だけの一覧（題が古い更新の時刻）や、二つの表の行をまたぐ一覧
+  // （「全国 〇〇の警報・注意報」の題で警戒レベルの表を読む）ができ、発表状況のカードが無くなった（頼み27 の7〜9）。
+  const unitOf = (node) => tableUnits.find((x) => [x.el, x.t, partnerOf.get(x.t)].some((m) => m && m.contains(node)));
+  const fragments = [];
+  // 一つの表の行だけを並べる一覧のカードは、題をその表の題（caption・aria-label・表の頭の題の行）にする（題の元が別の表の題を指していた。頼み27 の9）。
+  const retitles = {};
+  for (const t of taken) {
+    if (!Array.isArray(t) || t[1] !== 'list') continue;
+    let els = [];
+    try {
+      els = [...document.querySelectorAll(t[0])];
+    } catch (err) {
+      els = [];
+    }
+    if (els.length === 0) continue;
+    const units = els.map(unitOf);
+    if (units.some((u) => !u)) continue;
+    const cells = els.every((e) => e.matches('td, th') || Boolean(e.closest('td, th')));
+    if (!cells && new Set(units).size < 2) {
+      if (els.every((e) => e.matches('tr'))) {
+        const tt = titlesOf(units[0].el, true);
+        if (tt.cap || tt.label || tt.rowTitle) retitles[t[0]] = tt.cap || tt.label || tt.rowTitle;
+      }
+      continue;
+    }
+    fragments.push(t[0]);
+    for (const e of els) {
+      const k = takenEls.indexOf(e);
+      if (k >= 0) takenEls.splice(k, 1);
+    }
+    const c = takenCards.findIndex((group) => group.length === els.length && group.every((e, i) => e === els[i]));
+    if (c >= 0) takenCards.splice(c, 1);
+  }
   const splits = {};
   const claimed = new Set();
   for (const t of taken) {
@@ -693,6 +727,23 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
       e = null;
     }
     if (!e) continue;
+    // 分けて描いた表の頭（題と時刻だけの表）を読むカードは、その頭が付く表を読むカードにする（同じ表のカードを二枚作らない）。
+    // 気象庁の早期注意情報で、頭の表を読むカードと、必ず作る表のカードが同じ題になり、「 2」が付いた（頼み27 の7）。
+    if (headTable(e) && !tableUnits.some((x) => x.el === e || x.t === e) && e.parentElement) {
+      const body = tableUnits.filter((x) => e.parentElement.contains(x.el) && x.el !== e);
+      if (body.length === 1) {
+        const x = body[0];
+        const tt = titlesOf(x.el, true);
+        claimed.add(x.el);
+        claimed.add(x.t);
+        if (partnerOf.has(x.t)) claimed.add(partnerOf.get(x.t));
+        splits[t[0]] = [{
+          selector: rowsSelector(x), container: selectorOf(x.el), ...(x.join ? { joinWith: `${selectorOf(x.join)} tr:has(td, th):not(thead tr)` } : {}),
+          title: tt.cap || tt.label || tt.rowTitle || '', near: tt.heading || tt.near || '', pos: order.get(x.el),
+        }].filter((u) => u.container);
+        continue;
+      }
+    }
     // 組の表は、読むカードがどちらか片方を含めば、その組を読むとみる（隠れた固定の列の表だけを指すカードもある）。
     const partner = (x) => partnerOf.get(x.t) || null;
     const inside = tableUnits.filter((x) => [x.el, x.t, partner(x)].some((m) => m && (e === m || e.contains(m))));
@@ -819,7 +870,7 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
       if (sel && name && name.length <= 30) toggles.push({ selector: sel, name, pos: order.get(pick) });
     }
   }
-  if (!level) return { sections: [], mainLists: plain(), whole: [], splits, toggles };
+  if (!level) return { sections: [], mainLists: plain(), whole: [], splits, toggles, fragments, retitles };
   const stops = Array.from({ length: level }, (_, k) => `h${k + 1}`).join(', ');
   const until = `${stops}, :has(${stops})`;
   const out = [];
@@ -866,7 +917,7 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
     }
   }
   // 節のカードができたときだけ、丸ごとのカードを外す（節ができなければ、丸ごとのカードを残す）。
-  return { sections: out, mainLists: plain(), whole: out.length > 0 ? whole : [], splits, toggles };
+  return { sections: out, mainLists: plain(), whole: out.length > 0 ? whole : [], splits, toggles, fragments, retitles };
 }
 
 function buildSectionsScript(taken, clicks = []) {
@@ -950,6 +1001,27 @@ function applySplits(cards, splits) {
     });
   }
   return out;
+}
+
+// 一つの表の行だけを並べる一覧のカードの題を、その表の題にする（ほかのカードと重ならないときだけ）。
+function retitleCards(cards, retitles) {
+  if (!retitles) return cards;
+  const titles = new Set(cards.map((c) => c.title));
+  return cards.map((c) => {
+    const t = c.action === 'list' ? cleanTitle(retitles[c.selector]) : '';
+    if (!t || t === c.title || titles.has(t)) return c;
+    titles.delete(c.title);
+    titles.add(t);
+    const card = { ...c, title: t };
+    for (const k of ['pos', 'back', 'body', 'meta']) Object.defineProperty(card, k, { value: c[k], enumerable: false });
+    return card;
+  });
+}
+
+// 日時だけの文か（数字・年月日時分秒・区切りと、末尾の「更新」「発表」「現在」だけ）。
+function isTimeOnly(text) {
+  const t = String(text || '').trim();
+  return /[0-9０-９]/.test(t) && /^[0-9０-９年月日時分秒\s:：\/.\-（）()]+(更新|発表|現在)?$/.test(t);
 }
 
 // 題がほかのカードと重なるときは、題の取り方が違う疑いとして扱う: 中身がそのカードの中身に含まれるなら作らない。
@@ -1098,6 +1170,12 @@ function pickCards(candidates, probes, rejects = null) {
     if (probe.menu && title !== '目次を読む') title = menuTitle(probe.menuNames);
     // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
     // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。
+    // 題が日時だけ（「〇年〇月〇日〇時〇分更新」など）のカードは、何のカードか分からないので、中の別の短い文を題にし、無ければ作らない（頼み27 の8）。
+    if (isTimeOnly(title)) {
+      const alt = (Array.isArray(probe.alts) ? probe.alts : []).map((t) => cleanTitle(t)).find((t) => t && !isTimeOnly(t) && !isPlaceWord(t) && !titles.has(t));
+      if (!alt) return drop('time-title');
+      title = alt;
+    }
     if (!title) return drop('no-title');
     // 題が重なり、中身が同じ題のカードの中身に含まれるなら作らない（同じ所を二度読むカードに番号が付いた。頼み18 の確かめ）。
     if (titles.has(title) && body && cards.some((x) => x.title === title && squeezeText(x.body).includes(squeezeText(body)))) return drop('subset');
@@ -1261,8 +1339,9 @@ async function buildDeck({ BrowserWindow, id, url, callModel, store, signal, set
   const clickSelectors = picked.filter((c) => c.action === 'click').map((c) => c.selector);
   const extras = await win.webContents.executeJavaScript(buildSectionsScript(taken, clickSelectors));
   const whole = new Set(extras && Array.isArray(extras.whole) ? extras.whole : []);
-  const kept = applySplits(picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector))), extras && extras.splits);
-  const withMain = addToggleCards(addMainListCards(kept, extras && extras.mainLists), extras && extras.toggles);
+  const fragments = new Set(extras && Array.isArray(extras.fragments) ? extras.fragments : []);
+  const kept = applySplits(picked.filter((c) => !(c.action !== 'click' && whole.has(c.selector)) && !(c.action === 'list' && fragments.has(c.selector))), extras && extras.splits);
+  const withMain = addToggleCards(addMainListCards(retitleCards(kept, extras && extras.retitles), extras && extras.mainLists), extras && extras.toggles);
   const sectionList = extras && Array.isArray(extras.sections) ? extras.sections : [];
   const cards = orderCards(renamePageTitled(addSectionCards(withMain, sectionList), sectionList.length));
   dumpFile(id, 'c-deck.json', {
@@ -1358,6 +1437,7 @@ module.exports = {
   newDeckId,
   acceptUrl,
   limitStructure,
+  isTimeOnly,
   waitForSettle,
   pageSettleProbe,
   normalizeCandidates,
