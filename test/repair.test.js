@@ -45,3 +45,10 @@ test('採った案だけを設定ファイルの中身に当て、元の中身�
   assert.equal(next.cards[1].selector, '.b2');
   assert.equal(config.cards[1].selector, '.b');
 });
+
+test('直しの指示: 理由はふつうの日本語で、CSS の専門の言葉を使わず、言葉で言い換える例を添える', () => {
+  assert.match(SYSTEM_PROMPT, /理由は、ふつうの日本語で、1〜2文で書くこと。/);
+  for (const w of ['子結合', '子孫結合', '擬似クラス']) assert.ok(SYSTEM_PROMPT.includes(w), w);
+  assert.match(SYSTEM_PROMPT, /CSS の専門の言葉（[^）]+）を使わないこと。/);
+  assert.match(SYSTEM_PROMPT, /「子結合をやめて」ではなく「すぐ下の要素だけを指す書き方をやめて」/);
+});
