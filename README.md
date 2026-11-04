@@ -22,6 +22,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - `list` cards read every matching item with numbers, so content hidden in carousels or long pages becomes "4 items. Item 1: ...". Text in images is read from their `alt` text and `aria-label`, and slides that a carousel hides with `aria-hidden` are still read, because the person asked for them.
 - When a web app changes its screen and a config line no longer matches, the app reports only which line fails. With an API key, the repair happens on the spot (see "Automatic repair on the user's side"); a supporter can then write the fix into the config file to distribute it.
 - When a page is still being written (for example a chat reply that appears bit by bit), the card waits until it is finished; see "Pages that are still being written".
+- Screen readers: on Windows 11 the cards were used with NVDA 2026.3 throughout development, and checked by hand with PC-Talker Neo (moving between cards, reading a list card, the result announcement) on 2026-11-04. On macOS they are meant for VoiceOver.
+- Japanese input: while text is being converted in the search box, Enter only confirms the conversion and does not jump to a card (checked by hand on Windows 11 on 2026-11-04).
 
 ## Getting started (Windows)
 
