@@ -9,6 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.j
 
 test('窓を全部閉じたら、Mac でも終える（OS で分けない）', () => {
   const body = source.slice(source.indexOf("app.on('window-all-closed'"));
-  assert.match(body, /^app\.on\('window-all-closed', \(\) => \{\n {2}app\.quit\(\);\n\}\);/);
+  // 改行は \r?\n で見る（Windows の Git の既定 core.autocrlf=true で取り出すと、main.js が CRLF になる）。
+  assert.match(body, /^app\.on\('window-all-closed', \(\) => \{\r?\n {2}app\.quit\(\);\r?\n\}\);/);
   assert.doesNotMatch(body.slice(0, 80), /darwin/);
 });
