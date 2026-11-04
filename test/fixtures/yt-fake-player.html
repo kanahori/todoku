@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!-- 作り物の埋め込みプレーヤー（試しだけで使う）。YouTube の埋め込みプレーヤーの postMessage の決まりの一部をまねる: -->
+<!-- 親から {"event":"listening"} が来たら onReady と状態（再生の位置・音量）を返し、{"event":"command","func":…,"args":…} を受けたら -->
+<!-- 状態を変えて返す。受けた命令は lastCommand として返す（試しが、どの命令が届いたかを見るため）。本物の動画は無い。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000）。2026-11-05 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>作り物のプレーヤー</title>
+  <style>body { color: #000; background: #ffffff; margin: 0; }</style>
+</head>
+<body>
+  <p>作り物のプレーヤー</p>
+  <script>
+    const state = { currentTime: 30, volume: 50, playerState: -1 };
+    const post = (o) => parent.postMessage(JSON.stringify(o), '*');
+    window.addEventListener('message', (e) => {
+      let d;
+      try { d = JSON.parse(e.data); } catch (err) { return; }
+      if (d.event === 'listening') {
+        post({ event: 'onReady', id: d.id });
+        post({ event: 'infoDelivery', info: { ...state } });
+        return;
+      }
+      if (d.event !== 'command') return;
+      if (d.func === 'playVideo') state.playerState = 1;
+      if (d.func === 'pauseVideo') state.playerState = 2;
+      if (d.func === 'seekTo') state.currentTime = Number(d.args[0]);
+      if (d.func === 'setVolume') state.volume = Number(d.args[0]);
+      post({ event: 'infoDelivery', info: { ...state, lastCommand: `${d.func}:${JSON.stringify(d.args)}` } });
+    });
+  </script>
+</body>
+</html>

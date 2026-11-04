@@ -75,6 +75,28 @@ const reviewProblems = [
 ];
 const applied = [];
 
+// ?fake=youtube で開いたときは、YouTube のカード（作り物の API の答え）だけのアプリにする。
+// 動画の埋め込みは、本物の YouTube の代わりに作り物のプレーヤー（test/fixtures/yt-fake-player.html）を指す。&ytnokey=1 で API キーが無いときの答え。
+const youtubeMode = typeof location !== 'undefined' && /(^|[?&])fake=youtube(&|$)/.test(location.search);
+const youtubeNoKey = typeof location !== 'undefined' && /(^|[?&])ytnokey=1(&|$)/.test(location.search);
+const youtubeConfig = {
+  id: 'fake-youtube',
+  name: '作り物の授業の動画',
+  kind: 'youtube',
+  description: '出典：YouTube（作り物の答え）。',
+  cards: [
+    { id: 'search', title: '動画を探す', action: 'youtube-search' },
+    { id: 'latest', title: '授業の動画の新しいものを読む', action: 'youtube-channel', channelId: 'UCabcdefghijklmnopqrstuv' },
+    { id: 'player', title: '再生中の動画を操作する', action: 'youtube-player' },
+  ],
+};
+const ytQueries = [];
+const fakePlayer = (id) => (typeof location !== 'undefined' ? new URL(`../../test/fixtures/yt-fake-player.html?v=${id}`, location.href).href : '');
+const ytVideos = [
+  { id: 'aaaaaaaaaaa', title: '作り物の授業 第1回', text: '作り物の授業 第1回、長さ 12分34秒、公開日 2026年11月3日、作り物の大学' },
+  { id: 'bbbbbbbbbbb', title: '作り物の授業 第2回', text: '作り物の授業 第2回、長さ 1時間2分3秒、公開日 2026年11月4日、作り物の大学' },
+];
+
 const opened = [];
 const undone = [];
 const generated = [];
@@ -110,6 +132,7 @@ contextBridge.exposeInMainWorld('cardsApi', {
     if (chatMode) return [{ file: 'fake-chat.json', config: chatConfig, errors: [] }];
     if (clickMode) return [{ file: 'fake-click.json', config: clickConfig, errors: [] }];
     if (reviewMode) return [{ file: 'fake-review.json', config: reviewConfig, errors: [] }];
+    if (youtubeMode) return [{ file: 'fake-youtube.json', config: youtubeConfig, errors: [] }];
     return [{ file: 'fake-app.json', config, errors: [] }];
   },
   // 一件に結び付いた所: 1件目と2件目は返事があり、3件目は一覧を読んだ後に画面が変わっていて、4件目は返事がまだ無い。
@@ -192,6 +215,14 @@ contextBridge.exposeInMainWorld('cardsApi', {
     };
   },
   // 書くのに 0.8秒かかったことにする（0.5秒を越えたら「書いています。」と知らせるかの試し）。
+  // YouTube のカード: 作り物の API の答え（探す言葉と、どのカードかを控える）。
+  youtubeList: async (appId, cardId, query) => {
+    ytQueries.push(`${cardId}:${query}`);
+    await new Promise((r) => setTimeout(r, 50));
+    if (youtubeNoKey) return { ok: false, message: 'YouTube の API キーが設定されていません。' };
+    return { ok: true, items: ytVideos.map((v) => ({ ...v, embedUrl: fakePlayer(v.id) })) };
+  },
+  openPolicy: async (name) => ({ ok: true, message: `${name} を、既定のブラウザで開きました。` }),
   applyRepairs: async (appId, wheres) => {
     await new Promise((r) => setTimeout(r, 800));
     applied.push(...wheres);
@@ -215,4 +246,5 @@ contextBridge.exposeInMainWorld('fakeLog', {
   deleted: () => deleted.slice(),
   itemTargets: () => itemTargets.slice(),
   applied: () => applied.slice(),
+  ytQueries: () => ytQueries.slice(),
 });

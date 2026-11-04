@@ -48,6 +48,37 @@ const path = require('node:path');
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const ACTIONS = new Set(['read', 'click', 'list']);
 const FIXTURE_PATTERN = /^fixture:[a-z0-9][a-z0-9-]*\.html$/;
+// YouTube のカード（"kind": "youtube"）。ページを開かず、公式の API と埋め込みプレーヤーで読む・再生する（src/main/youtube.js）。
+const YOUTUBE_ACTIONS = new Set(['youtube-search', 'youtube-channel', 'youtube-player']);
+const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{22}$/;
+
+// YouTube のカードの設定の形を確かめる。url・selector は使わない。
+function validateYouTube(config, add) {
+  if (config.url !== undefined) add('url', '"kind": "youtube" の設定には書きません（ページを開かないため）');
+  if (!Array.isArray(config.cards) || config.cards.length === 0) {
+    add('cards', '1枚以上のカードの配列が必要です');
+    return;
+  }
+  const seen = new Set();
+  config.cards.forEach((card, i) => {
+    const at = `cards[${i}]`;
+    if (card === null || typeof card !== 'object' || Array.isArray(card)) {
+      add(at, 'オブジェクトではありません');
+      return;
+    }
+    if (typeof card.id !== 'string' || !ID_PATTERN.test(card.id)) add(`${at}.id`, '英小文字・数字・ハイフンの文字列が必要です');
+    else if (seen.has(card.id)) add(`${at}.id`, `「${card.id}」が重なっています`);
+    else seen.add(card.id);
+    if (typeof card.title !== 'string' || card.title.trim() === '') add(`${at}.title`, '空でない文字列が必要です');
+    if (!YOUTUBE_ACTIONS.has(card.action)) add(`${at}.action`, '"youtube-search"・"youtube-channel"・"youtube-player" のどれかが必要です');
+    if (card.action === 'youtube-channel' && !YOUTUBE_CHANNEL_ID.test(String(card.channelId || ''))) add(`${at}.channelId`, 'UC で始まる 24字のチャンネルの id が必要です');
+    if (card.action !== 'youtube-channel' && card.channelId !== undefined) add(`${at}.channelId`, 'action が "youtube-channel" のカードにだけ使えます');
+    if (card.maxResults !== undefined && !(Number.isInteger(card.maxResults) && card.maxResults >= 1 && card.maxResults <= 50)) add(`${at}.maxResults`, '1 から 50 までの整数が必要です');
+    if (card.description !== undefined && typeof card.description !== 'string') add(`${at}.description`, '文字列が必要です');
+    if (card.selector !== undefined) add(`${at}.selector`, '"kind": "youtube" の設定には書きません');
+  });
+  if (!config.cards.some((c) => c && c.action === 'youtube-player')) add('cards', '"youtube-player" のカード（再生の操作）が一枚必要です');
+}
 // 保存の名前の型で使える差し込み。
 const SAVE_AS_PLACEHOLDERS = new Set(['{date}', '{n}']);
 
@@ -76,6 +107,13 @@ function validateConfig(config) {
   }
   if (typeof config.name !== 'string' || config.name.trim() === '') {
     add('name', '空でない文字列が必要です');
+  }
+  if (config.kind !== undefined && config.kind !== 'youtube') add('kind', '"youtube" のほかは書きません');
+  if (config.kind === 'youtube') {
+    if (config.description !== undefined && typeof config.description !== 'string') add('description', '文字列が必要です');
+    if (config.sourceUrl !== undefined && !externalUrl(config.sourceUrl)) add('sourceUrl', 'http:// か https:// で始まる、空白の無い文字列が必要です');
+    validateYouTube(config, add);
+    return errors;
   }
   if (typeof config.url !== 'string' || !(/^https?:\/\//.test(config.url) || FIXTURE_PATTERN.test(config.url))) {
     add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が必要です');

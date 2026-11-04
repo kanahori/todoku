@@ -194,3 +194,7 @@ html[data-preset="yuttari"] .items dd { margin-bottom: 1em; }
   white-space: nowrap;
   border: 0;
 }
+
+/* YouTube の埋め込みプレーヤー。カードの項目の上に置き、ほかの要素を重ねない（YouTube の決まり: 200×200 以上・重ねない）。 */
+.yt-frame { margin: 0.5rem 0 0.75rem; }
+.yt-frame iframe { display: block; width: 100%; max-width: 640px; aspect-ratio: 16 / 9; height: auto; min-height: 200px; border: 0; }

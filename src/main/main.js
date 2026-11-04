@@ -14,6 +14,7 @@ const { createOverrideStore, applyOverrides, runCardWithAutoRepair, withTimeout 
 const PROPOSE_TIMEOUT_MS = 120 * 1000;
 const { sourceOpenedMessage } = require('./messages');
 const { localStamp } = require('./logline');
+const { youtubeApiKey, createYouTubeClient, videoText, NO_KEY_MESSAGE, DEFAULT_MAX, attachEmbedReferer, youtubePageUrl } = require('./youtube');
 const {
   GenerateSchema, generateDeck, createGeneratedStore, failureMessage, doneMessage, exportDeck, exportedMessage,
 } = require('./generate');
@@ -94,6 +95,12 @@ function createWindow() {
     },
   });
   mainWindow = win;
+  // カードの画面から窓は開かない。YouTube の埋め込みプレーヤーの「YouTube で見る」などは、既定のブラウザで開く。
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    const page = youtubePageUrl(url);
+    if (page) shell.openExternal(page).catch(() => {});
+    return { action: 'deny' };
+  });
   // ウェブアプリの窓に焦点が来てしまったときに、戻す先（target.js）。
   setHomeWindow(win);
   // Todoku の窓を閉じたら、ウェブアプリの窓も全部閉じる。残すと、窓が残ってアプリが終わらない
@@ -337,6 +344,37 @@ ipcMain.handle('source:open', async (_event, appId) => {
   }
 });
 
+// YouTube のカード: 動画を探す（youtube-search）・決まったチャンネルの新しい動画を読む（youtube-channel）。
+// 公式の YouTube Data API v3 だけで取り、保存しない。キーは環境変数から読み、画面には渡さない。結果は一件ずつの文と埋め込みの URL。
+ipcMain.handle('youtube:list', async (_event, appId, cardId, query) => {
+  const config = configs.get(appId);
+  const card = config && config.kind === 'youtube' ? config.cards.find((c) => c.id === cardId) : null;
+  if (!card || !['youtube-search', 'youtube-channel'].includes(card.action)) return { ok: false, message: 'YouTube のカードが設定ファイルにありません。' };
+  const key = youtubeApiKey();
+  if (!key) return { ok: false, message: NO_KEY_MESSAGE };
+  try {
+    const client = createYouTubeClient({ fetch: net.fetch.bind(net), key });
+    const max = card.maxResults || DEFAULT_MAX;
+    const videos = card.action === 'youtube-search' ? await client.search(String(query || ''), max) : await client.channelLatest(card.channelId, max);
+    return { ok: true, items: videos.map((v) => ({ id: v.id, title: v.title, text: videoText(v), embedUrl: v.embedUrl })) };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+});
+
+// YouTube のカードの、利用規約とプライバシーポリシーのページを既定のブラウザで開く（この二つだけ）。
+const POLICY_URLS = { 'youtube-terms': 'https://www.youtube.com/t/terms', 'google-privacy': 'https://policies.google.com/privacy' };
+ipcMain.handle('policy:open', async (_event, name) => {
+  const url = POLICY_URLS[String(name)];
+  if (!url) return { ok: false, message: '開けるページではありません。' };
+  try {
+    await shell.openExternal(url);
+    return { ok: true, message: sourceOpenedMessage(process.platform, 'ページ') };
+  } catch (e) {
+    return { ok: false, message: 'ページを開けませんでした。' };
+  }
+});
+
 // 一覧のカードの一件に結び付いた所を読む（itemTarget）。
 ipcMain.handle('card:item-target', async (_event, appId, cardId, index, key) => {
   const config = configs.get(appId);
@@ -378,6 +416,7 @@ app.whenReady().then(async () => {
     logLine(`プロキシの確認が途中で止まりました: ${e.message}`);
   }
   registerSettingsHandlers(ipcMain, settingsStore());
+  attachEmbedReferer(session.defaultSession, require('../../package.json').build.appId);
   // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
   // 押すカードの結果にならなかったもの（押してから遅れて始まったもの）は、終わったときに画面に知らせる。
   attachDownloads(session.defaultSession, {
