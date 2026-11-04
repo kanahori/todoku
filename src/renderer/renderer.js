@@ -33,6 +33,9 @@ function el(tag, props = {}, children = []) {
 // items の一つは { label?, text } か { button, onPress } 。
 const stack = [];
 let busy = false;
+// 支援者の確認（設定ファイルの確認）の最中か。その間は、キーやクリックで「読み込み中です。」を出さない
+// （1〜2秒おきに出て、「確認しています。」と重なって聞こえた。Windows の NVDA の確かめ）。進み具合は5秒ごとの知らせで伝える。
+let reviewing = false;
 let idSeq = 0;
 
 function current() { return stack[stack.length - 1]; }
@@ -290,7 +293,7 @@ async function activateCard(card, node) {
   // 読んでいる最中は、ほかのカードを動かさない。キーの守り（keydown）はあったが、クリックと、読み上げソフトが click として
   // 送る操作（NVDA の閲覧モードの Enter・VoiceOver の VO+Space）には無く、二枚を同時に読めた（見直しの4。smoke で確かめた）。
   if (busy) {
-    announce('読み込み中です。少しお待ちください。');
+    if (!reviewing) announce('読み込み中です。少しお待ちください。');
     return;
   }
   if (card.kind === 'goto') {
@@ -603,10 +606,19 @@ function reviewItems(card, justDecided = null) {
 
 async function openReview(card) {
   busy = true;
+  reviewing = true;
   card.heading = `${REVIEW_HEADING}（確認しています）`;
   card.items = [{ text: '確認しています。\n終わると、ここに読めなくなった場所と直しの候補が出ます。', result: true, loading: true }];
   refreshCard(card, { focusResult: true });
   announce('確認しています。');
+  // 5秒ごとに、どれだけたったかを知らせる（読むカードの「読み始めて、〇秒たちました。」と同じ形）。
+  const started = Date.now();
+  const timer = setInterval(() => {
+    const sec = Math.round((Date.now() - started) / 1000);
+    const item = card.node ? card.node.querySelector('[data-loading]') : null;
+    if (item) item.textContent = `確認しています。${sec}秒たちました。\n終わると、ここに読めなくなった場所と直しの候補が出ます。`;
+    announce(`確認を始めて、${sec}秒たちました。`);
+  }, PROGRESS_EVERY_MS);
   let summary;
   try {
     let checked;
@@ -646,6 +658,8 @@ async function openReview(card) {
       }
     }
   } finally {
+    clearInterval(timer);
+    reviewing = false;
     busy = false;
   }
   card.heading = card.review ? `${REVIEW_HEADING}（直しの候補${card.review.proposals.length}つ）` : REVIEW_HEADING;
@@ -1317,7 +1331,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (busy && key !== 'Escape') {
     e.preventDefault();
-    announce('読み込み中です。少しお待ちください。');
+    if (!reviewing) announce('読み込み中です。少しお待ちください。');
     return;
   }
   if (onCard) {

@@ -57,6 +57,8 @@ const clickConfig = {
 // &nokey=1 を足すと、鍵が無いときの答え（案を作れない）を返す。受けた案の場所は applied に控える。
 const reviewMode = typeof location !== 'undefined' && /(^|[?&])fake=review(&|$)/.test(location.search);
 const reviewNoKey = typeof location !== 'undefined' && /(^|[?&])nokey=1(&|$)/.test(location.search);
+// &slowcheck=1 を足すと、確認に 5.6秒かかったことにする（確認の間の知らせの試し）。
+const reviewSlowCheck = typeof location !== 'undefined' && /(^|[?&])slowcheck=1(&|$)/.test(location.search);
 const reviewConfig = {
   id: 'fake-review',
   name: '作り物の講座（画面が変わった後）',
@@ -174,7 +176,7 @@ contextBridge.exposeInMainWorld('cardsApi', {
   },
   // 点検と直しの案（支援者向け）: 点検は当たらない行を二つ返す。案は二つ（鍵が無いときは、案を作れない理由）。受けると書いたことにする。
   checkCards: async () => {
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, reviewSlowCheck ? 5600 : 50));
     return { ok: true, problems: reviewProblems.filter((p) => !applied.includes(p.where)) };
   },
   proposeRepairs: async () => {

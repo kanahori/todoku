@@ -1297,6 +1297,25 @@ async function rendererReviewChecks() {
     t.win.destroy();
   }
 
+  // 確認に時間がかかる間: キーを押しても「読み込み中です。」を出さず、5秒ごとに「確認を始めて、〇秒たちました。」と知らせる。
+  const w = await open({ fake: 'review', slowcheck: '1' });
+  try {
+    await w.press('設定ファイルを確認する（支援者向け）');
+    await w.wait(1500);
+    for (let k = 0; k < 3; k++) {
+      await w.key('ArrowDown');
+      await w.wait(400);
+    }
+    await w.wait(5000);
+    const s = await w.state();
+    const said = s.said.filter((t) => !/枚中/.test(t));
+    check('確認の間: キーを押しても「読み込み中です。」を出さず、5秒ごとに「確認を始めて、〇秒たちました。」と知らせ、終わったら数の一文',
+      !s.said.some((t) => t.includes('読み込み中')) && said[0] === '確認しています。' && said.includes('確認を始めて、5秒たちました。')
+        && said[said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2つあります。', s.said);
+  } finally {
+    w.win.destroy();
+  }
+
   const n = await open({ fake: 'review', nokey: '1' });
   try {
     await n.press('設定ファイルを確認する（支援者向け）');
