@@ -1,0 +1,20 @@
+# 改行は、どの機械で取り出しても LF にそろえる（Windows の Git の既定 core.autocrlf=true でも CRLF にしない）。
+* text=auto eol=lf
+
+# 二進のファイルは、改行を変えず、差も文字として出さない。
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.zip binary
+*.dmg binary
+*.exe binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
