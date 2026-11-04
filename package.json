@@ -12,6 +12,7 @@
     "demo:reset": "node scripts/demo-reset.js",
     "ui:repair": "electron test/ui-repair.js",
     "real:tsukuba": "electron test/real-tsukuba.js",
+    "voiceover:check": "node test/voiceover-check.js --run",
     "dist:win": "electron-builder --win --arm64 --x64",
     "dist:mac": "electron-builder --mac dmg --arm64"
   },
