@@ -27,12 +27,14 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 - Requirements: Windows 10/11 (x64 or Arm64), Node.js 22.12 or later (tested with Node 26.13 on Windows 11 Arm64).
 - Install dependencies: `npm ci`
-  - Behind an HTTP proxy, the Electron binary download may fail with "fetch failed". Setting `NODE_USE_ENV_PROXY=1` (Node 24.5 or later) together with `HTTPS_PROXY` lets the download use the proxy.
+  - `npm ci` does not download the Electron binary. The first `npm start` (or `npm run smoke`) does, printing "Downloading Electron binary..." (about 120 MB), so the first start takes longer.
+  - Behind an HTTP proxy, that download may fail with "fetch failed". Setting `NODE_USE_ENV_PROXY=1` (Node 24.5 or later) together with `HTTPS_PROXY` lets the download use the proxy.
+  - `npm ci` reports moderate vulnerabilities and a deprecated package. They are all in the packaging tool (`electron-builder` and the packages it uses), which is used only to build the installers and is not part of the app.
 - Start the app: `npm start`
   - The first screen ("Todoku") opens. Its cards are the app's introduction, display settings, search, one card per web app, and "新しいページからカードを作る".
   - Results are announced through a `role="status"` live region (errors through `role="alert"`), and the result items are put inside the card so they can be read again with the arrow keys.
 - Run the tests:
-  - `npm test` runs the unit tests with Node's built-in test runner.
+  - `npm test` runs the unit tests with Node's built-in test runner. It does not need the Electron binary. 5 tests are reported as skipped: they are the scripts that run only inside Electron (`npm run smoke` and the others below).
   - `npm run smoke` runs the end-to-end checks inside Electron against the bundled practice pages in `test/fixtures/` (no network access).
   - `npm run ui:repair` was for the "accept / reject" proposal form of the earlier screen. That form is being rebuilt for the card screen, so for now the script only prints that and exits.
   - `npm run smoke`, `npm run ui:repair` and `npm run real:tsukuba` keep their windows hidden and never take the keyboard focus from the app in front (on macOS they also stay out of the Dock), so they are safe to run while someone is typing. Add `-- --show-windows` to show the windows (for example, to look at the `ui:repair` screen).
@@ -46,10 +48,11 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 ## Getting started (macOS)
 
 - Requirements: macOS on Apple silicon, Node.js 22.12 or later (tested with Node 22.19).
-- `npm ci`, then `npm start`. `npm test` and `npm run smoke` work the same way as on Windows.
+- `npm ci`, then `npm start`. As on Windows, the first `npm start` downloads the Electron binary. `npm test` and `npm run smoke` work the same way as on Windows.
+- Closing the Todoku window quits the app on macOS too (it does not stay in the Dock without a window).
 - If the Electron binary download fails behind a proxy, download `electron-v<version>-darwin-arm64.zip` and `SHASUMS256.txt` from the Electron releases page, check the SHA-256, extract the zip into `node_modules/electron/dist`, and write `Electron.app/Contents/MacOS/Electron` into `node_modules/electron/path.txt`.
 - Build a macOS disk image: `npm run dist:mac` produces `dist/Todoku-1.0.0-arm64.dmg` (Apple silicon). It is not signed or notarized, so macOS warns that the developer cannot be verified; open it from the context menu (Open) the first time.
-  - Behind a proxy, point `ELECTRON_CACHE` to a folder that already holds the Electron zip and `SHASUMS256.txt`.
+  - Behind a proxy, point `ELECTRON_CACHE` to a folder that already holds the Electron zip and `SHASUMS256.txt`. The same `ELECTRON_CACHE` also works for the first `npm start`.
 
 ## Configuration (environment variables)
 
@@ -134,10 +137,10 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Tests
 
-- `npm test`: 117 tests, 112 passed, 5 skipped (the Electron-only scripts), 0 failed.
-- `npm run smoke`: 170 checks, 170 passed, against the practice pages (and a local test server that never answers) only.
+- `npm test`: 121 tests, 116 passed, 5 skipped (the Electron-only scripts), 0 failed.
+- `npm run smoke`: 185 checks, 185 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
-- Measured on macOS on 2026-11-04, after the fixes for the real weather and city pages (commit `e413d35`).
+- Measured on macOS on 2026-11-04. `npm test` and `npm run smoke` were measured on a fresh clone of this repository, following "Getting started (macOS)"; `npm run real:tsukuba` was measured earlier the same day.
 
 ## Future
 
