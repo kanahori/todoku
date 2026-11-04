@@ -116,7 +116,9 @@ app.whenReady().then(async () => {
   await wait(300);
   await js('window.__said.length = 0');
   check('一件目の案を受けるボタンを押せる', await press(`「${title0}」の案を受ける（設定ファイルに書く）`), null);
-  await until(async () => (await said()).some((t) => t.includes('案を受け')), 10 * 1000);
+  // 結果は、焦点の先の文（その案の行）で読む。別の知らせは出さない。
+  await until(async () => ((await focus()) || '').includes('受けました'), 10 * 1000);
+  const acceptFocus = await focus();
   const acceptSaid = await said();
   const written = JSON.parse(fs.readFileSync(configFile, 'utf8'));
   const backups = fs.existsSync(path.join(userData, 'config-backups')) ? fs.readdirSync(path.join(userData, 'config-backups')) : [];
@@ -124,17 +126,20 @@ app.whenReady().then(async () => {
     written.cards[0].selector === '[data-region="deadline-list"]' && written.cards[1].selector === course.cards[1].selector
       && written.cards.slice(2).every((c, k) => c.selector === course.cards[k + 2].selector), written.cards.map((c) => c.selector));
   check('受けると、前の版を config-backups に一つ残す', backups.length === 1 && /^practice-course-after\..+\.json$/.test(backups[0]), backups);
-  check('受けたことを一文で知らせる', JSON.stringify(acceptSaid) === JSON.stringify([`「${title0}」の案を受け、設定ファイルに書きました。前の版は控えに残しました。`]), acceptSaid);
+  check('受けたことを、焦点の先の文で読む（別の知らせは出さない）',
+    acceptFocus === `1件目（全2件）: 「${title0}」の読む所: 受けました。設定ファイルに書き、前の版は控えに残しました。` && acceptSaid.length === 0, { acceptFocus, acceptSaid });
 
   await wait(300);
   await js('window.__said.length = 0');
   check('二件目の案を断るボタンを押せる', await press(`「${title1}」の案を断る`), null);
-  await until(async () => (await said()).some((t) => t.includes('案を断り')), 10 * 1000);
+  await until(async () => ((await focus()) || '').includes('断りました'), 10 * 1000);
+  const rejectFocus = await focus();
   const rejectSaid = await said();
   const after = JSON.parse(fs.readFileSync(configFile, 'utf8'));
   const backupsAfter = fs.readdirSync(path.join(userData, 'config-backups'));
   check('断ると、設定ファイルは変えず、控えも増やさない', after.cards[1].selector === course.cards[1].selector && backupsAfter.length === 1, { selector: after.cards[1].selector, backupsAfter });
-  check('断ったことを一文で知らせる', /^「.+」の案を断りました。/.test(rejectSaid[0] || '') && rejectSaid[0].startsWith(`「${title1}」`), rejectSaid);
+  check('断ったことを、焦点の先の文で読む（別の知らせは出さない）',
+    rejectFocus === `2件目（全2件）: 「${title1}」の読む所: 断りました。設定ファイルは変えていません。` && rejectSaid.length === 0, { rejectFocus, rejectSaid });
 
   console.log(failed === 0 ? '全部通りました。' : `${failed}件が落ちました。`);
   app.exit(failed === 0 ? 0 : 1);

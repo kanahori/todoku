@@ -1263,22 +1263,32 @@ async function rendererReviewChecks() {
         && first.focus === '1件目（全2件）: 「締め切りを読む」の読む所'
         && first.said[first.said.length - 1] === '当たらない行が2件あり、直しの案が2件あります。'
         && first.buttons.includes('「締め切りを読む」の案を受ける（設定ファイルに書く）') && first.buttons.includes('「お知らせを読む」の案を断る'), first);
+    // 見出しと値は一つの段落（dl にしない。NVDA が項目ごとに役割の名前を付けて、一件で6回読んだ）。断っても使う人の画面では直す、の一文がある。
+    const reviewItems = await t.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.tagName + ' ' + x.textContent)");
+    check('点検: 案の見出しと値は「いまのセレクタ: …」の一つの段落で、dl を使わず、断っても使う人の画面では直す一文がある',
+      reviewItems.includes('P いまのセレクタ: .deadline-list li') && reviewItems.includes('P 案のセレクタ: [data-region="deadline-list"] li（ページの中で3か所に当たります）')
+        && reviewItems.includes('P 理由: 一覧の作りが data-region に変わったためです。') && reviewItems.includes('P 断っても、使う人の画面では、鍵があればその場で直して読みます。')
+        && !reviewItems.some((x) => /^D[TD] /.test(x)), reviewItems);
     await t.js('window.__said.length = 0');
     await t.press('「締め切りを読む」の案を受ける（設定ファイルに書く）');
     await t.wait(300);
     const accepted = await t.state();
-    check('点検: 案を受けると、その一件だけを書くように頼み、一文で知らせ、焦点は次の案の見出しへ',
-      JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector'])
-        && JSON.stringify(accepted.said) === JSON.stringify(['「締め切りを読む」の案を受け、設定ファイルに書きました。前の版は控えに残しました。'])
-        && accepted.focus === '2件目（全2件）: 「お知らせを読む」の読む所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), accepted);
+    await t.key('ArrowDown');
+    const nextHead = await t.state();
+    check('点検: 案を受けると、その一件だけを書くように頼み、焦点はその案の結果の文（別の知らせは出さない）。下矢印で次の案の見出し',
+      JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector']) && accepted.said.length === 0
+        && accepted.focus === '1件目（全2件）: 「締め切りを読む」の読む所: 受けました。設定ファイルに書き、前の版は控えに残しました。'
+        && nextHead.focus === '2件目（全2件）: 「お知らせを読む」の読む所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
     await t.js('window.__said.length = 0');
     await t.press('「お知らせを読む」の案を断る');
     await t.wait(300);
     const rejected = await t.state();
-    check('点検: 案を断ると書かず、一文で知らせ、全部見たら受けた数と断った数の一文に焦点を移す',
-      JSON.stringify(rejected.applied) === JSON.stringify(['cards[0].selector'])
-        && JSON.stringify(rejected.said) === JSON.stringify(['「お知らせを読む」の案を断りました。全部の案を見ました。'])
-        && rejected.focus === '全部の案を見ました（受けた案1件・断った案1件）。' && rejected.buttons.length === 0, rejected);
+    await t.key('ArrowDown');
+    const summary = await t.state();
+    check('点検: 案を断ると書かず、焦点はその案の結果の文。全部見たら、下矢印で受けた数と断った数の一文',
+      JSON.stringify(rejected.applied) === JSON.stringify(['cards[0].selector']) && rejected.said.length === 0
+        && rejected.focus === '2件目（全2件）: 「お知らせを読む」の読む所: 断りました。設定ファイルは変えていません。'
+        && summary.focus === '全部の案を見ました（受けた案1件・断った案1件）。' && rejected.buttons.length === 0, { rejected, summary });
     await t.key('Escape');
     await t.key('Escape');
     const back = await t.state();

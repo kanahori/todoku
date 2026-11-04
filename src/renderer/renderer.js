@@ -565,30 +565,38 @@ function placeOf(where) {
   return { selector: '読む所・押す所', container: '入れ物', path: 'ページ' }[m[2]] || m[2];
 }
 
-// 案の一覧（card.review）から、カードの項目を作る。まだ決めていない最初の案の見出しに焦点が行くように、そこだけ result にする。
-function reviewItems(card) {
+// 断っても、使う人の画面では、鍵があればその場で直して読む（autofix）。支援者が迷わないように、案の一覧の頭で言う。
+const REVIEW_REJECT_NOTE = '断っても、使う人の画面では、鍵があればその場で直して読みます。';
+
+// 案の一覧（card.review）から、カードの項目を作る。焦点の行き先（result）は、決めたばかりの案の行（結果の文を含む）か、
+// まだ決めていなければ最初の案の見出し。決めた結果を先に読み、次の案の見出しは下矢印で読む（知らせと焦点の移動が重なって、
+// 次の見出しが先に読まれた。Windows の NVDA の確かめ）。
+// 見出しと値は「いまのセレクタ: …」の一つの段落にする（dl にすると NVDA が項目ごとに役割の名前を付けて読み、一件で6回になった）。
+function reviewItems(card, justDecided = null) {
   const r = card.review;
-  const items = [{ text: r.summary }];
+  const items = [{ text: r.summary, result: r.proposals.length === 0 }];
+  if (r.proposals.length > 0) items.push({ text: REVIEW_REJECT_NOTE });
   for (const e of r.errors) items.push({ text: `「${e.title || e.where}」（${placeOf(e.where)}）: ${e.message}` });
   const pending = r.proposals.findIndex((p) => !p.decided);
   r.proposals.forEach((p, k) => {
     const head = `${k + 1}件目（全${r.proposals.length}件）: 「${p.title}」の${placeWord(p.action)}`;
     if (p.decided) {
-      items.push({ text: `${head}: ${p.decided === 'accepted' ? '受けました（設定ファイルに書きました）' : '断りました（設定ファイルは変えていません）'}。` });
+      const done = p.decided === 'accepted' ? '受けました。設定ファイルに書き、前の版は控えに残しました。' : '断りました。設定ファイルは変えていません。';
+      items.push({ text: `${head}: ${done}`, result: p === justDecided });
       return;
     }
     items.push(
-      { text: head, result: k === pending },
-      { label: 'いまのセレクタ', text: p.oldSelector },
-      { label: '案のセレクタ', text: `${p.newSelector}（ページの中で${p.matches}か所に当たります）` },
-      { label: '理由', text: p.reason || '（理由はありません）' },
+      { text: head, result: !justDecided && k === pending },
+      { text: `いまのセレクタ: ${p.oldSelector}` },
+      { text: `案のセレクタ: ${p.newSelector}（ページの中で${p.matches}か所に当たります）` },
+      { text: `理由: ${p.reason || '（理由はありません）'}` },
       { button: `「${p.title}」の案を受ける（設定ファイルに書く）`, onPress: () => decideProposal(card, p, true) },
       { button: `「${p.title}」の案を断る`, onPress: () => decideProposal(card, p, false) },
     );
   });
   if (r.proposals.length > 0 && pending < 0) {
     const accepted = r.proposals.filter((p) => p.decided === 'accepted').length;
-    items.push({ text: `全部の案を見ました（受けた案${accepted}件・断った案${r.proposals.length - accepted}件）。`, result: true });
+    items.push({ text: `全部の案を見ました（受けた案${accepted}件・断った案${r.proposals.length - accepted}件）。`, result: !justDecided });
   }
   return items;
 }
@@ -665,11 +673,9 @@ async function decideProposal(card, p, accept) {
   } else {
     p.decided = 'rejected';
   }
-  card.items = reviewItems(card);
+  // 焦点は、決めた案の行（結果の文を含む）に置き、知らせは出さない（焦点の先の文で結果を読むため。二度読ませない）。
+  card.items = reviewItems(card, p);
   refreshCard(card, { focusResult: true });
-  const rest = card.review.proposals.filter((x) => !x.decided).length;
-  const said = accept ? `「${p.title}」の案を受け、設定ファイルに書きました。前の版は控えに残しました。` : `「${p.title}」の案を断りました。`;
-  announce(rest > 0 ? said : `${said}全部の案を見ました。`);
 }
 
 // ---- 自動で直した所（支援者向けのカード）----
