@@ -507,3 +507,16 @@ test('日時だけの題（「〇年〇月〇日〇時〇分更新」など）�
   for (const t of ['2026年10月16日06時38分更新', '4日19時55分更新', '4日17時00分発表', '2026/11/04 現在']) assert.equal(isTimeOnly(t), true, t);
   for (const t of ['あおば県の警報・注意報（発表状況）', '12月の予定', '更新日：4月1日', '更新']) assert.equal(isTimeOnly(t), false, t);
 });
+
+test('題の頭の飾りの記号（▼・■・●・※ など）は落とす（読み上げソフトがそのまま読むため）', () => {
+  assert.equal(deckName('▼ 作り物の町のお知らせ', 'https://example.com/'), '作り物の町のお知らせ');
+  assert.equal(deckName('■□ 作り物の町', 'https://example.com/'), '作り物の町');
+  assert.equal(deckName('※作り物の町', 'https://example.com/'), '作り物の町');
+  // 頭でない記号と、〇〇のような字は残す。
+  assert.equal(deckName('〇〇町の案内 ▼', 'https://example.com/'), '〇〇町の案内 ▼');
+  const cards = pickCards(
+    [{ role: 'notice', action: 'read', selector: '#a', container: '', titleSelector: '', reason: 'x' }],
+    [{ count: 1, hasText: true, containerOk: false, title: '▶ 作り物の説明', body: '作り物の説明の本文です。二つ目の文です。', pos: 1 }],
+  );
+  assert.equal(cards[0].title, '作り物の説明');
+});

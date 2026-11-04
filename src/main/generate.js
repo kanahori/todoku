@@ -1055,8 +1055,11 @@ function buildInspectScript(candidates) {
 // 切れ目が前すぎる（上限の半分より前）ときだけ、上限の字数で切る。
 const CUT_BEFORE = /[、。，．,\s／/｜|（(「『【［[〔・：:－—–〜~]/;
 const CUT_AFTER = /[）)」』】］\]〕]/;
+// 題の頭の飾りの記号（「▼ 説明を表示する」の ▼ など）。読み上げソフトがそのまま「下向き三角」などと読むので落とす。
+const LEAD_MARKS = /^[▲▼△▽■□●○◆◇►▶▷▸▹◀◁◂◃★☆※＊*・]+\s*/;
+
 function cleanTitle(text, max = TITLE_MAX) {
-  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  const t = String(text || '').replace(/\s+/g, ' ').trim().replace(LEAD_MARKS, '');
   if (t.length <= max) return t;
   let cut = -1;
   for (let i = max; i > 0; i--) {

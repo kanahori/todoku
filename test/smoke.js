@@ -767,7 +767,7 @@ async function generateChecks() {
         d.ok && titles.length >= 6 && titles.length <= 8 && nightCore.every((t) => titles.filter((x) => x === t).length === 1)
           && !titles.some((t) => / \d+$/.test(t) || /更新$|発表$/.test(t)) && new Set(titles).size === titles.length
           && d.config.cards.every((c) => !/^td\b/.test(String(c.selector).trim().split(/\s+/).pop()))
-          && !titles.some((t) => /警戒レベルとの関係|とるべき行動|説明を表示する/.test(t))
+          && !titles.some((t) => /警戒レベルとの関係|とるべき行動|説明を表示する/.test(t) || /^[▲▼△▽■□●○◆◇►▶※＊*・]/.test(t))
           && JSON.stringify(items) === JSON.stringify([
             '4日19時55分更新 北部 特別警報 なし、警報 なし、注意報 強風注意報、雷注意報',
             '南部 特別警報 なし、警報 なし、注意報 波浪注意報',
