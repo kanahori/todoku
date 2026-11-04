@@ -447,6 +447,8 @@ function pageInspect(tryOne, cards) {
         }
       })() : false,
       menuNames: c.action === 'list' && probe.count >= 5 && region ? menuNames(c, region) : null,
+      // 読む所・一覧の場所が、ページの上に描かれていない（畳まれた説明など、display:none の中）か。
+      unrendered: c.action !== 'click' && Boolean(region) && region.getClientRects().length === 0,
       pageTitle: c.action !== 'click' && Boolean(region) && Boolean(title) && (() => {
         const h1 = document.querySelector('h1');
         return Boolean(h1 && !region.contains(h1) && !h1.contains(region) && nameOf(h1) === title);
@@ -628,7 +630,7 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
   for (const l of main.querySelectorAll('ul, ol')) {
     const items = [...l.children].filter((c) => c.tagName === 'LI');
     const rows = items.length;
-    if (rows >= 3 && !outside(l) && !l.parentElement.closest('ul, ol') && !tocLike(l) && !linkOnly(items)) lists.push({ el: l, rows, table: false });
+    if (rows >= 3 && !outside(l) && l.getClientRects().length > 0 && !l.parentElement.closest('ul, ol') && !tocLike(l) && !linkOnly(items)) lists.push({ el: l, rows, table: false });
   }
   // 表・一覧の題の手がかり。
   // 表の頭の、升目が一つだけの見出しの行（th）を題にする。表そのものの一行目か、分けて描いた表の頭（見出しの行だけの表）の一行目。
@@ -1145,6 +1147,10 @@ function pickCards(candidates, probes, rejects = null) {
     let title = cleanTitle(probe.title);
     const body = cleanTitle(probe.body, 200);
     if (c.action !== 'click' && ((title && body === title) || isOneWord(body))) return drop('one-word-body');
+    // ページの上に描かれていない所（「▼ 説明を表示する」で開くまで畳まれている説明など）を読むカードは作らない。
+    // 気象庁の警報のページで、畳まれた説明を読むカードが、見出しと表の頭の行だけを読んだ（頼み27 の10・11）。
+    // 一覧の入れ物が描かれていて、項目だけが隠れている所（切り替わる画像の帯など）と、開くまで畳まれているメニュー（リンクだけの一覧）は、今までどおり作る。
+    if (probe.unrendered && !probe.menu) return drop('not-rendered');
     // 中身が見出し一行だけのカードと、題とほぼ同じ一行だけのカードは作らない（バスのページと気象庁の一枚目がこの形だった）。
     if (c.action !== 'click' && (probe.headingOnly || nearlySame(body, title))) return drop('heading-only');
     // 押すカードは、押す所の名前が分からなければ作らない。

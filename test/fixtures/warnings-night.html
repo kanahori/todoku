@@ -2,7 +2,7 @@
 <!-- 作り物の練習のページ（架空の「あおば気象台」の警報）。注意報が出ているときの気象台のページで見た作り: -->
 <!-- 発表状況の表は、地域の見出しの行の下に、特別警報・警報・注意報の三行が続き、注意報の升目に名前の箱が並ぶ。 -->
 <!-- 警戒レベル相当情報の表は、題と更新の時刻だけの頭の表と、同じ中身を二つ描いた表（固定の列の写しは隠れている）に分かれる。 -->
-<!-- ほかに、題の行のある時系列・市町村別の表と、頭の表に題のある早期注意の表、表を替える div の並び、リンクだけのメニューがある。 -->
+<!-- 下に、「▼ 説明を表示する」で開くまで畳まれている説明（表の入った一覧）がある。ほかに、題の行のある時系列・市町村別の表と、頭の表に題のある早期注意の表、表を替える div の並び、リンクだけのメニューがある。 -->
 <!-- Claude の案の形が違っても、束の枚数が同じ範囲に収まり、発表状況が地域ごとに一件で読まれるかの試し（頼み27）。 -->
 <!-- 対比の最小: 文字 21:1（#ffffff と #000）。2026-11-04 に WCAG の式で計算。 -->
 <html lang="ja">
@@ -37,5 +37,6 @@
   <div id="timeline"><table class="warning-table"><tr class="title"><th colspan="3">あおば県の時系列情報（明日までの見通し）</th></tr><tr><th>市町村</th><th>今夜</th><th>明日</th></tr><tr><th>あおば市</th><td>注意報</td><td></td></tr><tr><th>みどり市</th><td></td><td></td></tr><tr><th>さくら町</th><td></td><td></td></tr><tr><th>やまなみ町</th><td>注意報</td><td></td></tr><tr><th>かわべ村</th><td></td><td></td></tr><tr><th>うみべ町</th><td></td><td></td></tr></table></div>
   <div id="prob"><div class="wide"><table class="warning-table head"><tr class="title"><th>あおば県の早期注意情報（警報級の可能性）</th></tr><tr class="header"><th>4日17時00分発表</th></tr></table><div class="wide-body"><table class="warning-table"><tr><th>市町村</th><th>明日</th><th>明後日</th></tr><tr><th>あおば市</th><td>低</td><td>中</td></tr><tr><th>みどり市</th><td>低</td><td>中</td></tr><tr><th>さくら町</th><td>低</td><td>中</td></tr><tr><th>やまなみ町</th><td>低</td><td>中</td></tr></table></div></div></div>
   <div id="office"><table class="warning-table"><tr class="title"><th colspan="2">あおば県の警報・注意報（市町村別）</th></tr><tr><th>市町村</th><th>発表中</th></tr><tr><th>あおば市</th><td>強風注意報</td></tr><tr><th>みどり市</th><td>発表なし</td></tr><tr><th>さくら町</th><td>強風注意報</td></tr><tr><th>やまなみ町</th><td>発表なし</td></tr><tr><th>かわべ村</th><td>強風注意報</td></tr><tr><th>うみべ町</th><td>発表なし</td></tr><tr><th>おかの市</th><td>強風注意報</td></tr><tr><th>もりの町</th><td>発表なし</td></tr><tr><th>ひかり市</th><td>強風注意報</td></tr><tr><th>そよかぜ町</th><td>発表なし</td></tr><tr><th>つばさ村</th><td>強風注意報</td></tr><tr><th>いずみ市</th><td>発表なし</td></tr></table></div>
+  <div id="explain"><div class="close-box-button">▼ 警報・注意報の説明を表示する</div><div class="contents-explain" style="display: none;"><ul class="asterisk"><li><p>警戒レベルとの関係</p><table><tr><th></th><th>大雨</th><th>土砂災害</th></tr><tr><td>レベル5</td><td>レベル5大雨</td><td>レベル5土砂災害</td></tr><tr><td>レベル4</td><td>レベル4大雨</td><td>レベル4土砂災害</td></tr></table></li><li><p>とるべき行動</p><table><tr><th></th><th>大雨</th><th>土砂災害</th></tr><tr><td>レベル3</td><td>レベル3大雨</td><td>レベル3土砂災害</td></tr><tr><td>レベル2</td><td>レベル2大雨</td><td>レベル2土砂災害</td></tr></table></li><li><p>早期注意情報について</p><table><tr><th></th><th>大雨</th><th>土砂災害</th></tr><tr><td>高</td><td>高大雨</td><td>高土砂災害</td></tr><tr><td>中</td><td>中大雨</td><td>中土砂災害</td></tr></table></li></ul></div></div>
 </body>
 </html>
