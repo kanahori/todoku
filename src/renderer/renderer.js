@@ -800,10 +800,10 @@ function settingButton(key) {
   if (name === 'reflow') return { text: `1列リフロー表示: ${view.reflow ? '有効' : '無効'}`, pressed: view.reflow };
   if (name === 'preset') {
     const on = view.preset === value;
-    return { text: `${PRESET_LABELS[value]}${on ? '（選択中）' : ''}`, pressed: on };
+    return { text: `${PRESET_LABELS[value]}${on ? '、選択中' : ''}`, pressed: on };
   }
   const on = view.scheme === value;
-  return { text: `${SCHEME_LABELS[value]}${on ? '：選択中' : ''}`, pressed: on };
+  return { text: `${SCHEME_LABELS[value]}${on ? '、選択中' : ''}`, pressed: on };
 }
 
 function settingsItems(card) {

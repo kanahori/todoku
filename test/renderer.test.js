@@ -170,17 +170,17 @@ test('表示設定: 知らない値は標準に戻し、html の data-* に当�
   assert.deepEqual({ ...dataset }, { preset: 'standard', reflow: 'off', scheme: 'standard' });
 });
 
-test('表示設定: ボタンの文字にいまの状態を入れる（「（選択中）」「：選択中」「: 有効」）', () => {
+test('表示設定: ボタンの文字にいまの状態を入れる（「、選択中」「: 有効」）', () => {
   const { applySettings, settingButton } = loadSettingFunctions();
   applySettings({ preset: 'standard', reflow: false, scheme: 'white' });
-  assert.deepEqual(settingButton('preset:standard'), { text: '標準（選択中）', pressed: true });
+  assert.deepEqual(settingButton('preset:standard'), { text: '標準、選択中', pressed: true });
   assert.deepEqual(settingButton('preset:yuttari'), { text: 'ゆったり', pressed: false });
   assert.deepEqual(settingButton('reflow'), { text: '1列リフロー表示: 無効', pressed: false });
   assert.deepEqual(settingButton('scheme:standard'), { text: '標準（配色変更なし）', pressed: false });
-  assert.deepEqual(settingButton('scheme:white'), { text: '高コントラスト（白地）：選択中', pressed: true });
+  assert.deepEqual(settingButton('scheme:white'), { text: '高コントラスト（白地）、選択中', pressed: true });
   applySettings({ preset: 'yuttari', reflow: true, scheme: 'black' });
   assert.deepEqual(settingButton('reflow'), { text: '1列リフロー表示: 有効', pressed: true });
-  assert.deepEqual(settingButton('scheme:black'), { text: '高コントラスト（黒地）：選択中', pressed: true });
+  assert.deepEqual(settingButton('scheme:black'), { text: '高コントラスト（黒地）、選択中', pressed: true });
 });
 
 test('表示設定: 変えたときの知らせは「何をしたか」を一文で（名前は「」で囲む）', () => {

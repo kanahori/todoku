@@ -1616,7 +1616,7 @@ async function rendererSettingsChecks(settingsStore, settingsFile) {
     const labels = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].filter((n) => !n.closest('[hidden]')).map((n) => n.textContent)");
     check('表示設定: 開くと aria-expanded が true になり、読みやすさ・1列リフロー表示・配色・標準に戻すが並ぶ',
       opened.expanded === 'true' && opened.text === '表示設定を開く'
-        && ['標準（選択中）', 'ゆったり', '1列リフロー表示: 無効', '標準（配色変更なし）：選択中', '高コントラスト（白地）', '高コントラスト（黒地）', '表示設定を標準に戻す']
+        && ['標準、選択中', 'ゆったり', '1列リフロー表示: 無効', '標準（配色変更なし）、選択中', '高コントラスト（白地）', '高コントラスト（黒地）', '表示設定を標準に戻す']
           .every((x) => labels.includes(x)), labels);
 
     // ゆったり
@@ -1631,10 +1631,10 @@ async function rendererSettingsChecks(settingsStore, settingsFile) {
     const saidYuttari = await t.said();
     const dsYuttari = await t.dataset();
     const spacing = await t.js("getComputedStyle(document.body).letterSpacing");
-    check('表示設定: 「ゆったり」を押すと、「読みやすさを「ゆったり」にしました。1列リフロー表示を有効にしました。」と一度だけ知らせ、ボタンは「ゆったり（選択中）」で焦点はそのまま',
-      standard.text === '標準（選択中）' && standard.pressed === 'true'
+    check('表示設定: 「ゆったり」を押すと、「読みやすさを「ゆったり」にしました。1列リフロー表示を有効にしました。」と一度だけ知らせ、ボタンは「ゆったり、選択中」で焦点はそのまま',
+      standard.text === '標準、選択中' && standard.pressed === 'true'
         && JSON.stringify(saidYuttari) === JSON.stringify(['読みやすさを「ゆったり」にしました。1列リフロー表示を有効にしました。'])
-        && yuttari.connected && yuttari.text === 'ゆったり（選択中）' && yuttari.pressed === 'true'
+        && yuttari.connected && yuttari.text === 'ゆったり、選択中' && yuttari.pressed === 'true'
         && dsYuttari.preset === 'yuttari' && dsYuttari.reflow === 'on' && spacing !== 'normal' && spacing !== '0px',
       { standard, saidYuttari, yuttari, dsYuttari, spacing });
 
@@ -1656,7 +1656,7 @@ async function rendererSettingsChecks(settingsStore, settingsFile) {
     const note = await t.js("(() => { const a = document.activeElement; return { text: a.textContent, bg: getComputedStyle(a).backgroundColor, color: getComputedStyle(a).color }; })()");
     check('表示設定: 「高コントラスト（黒地）」を押すと「配色を「高コントラスト（黒地）」にしました。」と一度だけ知らせ、地は黒・選ばれているボタンは黄色に黒い文字',
       JSON.stringify(saidBlack) === JSON.stringify(['配色を「高コントラスト（黒地）」にしました。'])
-        && black.text === '高コントラスト（黒地）：選択中' && black.pressed === 'true' && (await t.dataset()).scheme === 'black'
+        && black.text === '高コントラスト（黒地）、選択中' && black.pressed === 'true' && (await t.dataset()).scheme === 'black'
         && blackColors.page === 'rgb(0, 0, 0)' && blackColors.button === 'rgb(255, 255, 0)' && blackColors.buttonText === 'rgb(0, 0, 0)',
       { saidBlack, black, blackColors });
     check('表示設定: 黒地でフォーカス中の注釈は、黄色の背景に黒い文字（明るい灰色のまま載せない）',
@@ -1687,8 +1687,8 @@ async function rendererSettingsChecks(settingsStore, settingsFile) {
     await t.wait(100);
     check('表示設定: 起動し直しても、ゆったり・1列リフロー表示・黒地が残り、ボタンの文字と押された状態も合う',
       dsAgain.preset === 'yuttari' && dsAgain.reflow === 'on' && dsAgain.scheme === 'black'
-        && labelsAgain.includes('ゆったり（選択中）:true') && labelsAgain.includes('1列リフロー表示: 有効:true')
-        && labelsAgain.includes('高コントラスト（黒地）：選択中:true') && labelsAgain.includes('標準（配色変更なし）:false'),
+        && labelsAgain.includes('ゆったり、選択中:true') && labelsAgain.includes('1列リフロー表示: 有効:true')
+        && labelsAgain.includes('高コントラスト（黒地）、選択中:true') && labelsAgain.includes('標準（配色変更なし）:false'),
       { dsAgain, labelsAgain });
     check('文字の大きさ: 起動し直しても 110% が残る', t.win.webContents.getZoomFactor() === 1.1, t.win.webContents.getZoomFactor());
 
