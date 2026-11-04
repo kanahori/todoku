@@ -13,6 +13,7 @@ const { createOverrideStore, applyOverrides, runCardWithAutoRepair, withTimeout 
 // 支援者の直しの案（repair:propose）で、Claude の一回の呼び出しを待つ長さの上限（SDK の既定は10分で、2回までやり直す。見直しの10）。
 const PROPOSE_TIMEOUT_MS = 120 * 1000;
 const { sourceOpenedMessage } = require('./messages');
+const { localStamp } = require('./logline');
 const {
   GenerateSchema, generateDeck, createGeneratedStore, failureMessage, doneMessage, exportDeck, exportedMessage,
 } = require('./generate');
@@ -352,7 +353,7 @@ ipcMain.handle('target:show', (_event, appId) => {
 
 // 一行の記録を、標準の出力と userData の log.txt に残す（Windows の包みでは標準の出力が見えないため）。
 function logLine(text) {
-  const line = `${new Date().toISOString()} ${text}`;
+  const line = `${localStamp()} ${text}`;
   console.log(line);
   try {
     fs.appendFileSync(path.join(app.getPath('userData'), 'log.txt'), `${line}\n`);
