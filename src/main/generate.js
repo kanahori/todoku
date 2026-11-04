@@ -642,6 +642,9 @@ function pageSections(taken, maxSections, minChars, maxMust, clicks = []) {
     return headOnly || r.cells[0].colSpan > 1 || (next && next.cells.length > 1) ? textOf(r.cells[0]) : '';
   };
   const headTable = (p) => p.matches('table') && [...p.rows].filter((r) => r.querySelector('td')).length <= 1;
+  // 行が3つより少なくても、表の題の行（表の頭の升目一つの見出しの行）か caption のある表は、主な表の候補にする。
+  // 気象庁の発表状況の表（地域が二つで、td の行が2つ）が、Claude の案が警戒レベルの表だけを指した回に、束から抜けた（頼み20 の確かめ）。
+  for (const x of tableUnits) if (x.rows < 3 && !linkOnly(x.rowEls) && (titleRow(x.t) || (x.t.caption && textOf(x.t.caption)))) lists.push(x);
   const titlesOf = (el, isTable) => {
     const cap = isTable && el.caption ? textOf(el.caption) : '';
     const label = clean(el.getAttribute('aria-label'));
@@ -1102,7 +1105,9 @@ function pickCards(candidates, probes, rejects = null) {
     const card = { id: `${c.role}-${cards.length + 1}`, title: unique, action: c.action, selector: c.selector };
     if (c.action === 'list' && c.container && probe.containerOk) card.container = c.container;
     Object.defineProperty(card, 'pos', { value: Number(probe.pos) || 0, enumerable: false });
-    Object.defineProperty(card, 'back', { value: c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome) || (Boolean(probe.menu) && title !== '目次を読む'), enumerable: false });
+    const meta = c.action === 'read' && isPartsOnly(body);
+    Object.defineProperty(card, 'back', { value: meta || c.role === 'search' || BACK_TITLE.test(unique) || Boolean(probe.chrome) || (Boolean(probe.menu) && title !== '目次を読む'), enumerable: false });
+    Object.defineProperty(card, 'meta', { value: meta, enumerable: false });
     Object.defineProperty(card, 'body', { value: body, enumerable: false });
     Object.defineProperty(card, 'weak', { value: weak, enumerable: false });
     Object.defineProperty(card, 'pageTitled', { value: pageTitled, enumerable: false });
@@ -1141,18 +1146,29 @@ function renamePageTitled(cards, sectionCount) {
     if (!c.pageTitled || titles.has(c.pageTitled)) return c;
     titles.add(c.pageTitled);
     const card = { ...c, title: c.pageTitled };
-    for (const k of ['pos', 'back', 'body']) Object.defineProperty(card, k, { value: c[k], enumerable: false });
+    for (const k of ['pos', 'back', 'body', 'meta']) Object.defineProperty(card, k, { value: c[k], enumerable: false });
     return card;
   });
 }
 
 // 後ろのカードの中は、お問い合わせ → メニュー・サイトの名前 → 検索 の順（それぞれの中はページの上からの順）。
 // ページの上にある見出しのメニューが、お問い合わせより前に来た（つくば市の自転車のページ。頼み19 の確かめ）。
+// ページの部品だけの所（更新日・ページ番号・印刷・文字の大きさ・背景の色・共有のボタンなど）は、お問い合わせの前に置く。
+// つくば市の自転車のページで、更新日とページ番号だけのカードが一枚目に来た（頼み20 の確かめ）。
 function backRank(c) {
   if (!c.back) return 0;
-  if (/^search-/.test(String(c.id)) || /検索/.test(c.title)) return 3;
-  if (/問い?合わせ|問合せ/.test(c.title)) return 1;
-  return 2;
+  if (c.meta) return 1;
+  if (/^search-/.test(String(c.id)) || /検索/.test(c.title)) return 4;
+  if (/問い?合わせ|問合せ/.test(c.title)) return 2;
+  return 3;
+}
+
+// 読むカードの中身が、ページの部品の言葉と日付・番号だけか（それを除くと6字も残らない、120字までの中身）。
+const PARTS_WORDS = /更新日|最終更新|公開日|掲載日|作成日|ページ番号|ページID|印刷(する|用)?|文字(の)?(サイズ|大きさ)|拡大|縮小|標準|背景(色)?|色(を)?(変える|変更)|白|黒|青|音声読み上げ|読み上げ|ふりがな|やさしい日本語|Language|シェア|ツイート|ポスト|いいね|Facebook|X|LINE|Twitter|年|月|日|時|分|[0-9０-９]+|[：:／/・|｜\-－()（）\s]/g;
+const PARTS_KEY = /更新日|最終更新|公開日|掲載日|作成日|ページ番号|ページID|印刷|文字(の)?(サイズ|大きさ)|拡大|縮小|背景|読み上げ|シェア|ツイート/;
+function isPartsOnly(body) {
+  const text = String(body || '');
+  return text.length > 0 && text.length <= 120 && PARTS_KEY.test(text) && text.replace(PARTS_WORDS, '').length < 6;
 }
 
 function orderCards(cards) {

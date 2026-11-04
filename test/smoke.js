@@ -721,6 +721,21 @@ async function generateChecks() {
         levelRows.ok && JSON.stringify(levelRows.items) === JSON.stringify(['北部 発表されていません', '南部 発表されていません', '西部 発表されていません']), levelRows.items);
       store.remove(splitDeck.config.id);
     }
+    // Claude の案が、警戒レベル相当情報の表の固定の列（隠れた写し）だけを指した回（本物の Claude の五回目の案の形）:
+    // 行の少ない発表状況の表も、題の行があれば必ず作る表にし、分けて描いた表の頭の更新の時刻を一件目に読む。
+    const headDeck = await generateDeck({
+      BrowserWindow, url: 'fixture:warnings-head.html', store, allowFixtures: true,
+      callModel: async () => ({ cards: [{ ...noTitle('table', 'read', '#summary .wide-fix'), titleSelector: '#summary tr.title th' }] }),
+    });
+    check('カードを作る: 案が警戒レベルの表の写しだけを指しても、行の少ない発表状況の表（題の行つき）のカードを作る',
+      headDeck.ok && JSON.stringify(headDeck.config.cards.map((c) => c.title)) === JSON.stringify(['あおば県の警戒レベル相当情報（発表状況）', 'あおば県の警報・注意報（発表状況）']),
+      headDeck.ok ? headDeck.config.cards.map((c) => c.title) : headDeck);
+    if (headDeck.ok) {
+      const levelItems = await runCard(BrowserWindow, headDeck.config, headDeck.config.cards[0].id, { waitMs: 500 });
+      check('カードを作る: 分けて描いた表の頭の更新の時刻を一件目の頭に付けて読む（地域名は行の頭）',
+        levelItems.ok && levelItems.items.length === 2 && levelItems.items[0].startsWith('4日6時00分更新 北部') && levelItems.items[1].startsWith('南部'), levelItems.items);
+      store.remove(headDeck.config.id);
+    }
     // メニューの題は Claude の題の元を使わず、aria-label・見出し・最初の項目から取る。項目がほとんど地域の名前なら「地域のメニュー」。
     const menuNamed = await generateDeck({
       BrowserWindow, url: 'fixture:warnings-split.html', store, allowFixtures: true,
@@ -730,7 +745,7 @@ async function generateChecks() {
     check('カードを作る: メニューの題は、aria-label か最初の項目から「〇〇のメニュー」にし、項目が地域の名前なら「地域のメニュー」にする（「全域のメニュー」にしない）',
       JSON.stringify(menuTitles) === JSON.stringify(['防災情報のメニュー', '地域のメニュー']), menuNamed.ok ? menuNamed.config.cards.map((c) => c.title) : menuNamed);
     if (menuNamed.ok) store.remove(menuNamed.config.id);
-    // 束の後ろの並び: お問い合わせ → メニュー・サイトの名前 → 検索（ページの上の見出しのメニューが、お問い合わせより前に来ない）。
+    // 束の後ろの並び: 部品だけの所（更新日・ページ番号など）→ お問い合わせ → メニュー・サイトの名前 → 検索（ページの上の見出しのメニューが、お問い合わせより前に来ない）。
     // 横のメニューの題は、包む dt から取る。ページの題（h1）を借りた更新日の所の題は、中の最初の短い文にする。目次はメニューの形でも後ろに回さない。
     const orderDeck = await generateDeck({
       BrowserWindow, url: 'fixture:cycle-order.html', store, allowFixtures: true,
@@ -741,9 +756,9 @@ async function generateChecks() {
       ] }),
     });
     const orderTitles = orderDeck.ok ? orderDeck.config.cards.map((c) => c.title) : [];
-    check('カードを作る: 後ろのカードは お問い合わせ → メニュー・サイトの名前 → 検索 の順。横のメニューの題は dt から、更新日の所の題は中の最初の文から。リンクだけが5件の目次は後ろに回さない',
-      orderDeck.ok && JSON.stringify(orderTitles.slice(-5)) === JSON.stringify(['この記事に関するお問い合わせ先', 'くらし・手続きのメニュー', '自転車のまちのメニュー', 'あおば町役場', orderTitles[orderTitles.length - 1]])
-        && /検索/.test(orderTitles[orderTitles.length - 1]) && orderTitles[0] === '更新日：4月1日' && orderTitles[1] === '目次を読む',
+    check('カードを作る: 後ろのカードは 部品だけの所（更新日とページ番号）→ お問い合わせ → メニュー・サイトの名前 → 検索 の順。横のメニューの題は dt から、更新日の所の題は中の最初の文から。リンクだけが5件の目次は後ろに回さない',
+      orderDeck.ok && JSON.stringify(orderTitles.slice(-6)) === JSON.stringify(['更新日：4月1日', 'この記事に関するお問い合わせ先', 'くらし・手続きのメニュー', '自転車のまちのメニュー', 'あおば町役場', orderTitles[orderTitles.length - 1]])
+        && /検索/.test(orderTitles[orderTitles.length - 1]) && orderTitles[0] === '目次を読む',
       orderDeck.ok ? orderTitles : orderDeck);
     if (orderDeck.ok) store.remove(orderDeck.config.id);
     // 芯が同じになること: 本物の Claude の二つの回の案の形（一回目: 表そのものを読むカード・表を替えるカード / 二回目: 区画を丸ごと読むカード・

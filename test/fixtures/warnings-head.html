@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば気象台」の発表状況）。気象台のページで見た作り: 警戒レベル相当情報の表は、題の行と更新の時刻の行だけの頭の表と、 -->
+<!-- 同じ中身を二つ描いた表（固定の列の写しは隠れている）に分かれる。警報・注意報（発表状況）の表は一枚で、地域の見出しの行の下に td の行が一つずつ（td の行が2つだけ）。 -->
+<!-- Claude の案が警戒レベルの表の固定の列だけを指した回でも、発表状況の表のカードを作り、更新の時刻を一件目に読むかの試し。 -->
+<!-- 対比の最小: 文字 21:1（#ffffff と #000）。2026-11-04 に WCAG の式で計算。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <title>あおば気象台｜発表状況（作り物・頭の表と写し）</title>
+  <style>body { color: #000; background: #ffffff; } .wide-body { display: flex; }</style>
+</head>
+<body>
+  <div id="summary">
+    <div class="block">
+      <div class="wide">
+        <table class="warning-table"><tr class="title"><th>あおば県の警戒レベル相当情報（発表状況）</th></tr><tr class="header"><th>4日6時00分更新</th></tr></table>
+        <div class="wide-body">
+          <div class="wide-fix" style="display: none;"><table class="warning-table"><tr class="hidden-tr"><td></td><td></td><td></td><td></td><td></td></tr><tr class="header bold-top"><th class="area" rowspan="2">北部</th><th rowspan="2">大雨</th><th rowspan="2">土砂災害</th><th rowspan="2">高潮</th><th rowspan="2">洪水</th></tr><tr class="header"></tr><tr><td></td><td colspan="4">警戒レベル相当情報は発表されていません</td></tr><tr class="header bold-top"><th class="area" rowspan="2">南部</th><th rowspan="2">大雨</th><th rowspan="2">土砂災害</th><th rowspan="2">高潮</th><th rowspan="2">洪水</th></tr><tr class="header"></tr><tr><td></td><td colspan="4">警戒レベル相当情報は発表されていません</td></tr></table></div>
+          <div class="wide-scroll"><table class="warning-table"><tr class="hidden-tr"><td></td><td></td><td></td><td></td><td></td></tr><tr class="header bold-top"><th class="area" rowspan="2">北部</th><th rowspan="2">大雨</th><th rowspan="2">土砂災害</th><th rowspan="2">高潮</th><th rowspan="2">洪水</th></tr><tr class="header"></tr><tr><td></td><td colspan="4">警戒レベル相当情報は発表されていません</td></tr><tr class="header bold-top"><th class="area" rowspan="2">南部</th><th rowspan="2">大雨</th><th rowspan="2">土砂災害</th><th rowspan="2">高潮</th><th rowspan="2">洪水</th></tr><tr class="header"></tr><tr><td></td><td colspan="4">警戒レベル相当情報は発表されていません</td></tr></table></div>
+        </div>
+      </div>
+    </div>
+    <div class="block">
+      <table class="warning-table">
+        <tr class="title"><th colspan="2">あおば県の警報・注意報（発表状況）</th></tr>
+        <tr class="header"><th colspan="2">4日6時00分更新</th></tr>
+        <tr class="header bold-top"><th class="area">北部</th><th>警報・注意報</th></tr>
+        <tr><td></td><td>大雨注意報</td></tr>
+        <tr class="header bold-top"><th class="area">南部</th><th>警報・注意報</th></tr>
+        <tr><td></td><td>警報・注意報は発表されていません</td></tr>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

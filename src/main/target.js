@@ -319,28 +319,43 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
         items = units;
       }
       // 表の中で、見出しだけの行（地域の名前）が行のまとまりごとに二つ以上あれば、その下の行の頭に、見出しの行の最初の升目を付けて読む。
-      // まとまりの前の見出しだけの行（一行目の題の行を除く。更新の時刻など）は、表の一件目の頭に付ける。
-      // 気象庁の発表状況の表で、地域名の行と「…更新」が抜け、「警報・注意報は発表されていません」の2件だけになった（2026-11-04 の Windows の確かめ）。
+      // 気象庁の発表状況の表で、地域名の行が抜け、「警報・注意報は発表されていません」の2件だけになった（2026-11-04 の Windows の確かめ）。
       const groupHead = new Map();
+      const isData = (r) => Boolean(r.querySelector('td'));
       if (items.length > 0 && !joinWith) {
         const cellText = (c) => oneLine(textLines(c, false, 'item'));
         for (const table of new Set(items.filter((it) => it.tagName === 'TR').map((it) => it.closest('table')))) {
           const rows = [...table.rows].filter((r) => (r.textContent || '').trim() || r.querySelector('td'));
-          const isData = (r) => Boolean(r.querySelector('td'));
           const groups = rows.filter((r, i) => !isData(r) && i > 0 && rows[i + 1] && isData(rows[i + 1]));
           if (groups.length < 2) continue;
-          const before = rows.slice(0, rows.indexOf(groups[0])).filter((r, i) => !(i === 0 && r.cells.length === 1));
-          const lead = before.map((r) => oneLine(textLines(r, false, 'item'))).filter(Boolean).join(' ');
           let label = '';
-          let first = true;
           for (const r of rows) {
             if (groups.includes(r)) label = r.cells[0] ? cellText(r.cells[0]) : '';
-            else if (isData(r) && items.includes(r)) {
-              groupHead.set(r, [first ? lead : '', label].filter(Boolean).join(' '));
-              first = false;
-            }
+            else if (isData(r) && items.includes(r) && label) groupHead.set(r, label);
           }
         }
+      }
+      // 表の題の行の後ろにある、升目が一つだけの見出しの行（更新の時刻など）は、一件目の頭に付けて読む。
+      // 表の中の、一件目より前の行と、分けて描いた表の頭（td の行の無い、すぐ前の表）の行を見る。題の行（一行目の升目一つの行）と、升目が二つ以上の列の名前の行は付けない。
+      // 気象庁の警戒レベル相当情報と発表状況の表で、「…更新」の時刻が抜けた（2026-11-04 の Windows の確かめ）。
+      let lead = '';
+      const firstRow = items.find((it) => it.tagName === 'TR');
+      if (firstRow && firstRow === items[0] && !overrides.has(firstRow)) {
+        const notes = (rows) => rows.filter((r, i) => !isData(r) && r.cells.length === 1 && i > 0).map((r) => oneLine(textLines(r, false, 'item'))).filter(Boolean);
+        const table = firstRow.closest('table');
+        const rows = [...table.rows];
+        const parts = notes(rows.slice(0, rows.indexOf(firstRow)));
+        // すぐ前の兄弟を4段上までさかのぼる。同じ表の写し（固定の列の表など、td の行のある表を含む兄弟）は飛ばす。それ以外の兄弟に当たったら止める。
+        let stop = false;
+        for (let n = table, d = 0; n && d < 4 && !stop; n = n.parentElement, d++) {
+          for (let p = n.previousElementSibling; p && !stop; p = p.previousElementSibling) {
+            if (p.matches('table') && p.rows.length > 0 && ![...p.rows].some(isData)) {
+              parts.push(...notes([...p.rows]));
+              stop = true;
+            } else if (!(p.matches('table') ? [p] : [...p.querySelectorAll('table')]).some((t) => [...t.rows].some(isData))) stop = true;
+          }
+        }
+        lead = parts.join(' ');
       }
       if (items.length > 0) {
         let texts = items.map((it, k) => {
@@ -389,6 +404,7 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
           const keep = texts.map((t, i) => (t.trim() !== '' ? i : -1)).filter((i) => i >= 0);
           items = keep.map((i) => items[i]);
           texts = keep.map((i) => texts[i]);
+          if (lead && !texts[0].includes(lead)) texts[0] = `${lead} ${texts[0]}`;
         }
         const lines = texts.map((t, i) => `${i + 1}件目: ${t}`);
         const text = `${items.length}件あります。\n` + lines.join('\n');
