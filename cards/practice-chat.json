@@ -1,7 +1,7 @@
 {
   "id": "practice-chat",
   "name": "ことのはチャットの画面（作り物）",
-  "description": "出典：作り物のチャットの画面。チャットのやり取りを、カードで遡ったり追いかけたりする練習です。",
+  "description": "出典：作り物のチャットの画面。チャットのやり取りを、カードでさかのぼったり、追いかけたりする練習です。",
   "url": "fixture:chat.html",
   "cards": [
     {
@@ -23,7 +23,7 @@
         "next": "li.ai",
         "find": ".body"
       },
-      "description": "自分が送った質問を、古い順に、番号を付けて全部読みます。一件を選んで Enter キーを押すと、その質問への返事を読みます。無いときは、0件と読みます"
+      "description": "自分が送った質問を、古い順に、番号を付けて全部読みます。一件を選んで Enter キーを押すと、その質問への返事を読みます。1件も無いときは、「0件」と知らせます"
     },
     {
       "id": "all-turns",
@@ -31,7 +31,7 @@
       "action": "list",
       "selector": ".log > li.turn",
       "container": ".log",
-      "description": "質問と返事を、古い順に、番号を付けて全部読みます。一件ずつ上下の矢印キーで前の発言、次の発言へ移れます"
+      "description": "質問と返事を、古い順に、番号を付けて全部読みます。上下矢印キーで、前の発言と次の発言に一件ずつ移れます"
     },
     {
       "id": "history",
@@ -39,7 +39,7 @@
       "action": "list",
       "selector": ".history-list > li",
       "container": ".history-list",
-      "description": "前に話したチャットの題を、番号を付けて全部読みます。無いときは、0件と読みます"
+      "description": "前に話したチャットの題を、番号を付けて全部読みます。1件も無いときは、「0件」と知らせます"
     },
     {
       "id": "last-code",
@@ -47,7 +47,7 @@
       "action": "list",
       "selector": ".log > li.ai:last-child .body pre",
       "container": ".log > li.ai:last-child .body",
-      "description": "いちばん新しい返事の中の、コードの塊だけを、番号を付けて読みます。無いときは、0件と読みます"
+      "description": "いちばん新しい返事の中の、コードの部分だけを、番号を付けて読みます。1件も無いときは、「0件」と知らせます"
     }
   ]
 }

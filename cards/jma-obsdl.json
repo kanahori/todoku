@@ -24,7 +24,7 @@
       "title": "地図で東京の地点を選ぶ",
       "action": "click",
       "selector": "#stationMap .station-marker > div[title^=\"地点名：東京\\a \"]",
-      "description": "東京都の地図の中の「東京」の地点を選びます。もう一度押すと、選ぶのをやめます"
+      "description": "東京都の地図の中の「東京」の地点を選びます。もう一度押すと、選んだのを取り消します"
     },
     {
       "id": "element-button",
@@ -45,7 +45,7 @@
       "title": "気温を選ぶ",
       "action": "click",
       "selector": "input.elem[name=\"element\"][value=\"201\"]",
-      "description": "日別値のときは日平均気温を選びます。もう一度押すと、選ぶのをやめます"
+      "description": "日別値のときは日平均気温を選びます。もう一度押すと、選んだのを取り消します"
     },
     {
       "id": "period-button",

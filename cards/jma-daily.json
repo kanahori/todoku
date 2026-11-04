@@ -63,7 +63,7 @@
       "action": "list",
       "selector": "#tablefix1 tr > td:nth-child(7):not(:empty)",
       "container": "#tablefix1",
-      "description": "1日から順に、値の入っている日の分だけ読みます。月の初めで値がまだ無いときは、0件と読みます"
+      "description": "1日から順に、値の入っている日の分だけ読みます。月の初めで、まだ値が1日分も無いときは、「0件」と知らせます"
     }
   ]
 }
