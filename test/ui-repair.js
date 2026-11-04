@@ -46,7 +46,15 @@ if (process.env.UI_REPAIR_REAL !== '1') {
   };
 }
 
-process.on('exit', () => fs.rmSync(work, { recursive: true, force: true }));
+// Windows では、終わる途中の Electron が userData のファイルをまだ開いていて、消すと EPERM になる（WinCC の頼み30・11/5）。
+// exit の中で投げると Electron がエラーのダイアログを出して止まるので、消せなかったら一行知らせるだけにする。
+process.on('exit', () => {
+  try {
+    fs.rmSync(work, { recursive: true, force: true });
+  } catch (e) {
+    console.log(`一時のフォルダを消せませんでした（${e.code || e.message}）。手で消してください: ${work}`);
+  }
+});
 require('../src/main/main');
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
