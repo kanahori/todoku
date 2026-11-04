@@ -404,6 +404,8 @@ if (!testHeadless()) {
   }
 }
 
+// Todoku は窓一つのアプリなので、Mac でも窓を閉じたら終える。窓の無いまま Dock に残ると、読み上げを使う人に分かりにくい
+// （2026-11-04 に Mac の包みで、窓を閉じても処理が3つ残ることを確かめた）。
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  app.quit();
 });
