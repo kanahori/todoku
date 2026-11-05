@@ -1299,6 +1299,11 @@ async function rendererYouTubeChecks() {
     check('YouTube: 一枚目に、検索の言葉が YouTube（Google）に送られ Todoku は保存しないことと、利用規約・プライバシーポリシーを開くボタンがある',
       first.includes('検索の言葉は YouTube（Google）に送られます。Todoku は保存しません。') && first.includes('YouTube の利用規約を開く')
         && first.includes('Google のプライバシーポリシーを開く') && !first.some((x) => x.includes('設定ファイルを確認する')), first);
+    check('YouTube: 一枚目のキーの説明は、ほかのアプリと同じく Home・End の一文と Esc の一文を含む',
+      first.includes('Homeキーで最初のカード、Endキーで最後のカードへ移動します。') && first.includes('Escキーで、カードの中からカードへ戻ります。'), first);
+    const emptyPlayer = await t.js("[...document.querySelectorAll('#deck > article.card')].pop().querySelectorAll('[data-item]').length === 1 ? [...document.querySelectorAll('#deck > article.card')].pop().querySelector('[data-item]').textContent : [...[...document.querySelectorAll('#deck > article.card')].pop().querySelectorAll('[data-item]')].map((x) => x.textContent)");
+    check('YouTube: 動画を選ぶ前の再生のカードは「まだ動画を選んでいません。…」の一文だけ（ボタンの説明は出さない）',
+      emptyPlayer === 'まだ動画を選んでいません。「動画を探す」か、新しい動画の一覧で一件を選んで Enter キーを押すと、ここで再生します。', emptyPlayer);
     // 探す欄で探す。
     await t.key('ArrowDown');
     await t.key('Enter');
@@ -1355,8 +1360,8 @@ async function rendererYouTubeChecks() {
     await n.js("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))");
     await n.wait(400);
     const nk = await n.js(`(() => ({ focus: document.activeElement.textContent, said: window.__said.slice() }))()`);
-    check('YouTube（API キーが無いとき）: 「YouTube の API キーが設定されていません。」と知らせ、その文に焦点を置く',
-      nk.focus === 'YouTube の API キーが設定されていません。' && nk.said.includes('YouTube の API キーが設定されていません。'), nk);
+    check('YouTube（API キーが無いとき）: 「YouTube の API キーが設定されていません。」の文に焦点を置き、知らせの欄には何も入れない（すぐ返ったので「探しています。」も言わない）',
+      nk.focus === 'YouTube の API キーが設定されていません。' && !nk.said.includes('YouTube の API キーが設定されていません。') && !nk.said.includes('探しています。'), nk);
   } finally {
     n.win.destroy();
   }

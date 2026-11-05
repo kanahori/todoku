@@ -573,10 +573,13 @@ let ytState = { card: null, iframe: null, ready: false, current: 0, volume: null
 function ytDeck(config, hasParent) {
   const texts = [
     `「${config.name}」で、YouTube の動画を探して、再生できます。`,
+    // キーの説明は、ほかのアプリのはじめのカード（appDeck）と同じ形にそろえる（Home・End の一文と Esc の一文。WinCC の確かめ）。
     '上下矢印キーでカードを選びます。',
+    'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
     'スペースキーまたはEnterキーで、カードの中に入ります。',
     '一覧の一件を選んで Enter キーを押すと、再生のカードで再生します。',
     '再生のカードでは、プレーヤーの下のボタンで、再生、一時停止、10秒戻る、10秒進む、音量の上げ下げができます。',
+    'Escキーで、カードの中からカードへ戻ります。',
     YT_PRIVACY,
   ];
   if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
@@ -605,7 +608,9 @@ function ytDeck(config, hasParent) {
     } else if (c.action === 'youtube-channel') {
       cards.push({ ...base, kind: 'yt-channel', items: [{ text: 'スペースキーまたはEnterキーで、新しい動画を読みます。', describe: true }] });
     } else if (c.action === 'youtube-player') {
-      const card = { ...base, kind: 'yt-player' };
+      // 説明（ボタンの一覧）は、動画を選んでボタンが出てから読ませる。選ぶ前は「まだ動画を選んでいません。…」の一文だけにする
+      // （無いボタンを探してしまうため。WinCC の確かめ）。
+      const card = { ...base, kind: 'yt-player', playerNote: base.note, note: undefined };
       card.items = ytPlayerItems(card);
       cards.push(card);
     }
@@ -634,21 +639,25 @@ async function ytLoad(card) {
     return;
   }
   busy = true;
-  announce(searching ? '探しています。' : '読んでいます。');
+  // 「探しています。」「読んでいます。」は、0.5秒たっても終わらないときだけ言う（キーが無いときなど、すぐ返るときは言わない。
+  // すぐ返ったのに言うと、理由の文と重なって読まれた。WinCC の確かめ）。
+  const loadingTimer = setTimeout(() => announce(searching ? '探しています。' : '読んでいます。'), LOADING_DELAY_MS);
   let r;
   try {
     r = await window.cardsApi.youtubeList(card.appId, card.cardId, searching ? card.query : '');
   } catch (e) {
     r = { ok: false, message: 'YouTube から読めませんでした。' };
   } finally {
+    clearTimeout(loadingTimer);
     busy = false;
   }
   const head = searching ? ytSearchItems(card) : [];
   if (!r.ok) {
     card.items = [...head, { text: endSentence(r.message), result: true }];
     card.heading = card.title;
-    refreshCard(card, { focusResult: true });
-    announce(endSentence(r.message), true);
+    // 焦点を理由の文に移すので、知らせの欄には同じ文を入れない（一度だけ読まれるように）。
+    // カードが描き直せなかった（別の束へ移っていた）ときだけ、知らせの欄で言う。
+    if (!refreshCard(card, { focusResult: true })) announce(endSentence(r.message), true);
     return;
   }
   card.ytItems = r.items;
@@ -686,6 +695,7 @@ function ytPlay(video) {
   }
   const card = deck.cards[index];
   card.video = video;
+  card.note = card.playerNote;
   card.heading = `${card.title}（${video.title}）`;
   card.items = ytPlayerItems(card);
   ytState = { card, iframe: null, ready: false, current: 0, volume: null, pendingPlay: true };
