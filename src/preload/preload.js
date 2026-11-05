@@ -11,6 +11,13 @@ contextBridge.exposeInMainWorld('cardsApi', {
   // 出典のページを既定のブラウザで開く（URL は主の処理が設定ファイルから取る）。
   openSource: (appId) => ipcRenderer.invoke('source:open', String(appId)),
   checkCards: (appId) => ipcRenderer.invoke('cards:check', String(appId)),
+  // 元のページをそのままの見た目で前に出す・いまのページを既定のブラウザで開く（URL は主の処理が決める）。
+  revealPage: (appId) => ipcRenderer.invoke('target:reveal', String(appId)),
+  openPageExternal: (appId) => ipcRenderer.invoke('page:open-external', String(appId)),
+  // 「このページのリンク」: リンクを読む・行き先の束を探す・一件を既定のブラウザで開く（一件は番号で渡し、URL は渡さない）。
+  readLinks: (appId) => ipcRenderer.invoke('page:links', String(appId)),
+  findDeckForLink: (url) => ipcRenderer.invoke('link:find', String(url)),
+  openLinkExternal: (appId, index) => ipcRenderer.invoke('link:open-external', String(appId), Number(index)),
   // YouTube のカード: 動画を探す・チャンネルの新しい動画を読む（キーは主の処理だけが持つ）。利用規約・プライバシーポリシーを開く。
   youtubeList: (appId, cardId, query) => ipcRenderer.invoke('youtube:list', String(appId), String(cardId), String(query || '')),
   openPolicy: (name) => ipcRenderer.invoke('policy:open', String(name)),

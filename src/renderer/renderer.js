@@ -202,6 +202,7 @@ function renderItems(items) {
     if (kind === 'button') {
       const b = el('button', { type: 'button', 'data-item': '', tabindex: '-1', class: 'item-button', text: item.button });
       if (item.yt) b.setAttribute('data-yt', item.yt);
+      if (item.keys) b.setAttribute('aria-keyshortcuts', item.keys);
       b.addEventListener('click', () => item.onPress(b));
       if (item.result) b.setAttribute('data-result', '');
       if (item.pressed !== undefined) b.setAttribute('aria-pressed', String(Boolean(item.pressed)));
@@ -421,7 +422,7 @@ async function readCard(card) {
   }, PROGRESS_EVERY_MS);
   let result;
   try {
-    result = await window.cardsApi.runCard(card.appId, card.cardId);
+    result = card.links ? await window.cardsApi.readLinks(card.appId) : await window.cardsApi.runCard(card.appId, card.cardId);
   } catch (e) {
     result = { ok: false, message: e.message };
   } finally {
@@ -444,6 +445,11 @@ async function readCard(card) {
       card.items = texts.map((t) => ({ listItem: t }));
       // 一件ごとの手がかり（文字ではなく短いハッシュ）。一件を選んだとき、ページの今の同じ項目を探すのに使う。
       card.itemKeys = Array.isArray(result.keys) ? result.keys.slice() : null;
+      // 「このページのリンク」: 一件の上の Enter で、そのリンクの行き先へ進む（followLink）。
+      if (card.links) {
+        card.linkList = Array.isArray(result.links) ? result.links.slice() : [];
+        card.onItemEnter = (i) => followLink(card, i);
+      }
       card.heading = `${card.title}（${count}件）`;
       // 一件に結び付いた所（itemTarget）のあるカードは、一覧の後に、Enter で何が起きるかの一文を置く。
       if (card.itemTarget) card.items.push({ text: `一件を選んで Enter キーを押すと、その${card.itemTarget.label}を読みます。` });
@@ -1076,7 +1082,10 @@ async function startGenerate(card) {
   }
   busy = true;
   const started = Date.now();
-  card.heading = `${CREATE_HEADING}（作っています）`;
+  // 見出しと、作れなかったとき・作れたときに戻す項目は、カードごと（はじめの束の作るカードと、リンクの確認のカード）。
+  const baseHeading = card.baseHeading || CREATE_HEADING;
+  const againItems = () => (card.restoreItems ? card.restoreItems() : createItems(card)).map(({ result: _r, ...it }) => it);
+  card.heading = `${baseHeading}（作っています）`;
   card.items = [{ text: 'カードを作っています。長いときは90秒ほどかかります。\n作り終わると、作ったカードを開きます。', result: true, loading: true }];
   // 焦点を入力欄から「カードを作っています。」の項目へ移してから、入力欄を外す（refreshCard の中）。
   const node = refreshCard(card, { focusResult: true });
@@ -1097,27 +1106,31 @@ async function startGenerate(card) {
     busy = false;
   }
   if (card.node) card.node.removeAttribute('aria-busy');
-  card.heading = CREATE_HEADING;
+  card.heading = baseHeading;
   const wasInside = Boolean(card.node && card.node.isConnected && card.node.contains(document.activeElement));
   if (!r.ok) {
-    card.items = [{ text: r.message, result: true }, ...createItems(card)];
+    card.items = [{ text: r.message, result: true }, ...againItems()];
     refreshCard(card, { focusResult: wasInside });
     announce(r.message, true);
     return;
   }
-  card.urlValue = '';
-  card.items = createItems(card);
+  if (card.kind === 'create') card.urlValue = '';
+  card.items = againItems();
   refreshCard(card);
   generatedApps.add(r.config.id);
   appConfigs.push(r.config);
-  // はじめの束の「新しいページからカードを作る」の前に、作った束の行き先のカードを足す。戻ったときは、そのカードに焦点を戻す。
+  // はじめの束の「新しいページからカードを作る」の前に、作った束の行き先のカードを足す。
+  // はじめの束の作るカードから作ったときは、戻ったときに、そのカードに焦点を戻す。
   const top = stack[0];
-  const at = top.cards.indexOf(card);
+  const at = top.cards.findIndex((c) => c.kind === 'create');
   const k = at < 0 ? top.cards.length : at;
   top.cards.splice(k, 0, gotoCard(r.config));
-  top.index = k;
+  if (card.kind === 'create') top.index = k;
+  else if (top.index >= k) top.index += 1;
   refreshTopIntro();
   refreshSearchResults();
+  // リンクの確認の束から作ったときは、確認の束を外してから、作った束を開く（Esc でリンクの一覧のその一件に戻る）。
+  if (current().linkConfirm && current().cards.includes(card)) stack.pop();
   pushDeck(appDeck(r.config, true), { announcePosition: false });
   announce(r.message);
 }
@@ -1168,6 +1181,117 @@ async function exportGenerated(config) {
     r = await window.cardsApi.exportGenerated(config.id);
   } catch (e) {
     r = { ok: false, message: '設定ファイルを書き出せませんでした。' };
+  }
+  announce(r.message, !r.ok);
+}
+
+// ---- このページのリンク ----
+// アプリの束の最後のほうに、そのページのリンクを一件ずつ読むカードを置く（設定ファイルの束にも、作った束にも）。
+// 一件の上の Enter で、行き先に Todoku の束があればその束へ進む。無ければ、カードを作るか・既定のブラウザで開くか・やめるかを確かめる。
+// リンクの文字はこのパソコンの中で読むだけで、Claude に送るのは今までどおりページの構造だけ。
+const LINKS_CARD_ID = '__links';
+const LINKS_TITLE = 'このページのリンク';
+const LINKS_NOTE = '一件を選んで Enter キーを押すと、そのページへ移ります。まだ読めないページは、開く前に確認します。';
+const LINK_CONFIRM_TEXT = 'このページは、まだ Todoku で読めるようになっていません。これから Claude がカードを作ります。90秒ほどかかります。';
+
+function linksCard(config) {
+  return {
+    kind: 'read', action: 'list', links: true, appId: config.id, cardId: LINKS_CARD_ID, title: LINKS_TITLE, heading: LINKS_TITLE,
+    hasContainer: true, itemTarget: null, note: LINKS_NOTE, items: [],
+  };
+}
+
+async function followLink(card, i) {
+  const link = (card.linkList || [])[i];
+  if (!link || busy) return;
+  let found = null;
+  try {
+    found = await window.cardsApi.findDeckForLink(link.url);
+  } catch (e) {
+    found = null;
+  }
+  const config = found ? appConfigs.find((c) => c.id === found.appId) : null;
+  // Esc で戻ったとき、一覧のその一件に焦点を戻す（popDeck）。
+  current().returnItem = i;
+  if (config) {
+    const deck = appDeck(config, true);
+    const index = found.cardId ? Math.max(0, deck.cards.findIndex((c) => c.cardId === found.cardId)) : 0;
+    pushDeck({ ...deck, index }, { announcePosition: false });
+    announce(`「${config.name}」のカードへ移りました。`);
+    return;
+  }
+  pushDeck(linkConfirmDeck(card, link, i), { announcePosition: false });
+  const first = itemNodes(cardNodes()[0])[0];
+  if (first) first.focus();
+}
+
+function linkConfirmItems(card) {
+  return [
+    { text: LINK_CONFIRM_TEXT, result: true },
+    { button: 'カードを作って開く', onPress: () => startGenerate(card) },
+    { button: '既定のブラウザで開く', onPress: () => openLinkExternal(card) },
+    { button: 'やめる', onPress: () => { if (!busy) popDeck(); } },
+  ];
+}
+
+// 確認の束（カード一枚）。作る流れは「新しいページからカードを作る」と同じ startGenerate を使う。
+function linkConfirmDeck(fromCard, link, i) {
+  const heading = `「${link.text}」を開く`;
+  const card = { kind: 'linkConfirm', heading, baseHeading: heading, appId: fromCard.appId, linkIndex: i, urlValue: link.url };
+  card.restoreItems = () => linkConfirmItems(card);
+  card.items = linkConfirmItems(card);
+  return { name: heading, linkConfirm: true, cards: [card] };
+}
+
+async function openLinkExternal(card) {
+  let r;
+  try {
+    r = await window.cardsApi.openLinkExternal(card.appId, card.linkIndex);
+  } catch (e) {
+    r = { ok: false, message: 'リンクのページを開けませんでした。' };
+  }
+  announce(r.message, !r.ok);
+}
+
+// いま見ているアプリ（確認の束や一件を読んだ束にいるときは、そのもとのアプリ）。はじめの束では null。
+function pageAppId() {
+  for (let k = stack.length - 1; k >= 0; k--) if (stack[k].appId) return stack[k].appId;
+  return null;
+}
+
+const PAGE_KEYS_ONLY_IN_APP = 'このキーは、アプリのカードを開いているときに使えます。';
+
+// P キーと「元のページを表示する」ボタン: 元のページを、そのままの見た目で前に出す。
+async function revealPage(appId = pageAppId()) {
+  // カードを読んでいる間は、同じ窓のページを動かさない。
+  if (busy) {
+    if (!reviewing) announce('読み込み中です。少しお待ちください。');
+    return;
+  }
+  if (!appId) {
+    announce(PAGE_KEYS_ONLY_IN_APP);
+    return;
+  }
+  let r;
+  try {
+    r = await window.cardsApi.revealPage(appId);
+  } catch (e) {
+    r = { ok: false, message: '元のページを表示できませんでした。' };
+  }
+  announce(r.message, !r.ok);
+}
+
+// B キーと「いまのページを既定のブラウザで開く」ボタン。
+async function openPageExternal(appId = pageAppId()) {
+  if (!appId) {
+    announce(PAGE_KEYS_ONLY_IN_APP);
+    return;
+  }
+  let r;
+  try {
+    r = await window.cardsApi.openPageExternal(appId);
+  } catch (e) {
+    r = { ok: false, message: 'いまのページを開けませんでした。' };
   }
   announce(r.message, !r.ok);
 }
@@ -1445,8 +1569,9 @@ function endSentence(text) {
 // hasParent: 上に「Todoku」の束があるか（アプリが一つだけのときは無い）。
 function appDeck(config, hasParent = true) {
   if (config.kind === 'youtube') return ytDeck(config, hasParent);
-  const reads = config.cards.filter((c) => c.action !== 'click').length;
-  const clicks = config.cards.length - reads;
+  // 「このページのリンク」のカードも読むカードに数える。
+  const reads = config.cards.filter((c) => c.action !== 'click').length + 1;
+  const clicks = config.cards.length + 1 - reads;
   const counts = [reads > 0 ? `読むカード${reads}枚` : '', clicks > 0 ? `押すカード${clicks}枚` : ''].filter(Boolean).join('、');
   const texts = [
     `「${config.name}」の画面を、カードで読めます（${counts || 'カードはありません'}）。`,
@@ -1459,6 +1584,8 @@ function appDeck(config, hasParent = true) {
     'カードの中では、上下矢印キーで項目を一つずつ選びます。',
     'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
+    'Pキーで、元のページを、そのままの見た目で表示します。元のページでEscキーを押すと、Todoku に戻ります。',
+    'Bキーで、いまのページを既定のブラウザで開きます。',
   ];
   if (hasParent) {
     texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
@@ -1469,6 +1596,11 @@ function appDeck(config, hasParent = true) {
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);
+  // 元のページを見る・ブラウザで開くボタン（P キーと B キーと同じ働き）。
+  items.push(
+    { button: '元のページを表示する', keys: 'P', onPress: () => revealPage(config.id) },
+    { button: 'いまのページを既定のブラウザで開く', keys: 'B', onPress: () => openPageExternal(config.id) },
+  );
   // 支援者向け: 設定ファイルを点検し、当たらない行の直しの案を一件ずつ受ける・断る束へ進む（使う人の束にカードを増やさないため、ボタンにする）。
   items.push({ button: REVIEW_BUTTON, onPress: () => openReviewDeck(config) });
   // 出典のページ（sourceUrl）があれば、URL は読ませずに、開くボタンを最後の項目にする（既定のブラウザで開く）。
@@ -1508,6 +1640,7 @@ function appDeck(config, hasParent = true) {
       items: [],
     });
   }
+  cards.push(linksCard(config));
   // 自動で直した所があれば、支援者向けのカードを最後に置く。
   if (repairsOf(config.id).size > 0) cards.push(maintCard(config.id));
   return { name: config.name, appId: config.id, cards };
@@ -1562,6 +1695,19 @@ document.addEventListener('keydown', (e) => {
   if (!cardNode) return;
   const onCard = active === cardNode;
   const key = e.key;
+  // B キー（いまのページを既定のブラウザで開く）と P キー（元のページを表示する）。入力欄の中では文字の入力に任せる。
+  // 日本語入力のときも働くように、キーの位置（code）でも見る。
+  const letter = e.code === 'KeyB' || key === 'b' || key === 'B' ? 'b' : e.code === 'KeyP' || key === 'p' || key === 'P' ? 'p' : '';
+  if (letter && active.tagName !== 'INPUT') {
+    e.preventDefault();
+    if (busy) {
+      if (!reviewing) announce('読み込み中です。少しお待ちください。');
+      return;
+    }
+    if (letter === 'b') openPageExternal();
+    else revealPage();
+    return;
+  }
   const handled = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(key);
   if (!handled) return;
   // 入力欄の中の Enter（入力欄が作り始める）・スペース・Home・End（文字の入力と移動）は、入力欄に任せる。

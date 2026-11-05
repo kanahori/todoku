@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- 作り物の練習のページ（架空の「あおば町」）。「このページのリンク」のカードの検証に使う。町の名前・行き先は全部作り物。 -->
+<!-- 行き先は example.com（例に使うための名前）だけ。リンクを押すことはなく、行き先と名前を読むだけ。 -->
+<!-- 対比の最小: 文字 21:1（#000 と #ffffff）。 -->
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+  <title>あおば町のリンク（作り物）</title>
+  <style>
+    body { font-family: system-ui, sans-serif; color: #000; background: #ffffff; margin: 1rem 2rem; }
+  </style>
+</head>
+<body>
+  <a href="#main">本文へ移動</a>
+  <nav aria-label="町のメニュー">
+    <ul id="menu">
+      <li><a href="https://example.com/aoba/kurashi/">くらしの案内</a></li>
+      <li><a href="https://example.com/aoba/bousai/">  防災の
+        お知らせ </a></li>
+      <li><a href="https://example.com/aoba/kurashi/#gomi">くらしの案内（ごみ）</a></li>
+      <li><a href="mailto:">町へのメール</a></li>
+      <li><a href="javascript:void(0)">文字を大きくする</a></li>
+      <li><a href="https://example.com/aoba/map/"><img alt="町の地図" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></a></li>
+      <li><a href="https://example.com/aoba/nameless/"></a></li>
+    </ul>
+  </nav>
+  <main id="main">
+    <h1>あおば町のリンク（作り物）</h1>
+    <p>町のページへのリンクを並べた作り物のページです。</p>
+  </main>
+  <script>
+    // 後から出てくるリンク（読み込みの後に足される）。
+    setTimeout(() => {
+      const li = document.createElement('li');
+      li.innerHTML = '<a href="https://example.com/aoba/events/" aria-label="催しの予定"></a>';
+      document.getElementById('menu').append(li);
+    }, 300);
+  </script>
+</body>
+</html>

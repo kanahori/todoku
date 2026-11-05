@@ -5,7 +5,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app, BrowserWindow, ipcMain, net, session, shell } = require('electron');
 const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
-const { checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget, closeAllTargets } = require('./target');
+const {
+  checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget, closeAllTargets, revealTarget, currentPageUrl, readLinks,
+} = require('./target');
+const { browserUrl, findDeckFor } = require('./links');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair, withTimeout } = require('./autofix');
@@ -390,6 +393,69 @@ ipcMain.handle('card:item-target', async (_event, appId, cardId, index, key) => 
 ipcMain.handle('target:show', (_event, appId) => {
   if (!configs.get(appId)) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
   return showTarget(appId) ? { ok: true } : { ok: false, message: 'ウェブアプリの窓が、まだ開いていません。カードを Enterキーで読んでください。' };
+});
+
+// 元のページを、そのままの見た目で前に出す（気象庁のような複雑なページを、そのまま見せるため）。窓がまだ無ければ開いてから出す。
+// 出した窓で Esc キーを押すと、Todoku の窓へ戻る。
+ipcMain.handle('target:reveal', async (_event, appId) => {
+  const config = configs.get(appId);
+  if (!config || config.kind === 'youtube') return { ok: false, message: 'このアプリには、表示できる元のページがありません。' };
+  try {
+    await revealTarget(BrowserWindow, config);
+    return { ok: true, message: '元のページを表示しました。元のページでEscキーを押すと、Todoku に戻ります。' };
+  } catch (e) {
+    return { ok: false, message: '元のページを表示できませんでした。ネットワークを確認してください。' };
+  }
+});
+
+// いまのページを既定のブラウザで開く。画面からは appId だけを受け取り、URL は受け取らない（ウェブアプリの窓のいまのページか、設定ファイルの url）。
+// 開くのは http:// と https:// だけ。
+ipcMain.handle('page:open-external', async (_event, appId) => {
+  const config = configs.get(appId);
+  if (!config || config.kind === 'youtube') return { ok: false, message: 'このアプリには、ブラウザで開けるページがありません。' };
+  const url = browserUrl(currentPageUrl(appId), config.url);
+  if (!url) return { ok: false, message: 'このページは、既定のブラウザでは開けません。' };
+  try {
+    await shell.openExternal(url);
+    return { ok: true, message: sourceOpenedMessage(process.platform, 'いまのページ') };
+  } catch (e) {
+    return { ok: false, message: 'いまのページを開けませんでした。' };
+  }
+});
+
+// 「このページのリンク」のカード: 設定ファイルの url のページのリンクを読む（アプリごとに最後に読んだ一覧を控える）。
+// リンクの文字は読み上げに渡すだけで、Claude には送らない。
+const lastLinks = new Map();
+ipcMain.handle('page:links', async (_event, appId) => {
+  const config = configs.get(appId);
+  if (!config || config.kind === 'youtube') return { ok: false, where: '(なし)', message: 'このアプリには、リンクを読むページがありません。' };
+  try {
+    const r = await readLinks(BrowserWindow, config);
+    if (!r.ok) return r;
+    lastLinks.set(appId, r.links);
+    return { ok: true, action: 'list', items: r.links.map((l) => l.text), links: r.links, truncated: r.truncated };
+  } catch (e) {
+    return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
+  }
+});
+
+// リンクの行き先に Todoku の束（設定ファイル・作った束）があるかを探す。結果は { appId, cardId } か null。
+ipcMain.handle('link:find', (_event, url) => {
+  const found = findDeckFor(String(url || ''), [...configs.values()]);
+  return found ? { appId: found.config.id, cardId: found.cardId } : null;
+});
+
+// 最後に読んだリンクの一覧の index 件目（0 から）を、既定のブラウザで開く。画面からは URL を受け取らない。
+ipcMain.handle('link:open-external', async (_event, appId, index) => {
+  const link = (lastLinks.get(appId) || [])[Number(index)];
+  const url = link ? externalUrl(link.url) : null;
+  if (!url) return { ok: false, message: 'そのリンクは、もうありません。「このページのリンク」をもう一度読んでください。' };
+  try {
+    await shell.openExternal(url);
+    return { ok: true, message: sourceOpenedMessage(process.platform, `「${link.text}」のページ`) };
+  } catch (e) {
+    return { ok: false, message: 'リンクのページを開けませんでした。' };
+  }
 });
 
 // 一行の記録を、標準の出力と userData の log.txt に残す（Windows の包みでは標準の出力が見えないため）。

@@ -98,6 +98,16 @@ const ytVideos = [
 ];
 
 const opened = [];
+// 元のページを表示する・いまのページを既定のブラウザで開く・リンクの一件を既定のブラウザで開く、を頼まれた appId（と番号）。
+const revealed = [];
+const pagesOpened = [];
+const linksOpened = [];
+// 「このページのリンク」の作り物の答え。一件目は Todoku の束がある行き先、二件目は無い行き先（作り物の町のページ）、三件目は作れない行き先。
+const fakeLinks = [
+  { text: '読めるページ（作り物）', url: 'https://example.com/known/' },
+  { text: '作り物の町のページ', url: 'https://example.com/town' },
+  { text: '作れないページ（作り物）', url: 'https://example.com/fail-link' },
+];
 const undone = [];
 const generated = [];
 const exported = [];
@@ -168,6 +178,24 @@ contextBridge.exposeInMainWorld('cardsApi', {
     setTimeout(() => resolve(a.result), a.delay);
   }),
   showTarget: async () => ({ ok: true }),
+  revealPage: async (appId) => {
+    revealed.push(appId);
+    return { ok: true, message: '元のページを表示しました。元のページでEscキーを押すと、Todoku に戻ります。' };
+  },
+  openPageExternal: async (appId) => {
+    pagesOpened.push(appId);
+    return { ok: true, message: 'いまのページを、既定のブラウザで開きました。Todoku に戻るには Command キーと Tab キーを押してください。' };
+  },
+  readLinks: async () => {
+    await new Promise((r) => setTimeout(r, 20));
+    return { ok: true, action: 'list', items: fakeLinks.map((l) => l.text), links: fakeLinks.slice(), truncated: false };
+  },
+  // 読めるページの行き先だけ、試しのアプリの「すぐ返る一覧」のカードがあることにする。
+  findDeckForLink: async (url) => (url === 'https://example.com/known/' ? { appId: 'fake-app', cardId: 'fast-list' } : null),
+  openLinkExternal: async (appId, index) => {
+    linksOpened.push(`${appId}/${index}`);
+    return { ok: true, message: `「${fakeLinks[index].text}」のページを、既定のブラウザで開きました。` };
+  },
   // 出典のページは開かず、呼ばれた appId を控えるだけ。
   openSource: async (appId) => {
     opened.push(appId);
@@ -240,6 +268,9 @@ contextBridge.exposeInMainWorld('cardsApi', {
 // 試しから、出典のページを開くように頼まれた回数と appId を見るため。
 contextBridge.exposeInMainWorld('fakeLog', {
   opened: () => opened.slice(),
+  revealed: () => revealed.slice(),
+  pagesOpened: () => pagesOpened.slice(),
+  linksOpened: () => linksOpened.slice(),
   undone: () => undone.slice(),
   generated: () => generated.slice(),
   exported: () => exported.slice(),

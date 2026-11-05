@@ -17,7 +17,9 @@ const { dialog: errorDialog } = require('electron');
 errorDialog.showErrorBox = (title, content) => { console.log(`エラー: ${title} ${content}`); app.exit(3); };
 process.on('uncaughtException', (e) => { console.log(`エラー: ${e.stack}`); app.exit(3); });
 const { loadConfigFile } = require('../src/main/config');
-const { runCard, checkCards, setHomeWindow, showTarget, closeTarget, readItemTarget } = require('../src/main/target');
+const {
+  runCard, checkCards, setHomeWindow, showTarget, closeTarget, readItemTarget, readLinks, revealTarget, isRevealed, currentPageUrl,
+} = require('../src/main/target');
 
 const checks = [];
 function check(name, ok, detail) {
@@ -382,6 +384,7 @@ async function main() {
 
   await autoRepairChecks();
   await focusAndSeparatorChecks();
+  await linksAndRevealChecks();
   await generateChecks();
   // カードの画面の試しは、表示設定の口を本物（settings.js）にして、一時のフォルダの settings.json につなぐ。
   const { createSettingsStore, registerSettingsHandlers } = require('../src/main/settings');
@@ -401,6 +404,7 @@ async function main() {
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
     await rendererSearchChecks(settingsStore);
+    await rendererLinksChecks();
   } finally {
     fs.rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -490,6 +494,54 @@ async function focusAndSeparatorChecks() {
       office.ok && office.text === '役場の窓口\n役場の写真 あおば町役場\n電話 （作り物の番号）\n窓口 8時30分から17時15分', office.text);
   } finally {
     closeTarget('grab');
+    setHomeWindow(null);
+    home.destroy();
+  }
+}
+
+// 「このページのリンク」と「元のページを表示する」（主の処理の側）。作り物のあおば町のページ（test/fixtures/links.html）で確かめる。
+async function linksAndRevealChecks() {
+  const home = new BrowserWindow({ width: 480, height: 320, title: 'Todoku（検証）', show: false });
+  const page = { id: 'links-test', name: 'あおば町のリンク（作り物）', url: 'fixture:links.html', cards: [{ id: 'main', title: '本文', action: 'read', selector: 'main' }] };
+  const other = { id: 'reveal-test', name: 'あおば町の練習（作り物）', url: 'fixture:practice.html', cards: [{ id: 'inbox', title: '受信箱', action: 'read', selector: 'body' }] };
+  try {
+    await home.loadURL('data:text/html;charset=utf-8,<title>Todoku</title><p>検証</p>');
+    setHomeWindow(home);
+    // リンク: http と https だけ・同じ行き先は一つ・ページの中の飛び先と名前の無いものは除く・名前は文字か aria-label か画像の alt・後から出てくるものも読む。
+    const r = await readLinks(BrowserWindow, page);
+    const got = r.ok ? r.links.map((l) => `${l.text} ${l.url}`) : r;
+    check('リンク: ページのリンクを、名前と行き先で、ページの順に一件ずつ読む（重なり・ページの中の飛び先・mailto・javascript・名前の無いものは除く）',
+      r.ok && r.truncated === false && JSON.stringify(got) === JSON.stringify([
+        'くらしの案内 https://example.com/aoba/kurashi/',
+        '防災の お知らせ https://example.com/aoba/bousai/',
+        '町の地図 https://example.com/aoba/map/',
+        '催しの予定 https://example.com/aoba/events/',
+      ]), got);
+    check('リンク: 読んだ後のウェブアプリの窓は、設定ファイルの url のページにいる', currentPageUrl('links-test').endsWith('/test/fixtures/links.html'), currentPageUrl('links-test'));
+
+    // 元のページを表示する: 窓がまだ無いアプリでも開いてから出し、焦点を取れる窓にする。Esc キーで Todoku の窓へ戻り、焦点を取れない窓に戻る。
+    await revealTarget(BrowserWindow, other);
+    const win = BrowserWindow.getAllWindows().find((w) => w !== home && w.getTitle() === '練習のページ（作り物）');
+    const opened = Boolean(win) && win.webContents.getURL().endsWith('/test/fixtures/practice.html');
+    const focusable = Boolean(win) && win.isFocusable();
+    const hiddenOther = BrowserWindow.getAllWindows().filter((w) => w !== home && w !== win).every((w) => !w.isVisible());
+    let prevented = 0;
+    const press = (key) => win.webContents.emit('before-input-event', { preventDefault: () => { prevented += 1; } }, { type: 'keyDown', key });
+    press('a');
+    const afterA = isRevealed('reveal-test');
+    press('Escape');
+    const afterEsc = isRevealed('reveal-test');
+    home.emit('focus');
+    check('元のページ: 窓が無いアプリでも開いてから前に出し、焦点を取れる窓にする。ほかのアプリの窓は隠す',
+      opened && focusable && hiddenOther && afterA === true, { opened, focusable, hiddenOther, afterA });
+    check('元のページ: 出した窓で Esc キーを押すと、ページには渡さずに Todoku の窓へ戻り、窓は焦点を取れない窓に戻る',
+      afterEsc === false && prevented === 1 && win.isFocusable() === false, { afterEsc, prevented, focusable: win.isFocusable() });
+    // 出していない窓の Esc はページに渡す（ページの中のダイアログを閉じる Esc などを横取りしない）。
+    press('Escape');
+    check('元のページ: 出していないときの Esc キーは横取りしない', prevented === 1, { prevented });
+  } finally {
+    closeTarget('links-test');
+    closeTarget('reveal-test');
     setHomeWindow(null);
     home.destroy();
   }
@@ -1643,9 +1695,9 @@ async function rendererFocusChecks() {
         && maintTexts.some((t) => /^2026年11月3日 \d+時05分$/.test(t))
         && maintTexts.includes('「画面が変わった読む所」の直しを設定ファイルに書く（ほかの人にも配れるようにする）') && maintTexts.includes('「画面が変わった読む所」を直す前に戻す'), maintTexts);
 
-    // 直す前に戻す（読む所のカードの中のボタン）。支援者向けのカードから3枚上（直せない押す所・直せない読む所の上）。
+    // 直す前に戻す（読む所のカードの中のボタン）。支援者向けのカードから4枚上（このページのリンク・直せない押す所・直せない読む所の上）。
     await key('Escape');
-    for (let k = 0; k < 3; k++) await key('ArrowUp');
+    for (let k = 0; k < 4; k++) await key('ArrowUp');
     await key('Enter');
     await wait(900);
     await key('End');
@@ -1791,7 +1843,7 @@ async function rendererGenerateChecks() {
     const deckHeadings = await headings();
     check('作り終えたら、その束を開き、「「作り物の町のページ」のカードを2枚作りました。」と一度だけ知らせる',
       doneSaid === '「作り物の町のページ」のカードを2枚作りました。' && done.tag === 'ARTICLE' && done.heading === '作り物の町のページ'
-        && JSON.stringify(deckHeadings) === JSON.stringify(['作り物の町のページ', '新着', '本文 1']), { doneSaid, done, deckHeadings });
+        && JSON.stringify(deckHeadings) === JSON.stringify(['作り物の町のページ', '新着', '本文 1', 'このページのリンク']), { doneSaid, done, deckHeadings });
 
     await key('Enter');
     await key('End');
@@ -2084,7 +2136,7 @@ async function rendererSearchChecks(settingsStore) {
     const movedPos = await t.status();
     check('探す欄: 見つかったカードの中は「「アプリの名前」の「〇〇」へ移る」のボタンで、押すとそのアプリの束のそのカードへ移り、位置を知らせる',
       first.text === '「試しのアプリ（作り物）」の「すぐ返る読む所」へ移る' && second.text === '「試しのアプリ（作り物）」の「すぐ返る一覧」へ移る'
-        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '7枚中3枚目', { first, second, moved, movedPos });
+        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '8枚中3枚目', { first, second, moved, movedPos });
     await t.key('Escape');
     await t.wait(100);
     const backTop = await t.active();
@@ -2144,6 +2196,121 @@ async function rendererSearchChecks(settingsStore) {
       JSON.stringify(headsEmpty) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
         && countEmpty === '探す言葉を入れると、ここに見つかった数が出ます。' && outEmpty.tag === 'ARTICLE' && outEmpty.heading === 'カードを探す',
       { headsEmpty, countEmpty, outEmpty });
+  } finally {
+    t.win.destroy();
+  }
+}
+
+// 「このページのリンク」・リンクの行き先の確認（三つの選び方）・P キーと B キーと、はじめのカードのボタン（偽の cardsApi で。本物の Claude は呼ばない）。
+async function rendererLinksChecks() {
+  const t = await openRendererWindow(null);
+  const pressLetter = (k) => t.js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, code: ${JSON.stringify(`Key${k.toUpperCase()}`)}, bubbles: true, cancelable: true }))`);
+  const alertSaid = () => t.js("document.getElementById('alert').textContent");
+  try {
+    // はじめの束では、P キーと B キーは働かず、そう知らせる。
+    await pressLetter('p');
+    await t.wait(150);
+    const topSaid = await t.status();
+    check('P キー: はじめの束では「このキーは、アプリのカードを開いているときに使えます。」と知らせ、何も開かない',
+      topSaid === 'このキーは、アプリのカードを開いているときに使えます。' && JSON.stringify(await t.js('window.fakeLog.revealed()')) === '[]', topSaid);
+
+    for (let k = 0; k < 3; k++) await t.key('ArrowDown');
+    await t.key('Enter');
+    const info = await t.js(`(() => {
+      const card = document.activeElement.closest('article.card');
+      return { heading: card.querySelector('h2').textContent,
+        texts: [...card.querySelectorAll('p[data-item]')].map((n) => n.textContent),
+        buttons: [...card.querySelectorAll('button[data-item]')].map((b) => b.textContent + (b.getAttribute('aria-keyshortcuts') ? '/' + b.getAttribute('aria-keyshortcuts') : '')) };
+    })()`);
+    check('アプリのはじめのカード: P キーと B キーの説明があり、「元のページを表示する」（P）と「いまのページを既定のブラウザで開く」（B）のボタンがある',
+      info.heading === '試しのアプリ（作り物）'
+        && info.texts.includes('Pキーで、元のページを、そのままの見た目で表示します。元のページでEscキーを押すと、Todoku に戻ります。')
+        && info.texts.includes('Bキーで、いまのページを既定のブラウザで開きます。')
+        && JSON.stringify(info.buttons.slice(0, 2)) === JSON.stringify(['元のページを表示する/P', 'いまのページを既定のブラウザで開く/B'])
+        && info.buttons[info.buttons.length - 1] === '出典のページを開く', info);
+
+    await pressLetter('p');
+    await t.wait(150);
+    const revealSaid = await t.status();
+    await pressLetter('B');
+    await t.wait(150);
+    const openSaid = await t.status();
+    check('P キーで元のページを表示し、B キーでいまのページを既定のブラウザで開き、それぞれ知らせる',
+      JSON.stringify(await t.js('window.fakeLog.revealed()')) === '["fake-app"]' && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '["fake-app"]'
+        && revealSaid === '元のページを表示しました。元のページでEscキーを押すと、Todoku に戻ります。'
+        && openSaid.startsWith('いまのページを、既定のブラウザで開きました。'), { revealSaid, openSaid });
+
+    // 「このページのリンク」は束の最後のカード。中に入るとリンクを一件ずつ読む。
+    await t.key('End');
+    const linksCardHead = await t.active();
+    await t.key('Enter');
+    await t.wait(700);
+    const firstLink = await t.active();
+    const linkItems = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + n.textContent)");
+    check('「このページのリンク」: 束の最後にあり、中に入ると、説明の一文の後にリンクを一件ずつ読み、最初の一件に焦点が移る',
+      linksCardHead.heading === 'このページのリンク' && firstLink.tag === 'LI' && firstLink.text === '読めるページ（作り物）'
+        && firstLink.heading === 'このページのリンク（3件）'
+        && JSON.stringify(linkItems) === JSON.stringify(['P:一件を選んで Enter キーを押すと、そのページへ移ります。まだ読めないページは、開く前に確認します。',
+          'LI:読めるページ（作り物）', 'LI:作り物の町のページ', 'LI:作れないページ（作り物）']), { linksCardHead, firstLink, linkItems });
+
+    // 行き先に Todoku の束があれば、その束のそのカードへ移る。Esc でリンクのその一件に戻る。
+    await t.key('Enter');
+    await t.wait(150);
+    const moved = await t.active();
+    const movedSaid = await t.status();
+    await t.key('Escape');
+    const backToLink = await t.active();
+    check('リンクの行き先に束があれば、その束のそのカードへ移って知らせ、Esc でリンクのその一件に戻る',
+      moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedSaid === '「試しのアプリ（作り物）」のカードへ移りました。'
+        && backToLink.tag === 'LI' && backToLink.text === '読めるページ（作り物）', { moved, movedSaid, backToLink });
+
+    // 行き先に束が無ければ、確かめる（作って開く・既定のブラウザで開く・やめる）。
+    await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.wait(150);
+    const ask = await t.active();
+    const choices = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('button[data-item]')].map((b) => b.textContent)");
+    check('リンクの行き先に束が無ければ、「まだ Todoku で読めるようになっていません…90秒ほどかかります。」と告げ、三つから選ばせる',
+      ask.tag === 'P' && ask.heading === '「作り物の町のページ」を開く'
+        && ask.text === 'このページは、まだ Todoku で読めるようになっていません。これから Claude がカードを作ります。90秒ほどかかります。'
+        && JSON.stringify(choices) === JSON.stringify(['カードを作って開く', '既定のブラウザで開く', 'やめる']), { ask, choices });
+
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    await t.js('document.activeElement.click()');
+    await t.wait(150);
+    const extSaid = await t.status();
+    check('確認の「既定のブラウザで開く」は、その一件を番号で頼んで開き、知らせる',
+      JSON.stringify(await t.js('window.fakeLog.linksOpened()')) === '["fake-app/1"]' && extSaid === '「作り物の町のページ」のページを、既定のブラウザで開きました。', extSaid);
+
+    await t.key('ArrowDown');
+    await t.js('document.activeElement.click()');
+    await t.wait(100);
+    const cancelled = await t.active();
+    check('確認の「やめる」で、リンクのその一件に戻る', cancelled.tag === 'LI' && cancelled.text === '作り物の町のページ', cancelled);
+
+    // 「カードを作って開く」: 作る流れは「新しいページからカードを作る」と同じ。作れたら、確認の束の代わりに作った束を開く。
+    await t.key('Enter');
+    await t.wait(150);
+    await t.key('ArrowDown');
+    await t.js('document.activeElement.click()');
+    await t.wait(150);
+    const making = await t.active();
+    await t.wait(800);
+    const made = await t.active();
+    const madeSaid = await t.status();
+    check('確認の「カードを作って開く」で、そのリンクの URL から作り、「（作っています）」の後、作った束を開いて知らせる',
+      making.text.startsWith('カードを作っています。') && making.heading === '「作り物の町のページ」を開く（作っています）'
+        && made.tag === 'ARTICLE' && made.heading === '作り物の町のページ' && madeSaid === '「作り物の町のページ」のカードを2枚作りました。'
+        && (await t.js('window.fakeLog.generated()')).includes('https://example.com/town'), { making, made, madeSaid });
+    await t.key('Escape');
+    const afterMade = await t.active();
+    await t.key('Escape');
+    await t.key('Escape');
+    const top = await t.headings();
+    check('作った束から Esc でリンクのその一件に戻り（確認の束は残らない）、はじめの束には作った束のカードが足される',
+      afterMade.tag === 'LI' && afterMade.text === '作り物の町のページ'
+        && JSON.stringify(top) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '作り物の町のページ', '新しいページからカードを作る']), { afterMade, top });
   } finally {
     t.win.destroy();
   }

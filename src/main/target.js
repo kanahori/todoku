@@ -5,6 +5,7 @@
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { watchDownload } = require('./download');
+const { pageLinks, tidyLinks, MAX_LINKS } = require('./links');
 
 const FIXTURES_DIR = path.join(__dirname, '..', '..', 'test', 'fixtures');
 const FIXTURE_NAME = /^[a-z0-9][a-z0-9-]*\.html$/;
@@ -601,12 +602,15 @@ const windows = new Map();
 // NVDA がつくば市の窓へ移り、使う人がカードの画面から取り残された（2026-11-03 の Windows の確かめ）。
 // 焦点を取れるようにするのは、使う人が「ログインの窓を前に出す」を押したとき（showTarget）だけ。次にカードを動かすときに戻す。
 const loginFocus = new Set();
+// 「元のページを表示する」で前に出した窓（id）。その窓で Esc キーを押すと、Todoku の窓へ戻る。
+const revealed = new Set();
 // カードの画面の窓（Todoku の窓）。ウェブアプリの窓に焦点が来てしまったら、ここへ戻す。
 let homeWindow = null;
 // Todoku の窓に焦点が戻ったら、ログインのために前に出していた窓を、焦点を取れない窓に戻す（見直しの7）。
 // 前は次にカードを動かすまで守りが外れたままで、その間にログインの窓のページが焦点を取ると、NVDA がそちらへ移りえた
 // （smoke で、Todoku の窓に戻った後もログインの窓が焦点を取れる窓のままで、焦点が返らないことを確かめた）。
 function endLoginFocus() {
+  revealed.clear();
   for (const id of [...loginFocus]) {
     const w = windows.get(id);
     loginFocus.delete(id);
@@ -653,6 +657,7 @@ function showQuietly(win) {
 
 function keepUnfocusable(id, win) {
   loginFocus.delete(id);
+  revealed.delete(id);
   if (win.isFocusable()) win.setFocusable(false);
 }
 
@@ -707,7 +712,16 @@ async function openTarget(BrowserWindow, config, url, options = {}) {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     windows.set(config.id, win);
     const id = config.id;
-    win.on('closed', () => { windows.delete(id); loginFocus.delete(id); });
+    win.on('closed', () => { windows.delete(id); loginFocus.delete(id); revealed.delete(id); });
+    // 「元のページを表示する」で前に出したときだけ、Esc キーで Todoku の窓へ戻る（ページには渡さない）。
+    // （node の試しの偽の窓には on が無いので、あるときだけ付ける。）
+    if (typeof win.webContents.on === 'function') {
+      win.webContents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown' || input.key !== 'Escape' || !revealed.has(id)) return;
+        event.preventDefault();
+        backToHome(id);
+      });
+    }
     // 守りの二つ目: 焦点を取れない窓でも、OS やページの動きで焦点が来たら、ログインのとき以外は Todoku の窓へ返す。
     win.on('focus', () => {
       if (loginFocus.has(id)) return;
@@ -960,11 +974,60 @@ function showTarget(appId) {
   return true;
 }
 
+// 元のページ（ウェブアプリの窓）を、そのままの見た目で前に出す。窓がまだ無ければ、設定ファイルの url を開いてから出す。
+// ほかのアプリの窓は隠す（openTarget）。出した窓で Esc キーを押すと、Todoku の窓へ戻る（backToHome）。
+async function revealTarget(BrowserWindow, config, options = {}) {
+  const existing = windows.get(config.id);
+  const now = existing && !existing.isDestroyed() ? existing.webContents.getURL() : '';
+  await openTarget(BrowserWindow, config, now || resolveUrl(config.url), options);
+  showTarget(config.id);
+  revealed.add(config.id);
+  return true;
+}
+
+// 前に出した元のページから、Todoku の窓へ戻る。Todoku の窓に焦点が戻ると、元のページの窓は焦点を取れない窓に戻る（endLoginFocus）。
+function backToHome(id) {
+  revealed.delete(id);
+  if (!homeWindow || homeWindow.isDestroyed()) return false;
+  if (!testHeadless()) {
+    homeWindow.show();
+    homeWindow.focus();
+  }
+  return true;
+}
+
+function isRevealed(id) {
+  return revealed.has(id);
+}
+
+// いまウェブアプリの窓が開いているページの URL（窓が無ければ空の文字）。
+function currentPageUrl(appId) {
+  const win = windows.get(appId);
+  return win && !win.isDestroyed() ? win.webContents.getURL() : '';
+}
+
+// 設定ファイルの url のページを開き、ページの中のリンクを読む。結果は { ok, links: [{ url, text }], truncated } か { ok: false, where, message }。
+// リンクの文字は読み上げに渡すだけで、外へは送らない。
+async function readLinks(BrowserWindow, config, options = {}) {
+  let win;
+  try {
+    win = await openTarget(BrowserWindow, config, resolveUrl(config.url), options);
+  } catch (e) {
+    return { ok: false, where: 'url', message: `ページを開けませんでした: ${e.message}` };
+  }
+  const waitMs = options.linkWaitMs ?? 4000;
+  const raw = await runWithLimit(win, `(${pageLinks.toString()})(${JSON.stringify(waitMs)})`, waitMs);
+  keepBehindHome(win);
+  const all = tidyLinks(raw, win.webContents.getURL(), MAX_LINKS + 1);
+  return { ok: true, links: all.slice(0, MAX_LINKS), truncated: all.length > MAX_LINKS };
+}
+
 // ウェブアプリの窓を全部閉じる（Todoku の窓を閉じたとき）。閉じた数を返す。
 function closeAllTargets() {
   const all = [...windows.values()];
   windows.clear();
   loginFocus.clear();
+  revealed.clear();
   let n = 0;
   for (const w of all) {
     if (!w.isDestroyed()) {
@@ -984,5 +1047,5 @@ function closeTarget(appId) {
 
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
-  readItemTarget, closeAllTargets, tidyListItems,
+  readItemTarget, closeAllTargets, tidyListItems, revealTarget, backToHome, isRevealed, currentPageUrl, readLinks,
 };
