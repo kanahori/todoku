@@ -5,10 +5,10 @@
   "cards": [
     {
       "id": "carousel",
-      "title": "トップの画像のお知らせを全部読む",
+      "title": "カルーセル（スライダー）のお知らせを全部読む",
       "action": "list",
       "selector": ".hero .slide",
-      "description": "トップページの上に、画像で順に出るお知らせです。"
+      "description": "トップページで、自動で切り替わっていくお知らせです。"
     },
     {
       "id": "news",

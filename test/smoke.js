@@ -1219,7 +1219,7 @@ async function rendererErrorTextChecks() {
     await wait(300);
     const texts = await js("[...document.querySelectorAll('#deck > article.card')[1].querySelectorAll('[data-item]')].map((n) => n.textContent)");
     check('主の処理の誤り: 「動かせませんでした」は「うまく動きませんでした。」「もう一度押してください。」と読み、「画面が変わったため」とは言わない',
-      JSON.stringify(texts) === JSON.stringify(['うまく動きませんでした。\nもう一度押してください。']), texts);
+      JSON.stringify(texts) === JSON.stringify(['うまく動きませんでした。\nもう一度 Enter キーを押してください。']), texts);
   } finally {
     win.destroy();
   }
@@ -1296,8 +1296,8 @@ async function rendererClickAnnounceChecks() {
     const fastButton = await press();
     await wait(900);
     const fastSaid = await js('window.__said.slice()');
-    check('すぐ終わる押す所: 「押しています。」を出さず、「押しました。」だけを知らせる',
-      fastButton === '「すぐ終わる押す所」を押す' && JSON.stringify(fastSaid) === JSON.stringify(['「すぐ終わる押す所」を押しました。']), { fastButton, fastSaid });
+    check('すぐ終わる押す所: 「実行しています。」を出さず、「実行しました。」だけを知らせる',
+      fastButton === '「すぐ終わる押す所」を実行する' && JSON.stringify(fastSaid) === JSON.stringify(['「すぐ終わる押す所」を実行しました。']), { fastButton, fastSaid });
     await key('Escape');
     const slowButton = await press();
     await wait(800);
@@ -1306,11 +1306,11 @@ async function rendererClickAnnounceChecks() {
     await wait(1000);
     const slowSaid = await js('window.__said.slice()');
     const buttonAfter = await js('document.activeElement.textContent');
-    check('時間のかかる押す所: 0.5秒たっても終わらなければ「押しています。」を出し（ボタンも「（押しています）」）、終わったら「押しました。」',
-      slowButton === '「時間のかかる押す所」を押す' && JSON.stringify(slowDuring) === JSON.stringify(['「時間のかかる押す所」を押しています。'])
-        && buttonDuring === '「時間のかかる押す所」を押す（押しています）'
-        && JSON.stringify(slowSaid) === JSON.stringify(['「時間のかかる押す所」を押しています。', '「時間のかかる押す所」を押しました。'])
-        && buttonAfter === '「時間のかかる押す所」を押す',
+    check('時間のかかる押す所: 0.5秒たっても終わらなければ「実行しています。」を出し（ボタンも「（実行しています）」）、終わったら「実行しました。」',
+      slowButton === '「時間のかかる押す所」を実行する' && JSON.stringify(slowDuring) === JSON.stringify(['「時間のかかる押す所」を実行しています。'])
+        && buttonDuring === '「時間のかかる押す所」を実行する（実行しています）'
+        && JSON.stringify(slowSaid) === JSON.stringify(['「時間のかかる押す所」を実行しています。', '「時間のかかる押す所」を実行しました。'])
+        && buttonAfter === '「時間のかかる押す所」を実行する',
       { slowButton, slowDuring, buttonDuring, slowSaid, buttonAfter });
   } finally {
     win.destroy();
@@ -1530,8 +1530,8 @@ async function rendererReviewChecks() {
     check('確認（API キーが無いとき）: 読めなくなった場所の一覧だけを読み、使う・使わないのボタンは出さない',
       JSON.stringify(items) === JSON.stringify([
         '読めなくなった場所が2か所あります。Claude の API キーが設定されていないので、直しの候補を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。',
-        '「締め切りを読む」（読む場所・押す場所）: ページの中に読む場所が見つかりません。',
-        '「お知らせを読む」（読む場所・押す場所）: ページの中に読む場所が見つかりません。',
+        '「締め切りを読む」（読む場所、ボタンやリンクの場所）: ページの中に読む場所が見つかりません。',
+        '「お知らせを読む」（読む場所、ボタンやリンクの場所）: ページの中に読む場所が見つかりません。',
       ]) && s.buttons.length === 0 && s.applied.length === 0
         && s.said[s.said.length - 1] === '読めなくなった場所が2か所あります。Claude の API キーが設定されていないので、直しの候補を作れません（環境変数 CARDS_ANTHROPIC_API_KEY が空です）。', { items, s });
   } finally {
@@ -1741,9 +1741,9 @@ async function rendererFocusChecks() {
     await js('document.activeElement.click()');
     await wait(300);
     const clickSaid = await js("document.getElementById('alert').textContent");
-    check('直せなかった押す所: 「押せませんでした。…。自動で直すこともできませんでした（Claude の API キーがありません）。」と知らせる',
-      pressButton.text === '「直せない押す所」を押す'
-        && clickSaid === '「直せない押す所」を押せませんでした。ページの中に読む場所が見つかりません。自動で直すこともできませんでした（Claude の API キーがありません）。',
+    check('直せなかった押す所: 「実行できませんでした。…。自動で直すこともできませんでした（Claude の API キーがありません）。」と知らせる',
+      pressButton.text === '「直せない押す所」を実行する'
+        && clickSaid === '「直せない押す所」を実行できませんでした。ページの中に読む場所が見つかりません。自動で直すこともできませんでした（Claude の API キーがありません）。',
       { pressButton, clickSaid });
 
     // 支援者向けのカードの「直す前に戻す」: 焦点は支援者向けのカードの中の最初の項目（「いまはありません」）に移る。
@@ -2093,7 +2093,7 @@ async function rendererSearchChecks(settingsStore) {
     await t.key('Enter');
     const input = await t.active();
     check('探す欄: 三枚目のカード「カードを探す」で、Enter でラベル「探す言葉」の欄へ移る（カードを選ぶと何を探すかも読む）',
-      card.heading === 'カードを探す' && described === '題と説明から、全部のアプリのカードを探します。'
+      card.heading === 'カードを探す' && described === 'タイトルと説明から、全部のアプリのカードを探します。'
         && input.tag === 'INPUT' && input.label === '探す言葉', { card, described, input });
     check('探す欄: 説明の項目に、欄の中で Enter キーを押すと何が起きるかの一文がある',
       searchTexts.includes('欄の中でEnterキーを押すと、最初に見つかったカードへ移ります。'), searchTexts);

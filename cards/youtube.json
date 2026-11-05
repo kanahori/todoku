@@ -8,7 +8,7 @@
       "id": "search",
       "title": "動画を探す",
       "action": "youtube-search",
-      "description": "探す言葉を入れて Enter キーを押すと、見つかった動画の題・長さ・公開日・チャンネル名を読みます。"
+      "description": "探す言葉を入れて Enter キーを押すと、見つかった動画のタイトル・長さ・公開日・チャンネル名を読みます。"
     },
     {
       "id": "player",

@@ -10,7 +10,7 @@
       "title": "ピックアップニュースを全部読む",
       "action": "list",
       "selector": ".pc-header section.slider .swiper-slide:not(.swiper-slide-duplicate) .box",
-      "description": "出典：筑波技術大学ホームページ。トップページの上で、横に切り替わるニュースです。"
+      "description": "出典：筑波技術大学ホームページ。トップページのスライダーで、横に切り替わっていくニュースです。"
     },
     {
       "id": "announcements",

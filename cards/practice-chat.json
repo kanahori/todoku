@@ -39,7 +39,7 @@
       "action": "list",
       "selector": ".history-list > li",
       "container": ".history-list",
-      "description": "前に話したチャットの題です。"
+      "description": "前に話したチャットのタイトルです。"
     },
     {
       "id": "last-code",

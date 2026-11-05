@@ -24,7 +24,7 @@
       "title": "地図で東京の地点を選ぶ",
       "action": "click",
       "selector": "#stationMap .station-marker > div[title^=\"地点名：東京\\a \"]",
-      "description": "もう一度押すと、選んだのを取り消します。"
+      "description": "もう一度実行すると、選んだのを取り消します。"
     },
     {
       "id": "element-button",
@@ -45,7 +45,7 @@
       "title": "気温を選ぶ",
       "action": "click",
       "selector": "input.elem[name=\"element\"][value=\"201\"]",
-      "description": "日別値のときは、日平均気温を選びます。もう一度押すと、選んだのを取り消します。"
+      "description": "日別値のときは、日平均気温を選びます。もう一度実行すると、選んだのを取り消します。"
     },
     {
       "id": "period-button",
@@ -60,21 +60,21 @@
       "action": "list",
       "selector": "#selectedStationList .selectedStText",
       "container": "#selectedStationList",
-      "description": "「データを表示」を押した後は、「メニューへ戻る」を押すと読めます。"
+      "description": "「データを表示」の後は、「メニューへ戻る」を実行すると読めます。"
     },
     {
       "id": "selected-element",
       "title": "選んだ項目",
       "action": "read",
       "selector": "#selectedElementList",
-      "description": "「データを表示」を押した後は、「メニューへ戻る」を押すと読めます。"
+      "description": "「データを表示」の後は、「メニューへ戻る」を実行すると読めます。"
     },
     {
       "id": "selected-period",
       "title": "選んだ期間",
       "action": "read",
       "selector": "#selectedPeriod",
-      "description": "「データを表示」を押した後は、「メニューへ戻る」を押すと読めます。"
+      "description": "「データを表示」の後は、「メニューへ戻る」を実行すると読めます。"
     },
     {
       "id": "load-table",
@@ -88,7 +88,7 @@
       "title": "メニューへ戻る",
       "action": "click",
       "selector": "#loadTop",
-      "description": "表を出した後に押すと、地点や項目を選ぶ画面に戻ります。選んだ地点・項目・期間は、そのまま残ります。"
+      "description": "表を出した後に実行すると、地点や項目を選ぶ画面に戻ります。選んだ地点・項目・期間は、そのまま残ります。"
     },
     {
       "id": "csv-download",

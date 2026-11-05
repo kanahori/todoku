@@ -52,7 +52,7 @@ function repairsOf(appId) {
 }
 
 // 読む所か押す所か（知らせの言い回しで使う）。
-function placeWord(action) { return action === 'click' ? '押す場所' : '読む場所'; }
+function placeWord(action) { return action === 'click' ? 'ボタンやリンクの場所' : '読む場所'; }
 
 // 直したカードの中に足す項目: 直したことの一文と「直す前に戻す」ボタン。
 function repairItems(card) {
@@ -464,7 +464,7 @@ async function readCard(card) {
     card.heading = `${card.title}（ログインが必要です）`;
     card.items = [
       {
-        button: 'ログインの窓を前に出す',
+        button: 'ログインのウィンドウを前に出す',
         result: true,
         onPress: async () => {
           const r = await window.cardsApi.showTarget(card.appId);
@@ -505,9 +505,9 @@ function unreadableText(card, result) {
   const message = String(result.message || '');
   if (message.startsWith('ページを開けませんでした')) return 'ページを開けませんでした。\nネットワークを確認してください。\nネットワークの場所が変わったときは、Todoku を起動し直してください。';
   if (message.includes('書き方')) return '設定ファイルの書き方に誤りがあります。\n支援者に知らせてください。';
-  if (message.startsWith('ログインの画面を開けませんでした')) return 'ログインの画面を開けませんでした。\nネットワークを確認してから、もう一度押してください。';
+  if (message.startsWith('ログインの画面を開けませんでした')) return 'ログインの画面を開けませんでした。\nネットワークを確認してから、もう一度 Enter キーを押してください。';
   // 主の処理で例外が起きたとき（窓が閉じられていた・ページの中の処理が落ちた など）。画面が変わったのではないので、そう言わない（見直しの6）。
-  if (result.where === '(なし)' || message.startsWith('動かせませんでした')) return 'うまく動きませんでした。\nもう一度押してください。';
+  if (result.where === '(なし)' || message.startsWith('動かせませんでした')) return 'うまく動きませんでした。\nもう一度 Enter キーを押してください。';
   // 自動で直そうとして直せなかったときは、最後に理由つきの一文を足す（見つからない → 0件のことも → 直すこともできなかった、の順）。
   const notFixed = result.autoRepairFailed ? `\n${notFixedSentence(result)}` : '';
   // 入れ物（container）のあるカードは、0件なら「（0件）」と出るので、ここに来るのは本当に見つからないときだけ。
@@ -524,17 +524,17 @@ function notFixedSentence(result) {
 // ---- 押すカード（押す前に確かめる二段）----
 function showClickConfirm(card, node) {
   card.items = [
-    { text: `「${card.title}」を押します。`, result: true },
+    { text: `「${card.title}」を実行します。`, result: true },
     {
-      button: `「${card.title}」を押す`,
+      button: `「${card.title}」を実行する`,
       onPress: async (button) => {
         if (busy) return;
         busy = true;
         // 「押しています。」は、読み込み中の知らせと同じく、0.5秒たっても終わらないときだけ出す（すぐ終われば「押しました。」だけ）。
         // 押す9枚の束で、一枚ごとに「押します。」「押す ボタン」「押しています。」「押しました。」の4つが読まれ、長かった（Windows の通し稽古・押して約1.0秒）。
         const pressingTimer = setTimeout(() => {
-          button.textContent = `「${card.title}」を押す（押しています）`;
-          announce(`「${card.title}」を押しています。`);
+          button.textContent = `「${card.title}」を実行する（実行しています）`;
+          announce(`「${card.title}」を実行しています。`);
         }, LOADING_DELAY_MS);
         const key = `${card.appId}/${card.cardId}`;
         repairingNow.delete(key);
@@ -547,21 +547,21 @@ function showClickConfirm(card, node) {
           clearTimeout(pressingTimer);
           repairingNow.delete(key);
           busy = false;
-          button.textContent = `「${card.title}」を押す`;
+          button.textContent = `「${card.title}」を実行する`;
         }
         if (r.repaired) {
           // 押す所を直したときは、押し直さない。直したことを知らせ、もう一度押すかは使う人に任せる。
           repairsOf(card.appId).set(card.cardId, r.repaired);
           card.items = (card.items || []).filter((it) => !it.repairItem).concat(repairItems(card));
-          // 押すボタンは作り直されるので、焦点は「「〇〇」を押します。」の項目へ移す（下矢印キーで押すボタンへ）。
+          // 実行するボタンは作り直されるので、焦点は「「〇〇」を実行します。」の項目へ移す（下矢印キーで押すボタンへ）。
           refreshCard(card, { focusResult: true });
           ensureMaintCard(card.appId);
-          announce(`ページが変わったので、押す場所を直しました。もう一度押すときは、「${card.title}」を押すボタンを押してください。`);
+          announce(`ページが変わったので、ボタンやリンクの場所を直しました。もう一度実行するときは、「${card.title}」を実行するボタンを押してください。`);
           return;
         }
         // 押した結果ダウンロードが始まったときは、保存したか（できなかったか）を知らせる。
         if (r.ok && r.download) announce(r.download.message, !r.download.ok);
-        else announce(r.ok ? `「${card.title}」を押しました。` : `「${card.title}」を押せませんでした。${r.message}${r.autoRepairFailed ? `。${notFixedSentence(r)}` : ''}`, !r.ok);
+        else announce(r.ok ? `「${card.title}」を実行しました。` : `「${card.title}」を実行できませんでした。${r.message}${r.autoRepairFailed ? `。${notFixedSentence(r)}` : ''}`, !r.ok);
       },
     },
     ...repairItems(card),
@@ -810,7 +810,7 @@ async function openReviewDeck(config) {
 function placeOf(where) {
   const m = /^cards\[(\d+)\]\.(\w+)$/.exec(String(where || ''));
   if (!m) return String(where || '');
-  return { selector: '読む場所・押す場所', container: '項目を囲む部分', path: 'ページ' }[m[2]] || m[2];
+  return { selector: '読む場所、ボタンやリンクの場所', container: '項目を囲む部分', path: 'ページ' }[m[2]] || m[2];
 }
 
 // 断っても、使う人の画面では、鍵があればその場で直して読む（autofix）。支援者が迷わないように、案の一覧の頭で言う。
@@ -1461,7 +1461,7 @@ function searchCard() {
         onInput: (v) => onSearchInput(v),
         onEnter: (v) => { onSearchInput(v); toFirstResult(); },
       },
-      { text: '題と説明から、全部のアプリのカードを探します。', describe: true },
+      { text: 'タイトルと説明から、全部のアプリのカードを探します。', describe: true },
       { text: '入力した後、Escキーでこのカードへ戻り、下矢印キーで、アプリごとの見つかったカードへ移ります。' },
       { text: '欄の中でEnterキーを押すと、最初に見つかったカードへ移ります。' },
       { text: searchCountText(search.query, search.total), searchCount: true },
@@ -1572,7 +1572,7 @@ function appDeck(config, hasParent = true) {
   // 「このページのリンク」のカードも読むカードに数える。
   const reads = config.cards.filter((c) => c.action !== 'click').length + 1;
   const clicks = config.cards.length + 1 - reads;
-  const counts = [reads > 0 ? `読むカード${reads}枚` : '', clicks > 0 ? `押すカード${clicks}枚` : ''].filter(Boolean).join('、');
+  const counts = [reads > 0 ? `読むカード${reads}枚` : '', clicks > 0 ? `操作するカード${clicks}枚` : ''].filter(Boolean).join('、');
   const texts = [
     `「${config.name}」の画面を、カードで読めます（${counts || 'カードはありません'}）。`,
     '上下矢印キーでカードを選びます。',
@@ -1580,7 +1580,7 @@ function appDeck(config, hasParent = true) {
     'スペースキーまたはEnterキーで、カードの中に入ります。',
     '読むカードでは、カードの中に入るときに、ウェブアプリのその場所を読みます。',
     '読むカードの上で、もう一度スペースキーまたはEnterキーを押すと、読み直します。',
-    '押すカードでは、カードの中のボタンで押します。',
+    '操作するカードでは、カードの中の「実行する」ボタンで、ページのボタンやリンクを操作します。',
     'カードの中では、上下矢印キーで項目を一つずつ選びます。',
     'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
@@ -1592,7 +1592,7 @@ function appDeck(config, hasParent = true) {
     // 基を使い慣れた方は、二枚目に表示設定があると思って探すので、在処と戻り方を言う。
     texts.push(`表示設定は、はじめの画面の「${SETTINGS_HEADING}」のカードにあります。`);
   }
-  if (clicks === 0) texts.splice(texts.indexOf('押すカードでは、カードの中のボタンで押します。'), 1);
+  if (clicks === 0) texts.splice(texts.indexOf('操作するカードでは、カードの中の「実行する」ボタンで、ページのボタンやリンクを操作します。'), 1);
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);
@@ -1661,7 +1661,7 @@ function topDeck(configs, problems) {
       'Homeキーで最初、Endキーで最後の項目へ移動します。',
       'Escキーで、カードの中からカードへ戻ります。',
       `「${SETTINGS_HEADING}」のカードで、読みやすさ、1列リフロー表示、配色を変えられます。`,
-      `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、題と説明から探せます。`,
+      `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、タイトルと説明から探せます。`,
       ...READER_TEXTS,
     ]),
   }];
@@ -1777,7 +1777,7 @@ if (window.cardsApi.onRepairing) {
   window.cardsApi.onRepairing(({ appId, cardId }) => {
     repairingNow.add(`${appId}/${cardId}`);
     const card = stack.flatMap((d) => d.cards).find((c) => c.appId === appId && c.cardId === cardId);
-    if (card && card.kind === 'click') announce('ページが変わったので、押す場所を直しています。少しお待ちください。');
+    if (card && card.kind === 'click') announce('ページが変わったので、ボタンやリンクの場所を直しています。少しお待ちください。');
   });
 }
 

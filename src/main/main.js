@@ -392,7 +392,7 @@ ipcMain.handle('card:item-target', async (_event, appId, cardId, index, key) => 
 // ウェブアプリの窓を前に出す（ログインのため）。
 ipcMain.handle('target:show', (_event, appId) => {
   if (!configs.get(appId)) return { ok: false, message: `アプリ「${appId}」の設定ファイルがありません` };
-  return showTarget(appId) ? { ok: true } : { ok: false, message: 'ウェブアプリの窓が、まだ開いていません。カードを Enterキーで読んでください。' };
+  return showTarget(appId) ? { ok: true } : { ok: false, message: 'ウェブアプリのウィンドウが、まだ開いていません。カードを Enterキーで読んでください。' };
 });
 
 // 元のページを、そのままの見た目で前に出す（気象庁のような複雑なページを、そのまま見せるため）。窓がまだ無ければ開いてから出す。

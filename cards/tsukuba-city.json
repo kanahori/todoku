@@ -11,7 +11,7 @@
       "action": "list",
       "selector": ".top-emergency .category-contents ul.list > li",
       "container": ".top-emergency .category-contents",
-      "description": "出典：つくば市公式ウェブサイト。災害などの緊急のお知らせの日付と題です。"
+      "description": "出典：つくば市公式ウェブサイト。災害などの緊急のお知らせの日付とタイトルです。"
     },
     {
       "id": "news",
@@ -19,7 +19,7 @@
       "action": "list",
       "selector": ".top-topic .news-box ul.news-list > li",
       "container": ".top-topic .news-box .list-box",
-      "description": "新しく掲載されたページの日付と題です。"
+      "description": "新しく掲載されたページの日付とタイトルです。"
     },
     {
       "id": "notice",
@@ -37,21 +37,21 @@
       "container": "#calListTable",
       "dateSelector": "td.date",
       "tagSelector": ".event_icon",
-      "description": "イベントカレンダーにある、今月の催しの日付と題です。"
+      "description": "イベントカレンダーにある、今月の催しの日付とタイトルです。"
     },
     {
       "id": "carousel",
-      "title": "トップの画像のお知らせを全部読む",
+      "title": "カルーセル（スライダー）のお知らせを全部読む",
       "action": "list",
       "selector": ".wrap-mv ul.mv-slider > li:not(.bx-clone) > a",
-      "description": "トップページの上に、画像で順に出るお知らせです。"
+      "description": "トップページで、自動で切り替わっていくお知らせです。"
     },
     {
       "id": "pickup",
       "title": "ピックアップを全部読む",
       "action": "list",
       "selector": ".top-pickup ul.pickup-slider > li:not(.bx-clone) > a",
-      "description": "トップページの「ピックアップ」に並ぶ、注目のページの案内です。"
+      "description": "トップページの「ピックアップ」のスライダーに並ぶ、注目のページの案内です。"
     },
     {
       "id": "kurashi",

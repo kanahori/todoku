@@ -786,7 +786,7 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
       }
     }
     showQuietly(win);
-    return { ok: false, needLogin: true, message: 'ログインが必要です。ウェブアプリの窓でログインしてから、もう一度カードを押してください' };
+    return { ok: false, needLogin: true, message: 'ログインが必要です。ウェブアプリのウィンドウでログインしてから、もう一度カードで Enter キーを押してください' };
   }
   if (!result.found) {
     if (result.field === 'container') return { ok: false, where: `cards[${index}].container`, message: 'container の書き方が正しくありません' };
