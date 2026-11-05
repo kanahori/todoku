@@ -100,6 +100,15 @@ const ytVideos = [
 const opened = [];
 // 元のページを表示する・いまのページを既定のブラウザで開く・リンクの一件を既定のブラウザで開く、を頼まれた appId（と番号）。
 const revealed = [];
+// ?fake=linkgroups で開いたときは、「このページのリンク」が場所ごとに分けた答え（本文2件・メニュー2件・そのほか1件）を返す。
+const linkGroupsMode = typeof location !== 'undefined' && /(^|[?&])fake=linkgroups(&|$)/.test(location.search);
+const groupedLinks = [
+  { text: '町のお知らせ', url: 'https://example.com/g/news' },
+  { text: 'となり町の案内', url: 'https://example.com/g/next' },
+  { text: 'くらしの案内', url: 'https://example.com/g/kurashi' },
+  { text: '防災のお知らせ', url: 'https://example.com/g/bousai' },
+  { text: 'English', url: 'https://example.com/g/en' },
+];
 const pagesOpened = [];
 const linksOpened = [];
 // 「このページのリンク」の作り物の答え。一件目は Todoku の束がある行き先、二件目は無い行き先（作り物の町のページ）、三件目は作れない行き先。
@@ -188,13 +197,17 @@ contextBridge.exposeInMainWorld('cardsApi', {
   },
   readLinks: async () => {
     await new Promise((r) => setTimeout(r, 20));
+    if (linkGroupsMode) {
+      return { ok: true, action: 'list', items: groupedLinks.map((l) => l.text), links: groupedLinks.slice(), truncated: false,
+        groups: [{ label: '本文', kind: 'main', indexes: [0, 1] }, { label: 'メニュー', kind: 'nav', indexes: [2, 3] }, { label: 'そのほか', kind: 'none', indexes: [4] }] };
+    }
     return { ok: true, action: 'list', items: fakeLinks.map((l) => l.text), links: fakeLinks.slice(), truncated: false };
   },
   // 読めるページの行き先だけ、試しのアプリの「すぐ返る一覧」のカードがあることにする。
   findDeckForLink: async (url) => (url === 'https://example.com/known/' ? { appId: 'fake-app', cardId: 'fast-list' } : null),
   openLinkExternal: async (appId, index) => {
     linksOpened.push(`${appId}/${index}`);
-    return { ok: true, message: `「${fakeLinks[index].text}」のページを、既定のブラウザで開きました。` };
+    return { ok: true, message: `「${(linkGroupsMode ? groupedLinks : fakeLinks)[index].text}」のページを、既定のブラウザで開きました。` };
   },
   // 出典のページは開かず、呼ばれた appId を控えるだけ。
   openSource: async (appId) => {

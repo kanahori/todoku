@@ -410,6 +410,7 @@ async function main() {
     await rendererSearchChecks(settingsStore);
     await rendererLinksChecks();
     await rendererBookmarksChecks(bookmarksFile);
+    await rendererLinkGroupsChecks();
   } finally {
     fs.rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -518,11 +519,31 @@ async function linksAndRevealChecks() {
     const got = r.ok ? r.links.map((l) => `${l.text} ${l.url}`) : r;
     check('リンク: ページのリンクを、名前と行き先で、ページの順に一件ずつ読む（重なり・ページの中の飛び先・mailto・javascript・名前の無いものは除く）',
       r.ok && r.truncated === false && JSON.stringify(got) === JSON.stringify([
+        'English https://example.com/aoba/en/',
+        'スマートフォン版を表示 https://example.com/aoba/sp/',
         'くらしの案内 https://example.com/aoba/kurashi/',
         '防災の お知らせ https://example.com/aoba/bousai/',
         '町の地図 https://example.com/aoba/map/',
         '催しの予定 https://example.com/aoba/events/',
+        'お知らせ一 https://example.com/aoba/news/1',
+        '春の催し https://example.com/aoba/events/spring',
+        'となり町の案内 https://example.com/aoba/related/',
+        '個人情報の取り扱い https://example.com/aoba/privacy/',
       ]), got);
+    // 場所ごとに分ける: 本文 → 見出しのまとまり → メニュー（aria-label の名前）→ フッター → そのほか（言語とスマートフォン版）。合計は全部の件数。
+    const { groupLinks } = require('../src/main/links');
+    const groups = r.ok ? groupLinks(r.links) : [];
+    const shape = groups.map((g) => `${g.label}:${g.indexes.map((k) => r.links[k].text).join('|')}`);
+    const total = groups.reduce((n, g) => n + g.indexes.length, 0);
+    check('リンク: ページの場所ごとに分け（本文・本文の中の見出しのまとまり・見出しのまとまり・メニュー・フッター・そのほかの順）、場所ごとの件数の合計は全部の件数と同じ',
+      JSON.stringify(shape) === JSON.stringify([
+        '本文:お知らせ一',
+        '町の催し:春の催し',
+        '関連するページ:となり町の案内',
+        '町のメニュー:くらしの案内|防災の お知らせ|町の地図|催しの予定',
+        'フッター:個人情報の取り扱い',
+        'そのほか:English|スマートフォン版を表示',
+      ]) && total === r.links.length && new Set(groups.flatMap((g) => g.indexes)).size === r.links.length, { shape, total });
     check('リンク: 読んだ後のウェブアプリの窓は、設定ファイルの url のページにいる', currentPageUrl('links-test').endsWith('/test/fixtures/links.html'), currentPageUrl('links-test'));
 
     // 元のページを表示する: 窓がまだ無いアプリでも開いてから出し、焦点を取れる窓にする。Esc キーで Todoku の窓へ戻り、焦点を取れない窓に戻る。
@@ -1929,7 +1950,7 @@ async function rendererGenerateChecks() {
 }
 
 // カードの画面を、偽物の cardsApi（test/renderer-preload.js）と本物の表示設定の口で開く。読み上げの操作（キー）で動かすための道具を返す。
-async function openRendererWindow(settingsStore) {
+async function openRendererWindow(settingsStore, search = '') {
   const { attachZoomKeys } = require('../src/main/settings');
   const win = new BrowserWindow({
     show: false,
@@ -1939,7 +1960,7 @@ async function openRendererWindow(settingsStore) {
   if (settingsStore) {
     attachZoomKeys(win.webContents, settingsStore, (message) => { if (!win.isDestroyed()) win.webContents.send('settings:zoom', { message }); });
   }
-  await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'));
+  await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), search ? { search } : {});
   // 隠した窓でも、中身に焦点を渡す（:focus の見た目を測るため）。
   win.webContents.focus();
   const js = (code) => win.webContents.executeJavaScript(code);
@@ -2526,6 +2547,60 @@ async function rendererBookmarksChecks(bookmarksFile) {
     t = await openRendererWindow(null);
     const broken = await t.headings();
     check('保存のファイルが壊れていても、最初のページを開ける（フォルダも表示名も無いものとして）', JSON.stringify(broken) === JSON.stringify(fresh), broken);
+  } finally {
+    t.win.destroy();
+  }
+}
+
+// 場所ごとのリンクのカード（偽の cardsApi が、本文・メニュー・そのほかの三つに分けた答えを返す）。
+async function rendererLinkGroupsChecks() {
+  const t = await openRendererWindow(null, 'fake=linkgroups');
+  try {
+    for (let k = 0; k < 3; k++) await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.key('End');
+    await t.key('ArrowUp');
+    const linksCard = await t.active();
+    await t.key('Enter');
+    await t.wait(700);
+    const deck = await t.active();
+    const heads = await t.headings();
+    const groupsSaid = await t.status();
+    check('場所ごとのリンク: 「このページのリンク」を読むと、場所ごとのカードの束（本文・メニュー・そのほか）を開き、件数と枚数を一度に知らせる。件数の合計は全部の件数',
+      linksCard.heading === 'このページのリンク' && deck.tag === 'ARTICLE' && deck.heading === '本文（リンク2件）'
+        && JSON.stringify(heads) === JSON.stringify(['本文（リンク2件）', 'メニュー（リンク2件）', 'そのほか（リンク1件）'])
+        && groupsSaid === '「このページのリンク」から5件読みました。場所ごとに3枚のカードに分けました。', { linksCard, deck, heads, groupsSaid });
+
+    // メニューのカードの二件目（全体の四件目）を選んで、確認から既定のブラウザで開く: 主の処理へは全体の番号で頼む。
+    await t.key('ArrowDown');
+    await t.key('Enter');
+    const first = await t.active();
+    await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.wait(150);
+    const ask = await t.active();
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    await t.js('document.activeElement.click()');
+    await t.wait(150);
+    const opened = await t.js('window.fakeLog.linksOpened()');
+    await t.key('ArrowDown');
+    await t.js('document.activeElement.click()');
+    await t.wait(100);
+    const back = await t.active();
+    check('場所ごとのリンク: カードの中で一件を選ぶと確認を出し、既定のブラウザで開くときは全体の番号で頼み、「やめる」でそのカードのその一件に戻る',
+      first.tag === 'LI' && first.text === 'くらしの案内' && ask.heading === '「防災のお知らせ」を開く'
+        && JSON.stringify(opened) === '["fake-app/3"]' && back.tag === 'LI' && back.text === '防災のお知らせ' && back.heading === 'メニュー（リンク2件）',
+      { first, ask, opened, back });
+
+    // Esc で「このページのリンク」のカードへ戻ると、分けたことの一文と、場所ごとのカードを開き直すボタンがある。
+    await t.key('Escape');
+    await t.key('Escape');
+    const linksBack = await t.active();
+    const items = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + n.textContent)");
+    check('場所ごとのリンク: Esc で「このページのリンク（5件）」へ戻り、中に「5件のリンクを、ページの場所ごとに3枚のカードに分けました。」と開き直すボタンがある',
+      linksBack.heading === 'このページのリンク（5件）' && items.includes('P:5件のリンクを、ページの場所ごとに3枚のカードに分けました。')
+        && items.includes('BUTTON:場所ごとのリンクのカードを開く'), { linksBack, items });
   } finally {
     t.win.destroy();
   }

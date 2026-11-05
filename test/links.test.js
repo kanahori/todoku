@@ -19,7 +19,7 @@ test('リンクの一覧: http と https だけ・ページの中の飛び先と
     { href: 'https://example.com/aoba/nameless/', text: '   ' },
     null,
   ];
-  assert.deepEqual(tidyLinks(raw, PAGE), [
+  assert.deepEqual(tidyLinks(raw, PAGE).map(({ url, text }) => ({ url, text })), [
     { url: 'https://example.com/aoba/kurashi/', text: 'くらしの 案内' },
     { url: 'http://example.org/', text: '外のページ' },
   ]);
@@ -50,4 +50,39 @@ test('行き先の束: 束の url と合えばその束、カードの path の�
   assert.deepEqual(findDeckFor('https://example.com/weather/', configs), { config: configs[3], cardId: null });
   assert.equal(findDeckFor('https://example.com/other/', configs), null);
   assert.equal(findDeckFor('', configs), null);
+});
+
+const link = (text, kind, label = '', extra = {}) => ({ url: `https://example.com/${encodeURIComponent(text)}`, text, area: { key: `${kind}-${label}`, kind, label }, ...extra });
+
+test('場所ごとに分ける: 本文を先に、ページの上とフッターは後に、言語の切り替えなどの小さな操作は「そのほか」へ。全部のリンクがちょうど一度ずつ入る', () => {
+  const { groupLinks } = require('../src/main/links');
+  const links = [
+    link('English', 'header', '', { lang: true }),
+    link('スマートフォン版を表示', 'header'),
+    link('サイトマップ', 'header'),
+    link('くらしの案内', 'nav', 'グローバルナビゲーション'),
+    link('お知らせ一', 'main'),
+    link('観光の案内', 'heading', '関連するページ'),
+    link('個人情報の取り扱い', 'footer'),
+    link('どこにも無い所', 'none'),
+    link('防災', 'nav'),
+    link('ごみ', 'nav'),
+  ];
+  const groups = groupLinks(links);
+  assert.deepEqual(groups.map((g) => [g.label, g.indexes]), [
+    ['本文', [4]],
+    ['関連するページ', [5]],
+    ['グローバルナビゲーション', [3]],
+    ['メニュー', [8, 9]],
+    ['ページの上', [2]],
+    ['フッター', [6]],
+    ['そのほか', [0, 1, 7]],
+  ]);
+  const all = groups.flatMap((g) => g.indexes).sort((a, b) => a - b);
+  assert.deepEqual(all, links.map((_, i) => i));
+});
+
+test('場所ごとに分ける: 一覧そろえ（tidyLinks）は、場所の印と言語の印を残す', () => {
+  const r = tidyLinks([{ href: 'https://example.com/a', text: 'A', area: { key: 'l0', kind: 'nav', label: ' 町の\nメニュー ' }, lang: true }], PAGE);
+  assert.deepEqual(r, [{ url: 'https://example.com/a', text: 'A', area: { key: 'l0', kind: 'nav', label: '町の メニュー' }, lang: true }]);
 });

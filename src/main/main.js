@@ -8,7 +8,7 @@ const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
 const {
   checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget, closeAllTargets, revealTarget, currentPageUrl, readLinks,
 } = require('./target');
-const { browserUrl, findDeckFor } = require('./links');
+const { browserUrl, findDeckFor, groupLinks } = require('./links');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair, withTimeout } = require('./autofix');
@@ -434,7 +434,11 @@ ipcMain.handle('page:links', async (_event, appId) => {
     const r = await readLinks(BrowserWindow, config);
     if (!r.ok) return r;
     lastLinks.set(appId, r.links);
-    return { ok: true, action: 'list', items: r.links.map((l) => l.text), links: r.links, truncated: r.truncated };
+    // ページの場所ごとのまとまり（本文・メニュー・フッターなど）。手元で分け、Claude には送らない。
+    const groups = groupLinks(r.links);
+    return {
+      ok: true, action: 'list', items: r.links.map((l) => l.text), links: r.links.map(({ url, text }) => ({ url, text })), groups, truncated: r.truncated,
+    };
   } catch (e) {
     return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
   }

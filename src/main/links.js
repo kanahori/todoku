@@ -12,13 +12,66 @@ const NAME_MAX = 200;
 // ページの中で動く関数。外の変数は使えないので、引数だけで動くようにする。
 // リンク（a[href]）の行き先と名前を集める。後から出てくるリンクに備えて、数が落ち着くまで少し待つ（長くても waitMs）。
 // 名前は、リンクの文字・aria-label・中の画像の alt・title の順に探す。
+// あわせて、リンクがページのどの場所にあるか（area）を返す。場所は、いちばん内側のランドマーク
+// （main・nav・header・footer・aside・role="search"・名前のある section や role="region"。role の付いたものを含む）。
+// 本文（main）の中は、さらに見出し（h2・h3）ごとのまとまりに分ける。ランドマークの外のリンクは、すぐ前の見出し（h1〜h3）のまとまり。
+// どちらも無ければ kind: 'none'。
+// 場所の名前（label）は、ランドマークの aria-label・aria-labelledby の先の文字・中の最初の見出しの順（本文は aria-label だけ。
+// 本文の最初の見出しはページの題のことが多く、場所の名前にならないため）。言語の切り替え（hreflang・lang のあるリンク）も印を付ける。
 async function pageLinks(waitMs) {
   const clean = (t) => String(t || '').replace(/\s+/g, ' ').trim();
   const nameOf = (a) => clean(a.innerText || a.textContent)
     || clean(a.getAttribute('aria-label'))
     || clean([...a.querySelectorAll('img[alt]')].map((i) => i.getAttribute('alt')).join(' '))
     || clean(a.getAttribute('title'));
-  const collect = () => [...document.querySelectorAll('a[href]')].map((a) => ({ href: a.href, text: nameOf(a) }));
+  const LANDMARKS = 'main, [role="main"], nav, [role="navigation"], header, [role="banner"], footer, [role="contentinfo"], aside, [role="complementary"], '
+    + '[role="search"], section[aria-label], section[aria-labelledby], [role="region"][aria-label], [role="region"][aria-labelledby]';
+  const kindOf = (el) => {
+    const role = el.getAttribute('role') || '';
+    const tag = el.tagName.toLowerCase();
+    if (role === 'main' || tag === 'main') return 'main';
+    if (role === 'navigation' || tag === 'nav') return 'nav';
+    if (role === 'banner' || tag === 'header') return 'header';
+    if (role === 'contentinfo' || tag === 'footer') return 'footer';
+    if (role === 'complementary' || tag === 'aside') return 'aside';
+    if (role === 'search') return 'search';
+    return 'region';
+  };
+  const labelOf = (el, kind) => {
+    const own = clean(el.getAttribute('aria-label'));
+    if (own) return own;
+    const by = (el.getAttribute('aria-labelledby') || '').split(/\s+/).map((id) => document.getElementById(id)).filter(Boolean)
+      .map((n) => clean(n.textContent)).join(' ');
+    if (by) return by;
+    if (kind === 'main') return '';
+    const h = el.querySelector('h1, h2, h3, h4, h5, h6, [role="heading"]');
+    return h ? clean(h.textContent) : '';
+  };
+  const collect = () => {
+    const keys = new Map();
+    const headings = [...document.querySelectorAll('h1, h2, h3')];
+    let hk = -1;
+    return [...document.querySelectorAll('a[href]')].map((a) => {
+      let area;
+      // すぐ前の見出し（文書の順で、このリンクより前にある最後の h1〜h3）。
+      while (hk + 1 < headings.length && (headings[hk + 1].compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING)) hk += 1;
+      const near = hk >= 0 ? headings[hk] : null;
+      const land = a.parentElement ? a.parentElement.closest(LANDMARKS) : null;
+      if (land && kindOf(land) === 'main' && !clean(land.getAttribute('aria-label')) && near && near.tagName !== 'H1' && land.contains(near)) {
+        // 本文の中は、見出し（h2・h3）ごとのまとまりに分ける（本文のリンクがいちばん多く、一枚では長いため）。h1 はページの題なので使わない。
+        area = { key: `m${hk}`, kind: 'main', label: clean(near.textContent).slice(0, 30) };
+      } else if (land) {
+        if (!keys.has(land)) {
+          const kind = kindOf(land);
+          keys.set(land, { key: `l${keys.size}`, kind, label: labelOf(land, kind).slice(0, 30) });
+        }
+        area = keys.get(land);
+      } else {
+        area = near ? { key: `h${hk}`, kind: 'heading', label: clean(near.textContent).slice(0, 30) } : { key: 'none', kind: 'none', label: '' };
+      }
+      return { href: a.href, text: nameOf(a), area, lang: Boolean(a.getAttribute('hreflang') || a.getAttribute('lang')) };
+    });
+  };
   const started = Date.now();
   let last = -1;
   let same = 0;
@@ -60,10 +113,53 @@ function tidyLinks(raw, pageUrl, max = MAX_LINKS) {
     const text = String(r.text || '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
     if (!text) continue;
     seen.add(key);
-    out.push({ url, text });
+    const a = r.area && typeof r.area === 'object' ? r.area : {};
+    out.push({
+      url, text,
+      area: { key: String(a.key || 'none'), kind: String(a.kind || 'none'), label: String(a.label || '').replace(/\s+/g, ' ').trim().slice(0, 30) },
+      lang: Boolean(r.lang),
+    });
     if (out.length >= max) break;
   }
   return out;
+}
+
+// 場所の種類ごとの、名前が無いときの呼び名と、並びの順（小さいほど先）。本文を先に、ページの頭とフッターは後に。
+const AREA_KINDS = {
+  main: { name: '本文', order: 0 },
+  heading: { name: '', order: 1 },
+  region: { name: 'ページの中のまとまり', order: 1 },
+  aside: { name: 'サイドバー', order: 2 },
+  nav: { name: 'メニュー', order: 3 },
+  search: { name: '検索', order: 3 },
+  header: { name: 'ページの上', order: 4 },
+  footer: { name: 'フッター', order: 5 },
+  none: { name: 'そのほか', order: 6 },
+};
+const OTHER_LABEL = 'そのほか';
+// ページの頭の小さな操作（言語の切り替え・スマートフォン版の切り替え・文字の大きさや背景色など）。場所によらず「そのほか」に入れる。
+const SMALL_TOOLS = /^(English|Chinese|Korean|Portugu[eê]s|Espa[nñ]ol|Fran[cç]ais|Deutsch|Tiếng Việt|Filipino|Tagalog|ไทย|Bahasa|日本語|中文|简体中文|簡体中文|繁體中文|繁体中文|한국어|ポルトガル語|スペイン語|やさしい日本語|多言語|Language|Languages|スマートフォン版|スマホ版|PC版|パソコン版|モバイル版|文字(サイズ|の大きさ)|文字を?(大きく|小さく)|標準|拡大|縮小|背景色|配色|ふりがな|ルビ|音声読み上げ|読み上げ)/i;
+
+// リンクの一覧を、ページの場所ごとのまとまりに分ける。全部のリンクは、どれか一つのまとまりにちょうど一度ずつ入る。
+// 結果は [{ label, kind, indexes: [links の中の番号] }]。並びは、本文 → 見出しのまとまり・名前のあるまとまり → サイドバー →
+// メニュー・検索 → ページの上 → フッター → そのほか（言語の切り替えなど）。同じ順のものは、ページの中の順。
+// 同じ名前になったまとまりは一つにまとめる（名前の無い nav が二つあるときなど）。
+function groupLinks(links) {
+  const groups = new Map();
+  (Array.isArray(links) ? links : []).forEach((l, i) => {
+    const area = (l && l.area) || {};
+    const small = Boolean(l && (l.lang || SMALL_TOOLS.test(String(l.text || ''))));
+    const kind = small ? 'none' : (AREA_KINDS[area.kind] ? area.kind : 'none');
+    let label = small ? OTHER_LABEL : String(area.label || '') || AREA_KINDS[kind].name || OTHER_LABEL;
+    if (kind === 'none') label = OTHER_LABEL;
+    if (!groups.has(label)) groups.set(label, { label, kind, order: AREA_KINDS[kind].order, first: i, indexes: [] });
+    const g = groups.get(label);
+    g.order = Math.min(g.order, AREA_KINDS[kind].order);
+    g.indexes.push(i);
+  });
+  return [...groups.values()]
+    .sort((a, b) => (a.label === OTHER_LABEL) - (b.label === OTHER_LABEL) || a.order - b.order || a.first - b.first)
+    .map(({ label, kind, indexes }) => ({ label, kind, indexes }));
 }
 
 // いまのページを既定のブラウザで開くときの URL。ウェブアプリの窓が開いているページ（http か https）を先に、
@@ -95,4 +191,4 @@ function findDeckFor(url, configs) {
   return null;
 }
 
-module.exports = { MAX_LINKS, pageLinks, tidyLinks, browserUrl, findDeckFor, sameKey };
+module.exports = { MAX_LINKS, pageLinks, tidyLinks, groupLinks, browserUrl, findDeckFor, sameKey };

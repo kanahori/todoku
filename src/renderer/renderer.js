@@ -454,6 +454,15 @@ async function readCard(card) {
       if (card.links) {
         card.linkList = Array.isArray(result.links) ? result.links.slice() : [];
         card.onItemEnter = (i) => followLink(card, i);
+        // ページの場所（本文・メニュー・フッターなど）が二つ以上あれば、場所ごとのカードの束に分ける（全部のリンクは、どこか一つに入る）。
+        const groups = Array.isArray(result.groups) ? result.groups.filter((g) => g && Array.isArray(g.indexes) && g.indexes.length > 0) : [];
+        card.linkGroups = groups.length > 1 ? groups : null;
+        if (card.linkGroups) {
+          card.items = [
+            { text: `${count}件のリンクを、ページの場所ごとに${groups.length}枚のカードに分けました。`, result: true },
+            { button: '場所ごとのリンクのカードを開く', onPress: () => openLinkGroups(card) },
+          ];
+        }
       }
       card.heading = `${card.title}（${count}件）`;
       // 一件に結び付いた所（itemTarget）のあるカードは、一覧の後に、Enter で何が起きるかの一文を置く。
@@ -498,6 +507,12 @@ async function readCard(card) {
     return;
   }
   if (!node) return;
+  // 場所ごとに分けたリンクは、そのまま場所ごとのカードの束を開き、件数と枚数を一度に知らせる。
+  if (result.ok && card.links && card.linkGroups && wasInside) {
+    openLinkGroups(card, { quiet: true });
+    announce(`「${card.title}」から${count}件読みました。場所ごとに${card.linkGroups.length}枚のカードに分けました。`);
+    return;
+  }
   const midway = result.ok && result.partial ? 'まだ書いている途中です。' : '';
   if (result.ok && result.action === 'list') announce((count === 0 ? `「${card.title}」は0件でした。` : `「${card.title}」から${count}件読みました。`) + midway);
   else if (result.ok) announce(`「${card.title}」を読みました。${midway}`);
@@ -1206,8 +1221,28 @@ function linksCard(config) {
   };
 }
 
+// 場所ごとのリンクのカードの束（「本文（リンク4件）」「メニュー（リンク47件）」「フッター（リンク7件）」など）。各カードの中で、リンクを一件ずつ選ぶ。
+// 題は「〇〇のリンク」でなく「〇〇（リンクN件）」にする（場所の名前が「こんなときは」のような見出しのとき、「こんなときはのリンク」になるため）。
+// Esc で「このページのリンク」のカードへ戻る。
+function openLinkGroups(card, { quiet = false } = {}) {
+  const groups = card.linkGroups || [];
+  const all = card.linkList || [];
+  const cards = groups.map((g) => {
+    const linkList = g.indexes.map((k) => all[k]).filter(Boolean);
+    const groupCard = {
+      kind: 'linkGroup', appId: card.appId, title: g.label, heading: `${g.label}（リンク${linkList.length}件）`,
+      linkList, linkIndexes: g.indexes.slice(), items: linkList.map((l) => ({ listItem: l.text })),
+    };
+    groupCard.onItemEnter = (i) => followLink(groupCard, i);
+    return groupCard;
+  });
+  pushDeck({ name: `${card.title}（場所ごと）`, appId: card.appId, cards }, { announcePosition: !quiet });
+}
+
 async function followLink(card, i) {
   const link = (card.linkList || [])[i];
+  // 主の処理が控えている一覧の中の番号（場所ごとのカードでは、そのカードの中の番号と違う）。
+  const index = card.linkIndexes ? card.linkIndexes[i] : i;
   if (!link || busy) return;
   let found = null;
   try {
@@ -1225,7 +1260,7 @@ async function followLink(card, i) {
     announce(`「${config.name}」のカードへ移りました。`);
     return;
   }
-  pushDeck(linkConfirmDeck(card, link, i), { announcePosition: false });
+  pushDeck(linkConfirmDeck(card, link, index), { announcePosition: false });
   const first = itemNodes(cardNodes()[0])[0];
   if (first) first.focus();
 }
