@@ -712,7 +712,18 @@ async function openTarget(BrowserWindow, config, url, options = {}) {
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     windows.set(config.id, win);
     const id = config.id;
-    win.on('closed', () => { windows.delete(id); loginFocus.delete(id); revealed.delete(id); });
+    // 元のページやログインのために前に出していた窓を、使う人が閉じたときは、Todoku の窓へ戻す
+    // （戻さないと、Windows ではほかのアプリの窓が前に来て、使う人が取り残される）。
+    // 前に出していたかは、閉じ始め（close）で見ておく。Mac では閉じる途中で Todoku の窓に焦点が移り、closed の時には印が外れていた（窓を出す smoke で確かめた）。
+    let shownAtClose = false;
+    win.on('close', () => { shownAtClose = revealed.has(id) || loginFocus.has(id); });
+    win.on('closed', () => {
+      const shown = shownAtClose || revealed.has(id) || loginFocus.has(id);
+      windows.delete(id);
+      loginFocus.delete(id);
+      revealed.delete(id);
+      if (shown) backToHome(id, 'closed');
+    });
     // 「元のページを表示する」で前に出したときだけ、Esc キーで Todoku の窓へ戻る（ページには渡さない）。
     // （node の試しの偽の窓には on が無いので、あるときだけ付ける。）
     if (typeof win.webContents.on === 'function') {
@@ -967,10 +978,34 @@ function showTarget(appId) {
   if (!win.isFocusable()) win.setFocusable(true);
   // Windows では焦点を取れない窓はタスクバーに出ないので、ログインの間は出す。
   if (process.platform === 'win32') win.setSkipTaskbar(false);
-  if (!testHeadless()) {
-    win.show();
+  if (!testHeadless()) bringToFront(win);
+  return true;
+}
+
+// 窓を確かに前に出して、焦点を移す。
+// Windows では、BrowserWindow.focus() だけでは前に来ず、タスクバーが点滅するだけのことがある（前の窓が別の処理のものだと、
+// OS が前に出すのを止める）。元のページから Esc で戻ったとき、Todoku でなく、npm を起こした cmd の窓が前に来た（2026-11-06 の WinCC の報告）。
+// Windows では一瞬だけ最前面にしてから戻し（setAlwaysOnTop と moveTop）、どの OS でも、ページの中にも焦点を渡す。
+// 少し後に、まだ焦点が来ていなければ、もう一度だけ出し直す。later は試しのときに差し替える。
+function bringToFront(win, { platform = process.platform, later = setTimeout } = {}) {
+  if (!win || win.isDestroyed()) return false;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  if (platform === 'win32') {
+    win.setAlwaysOnTop(true);
+    win.focus();
+    win.moveTop();
+    later(() => { if (!win.isDestroyed()) win.setAlwaysOnTop(false); }, 300);
+  } else {
     win.focus();
   }
+  if (win.webContents && typeof win.webContents.focus === 'function') win.webContents.focus();
+  later(() => {
+    if (win.isDestroyed() || win.isFocused()) return;
+    win.show();
+    win.focus();
+    if (win.webContents && typeof win.webContents.focus === 'function') win.webContents.focus();
+  }, 150);
   return true;
 }
 
@@ -986,15 +1021,16 @@ async function revealTarget(BrowserWindow, config, options = {}) {
 }
 
 // 前に出した元のページから、Todoku の窓へ戻る。Todoku の窓に焦点が戻ると、元のページの窓は焦点を取れない窓に戻る（endLoginFocus）。
-function backToHome(id) {
+// どんなきっかけで Todoku の窓へ戻したかの控え（試しが見るため。'escape' か 'closed'）。
+const homeReturns = [];
+function backToHome(id, reason = 'escape') {
   revealed.delete(id);
   if (!homeWindow || homeWindow.isDestroyed()) return false;
-  if (!testHeadless()) {
-    homeWindow.show();
-    homeWindow.focus();
-  }
+  homeReturns.push(reason);
+  if (!testHeadless()) bringToFront(homeWindow);
   return true;
 }
+function homeReturnLog() { return homeReturns.slice(); }
 
 function isRevealed(id) {
   return revealed.has(id);
@@ -1048,4 +1084,5 @@ function closeTarget(appId) {
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
   readItemTarget, closeAllTargets, tidyListItems, revealTarget, backToHome, isRevealed, currentPageUrl, readLinks,
+  bringToFront, homeReturnLog,
 };

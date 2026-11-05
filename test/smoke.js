@@ -18,7 +18,7 @@ errorDialog.showErrorBox = (title, content) => { console.log(`エラー: ${title
 process.on('uncaughtException', (e) => { console.log(`エラー: ${e.stack}`); app.exit(3); });
 const { loadConfigFile } = require('../src/main/config');
 const {
-  runCard, checkCards, setHomeWindow, showTarget, closeTarget, readItemTarget, readLinks, revealTarget, isRevealed, currentPageUrl,
+  runCard, checkCards, setHomeWindow, showTarget, closeTarget, readItemTarget, readLinks, revealTarget, isRevealed, currentPageUrl, homeReturnLog,
 } = require('../src/main/target');
 
 const checks = [];
@@ -506,7 +506,8 @@ async function focusAndSeparatorChecks() {
 
 // 「このページのリンク」と「元のページを表示する」（主の処理の側）。作り物のあおば町のページ（test/fixtures/links.html）で確かめる。
 async function linksAndRevealChecks() {
-  const home = new BrowserWindow({ width: 480, height: 320, title: 'Todoku（検証）', show: false });
+  // 窓を出す smoke（--show-windows）のときだけ、Todoku の代わりの窓を見せ、焦点が本当に戻るかまで確かめる。
+  const home = new BrowserWindow({ width: 480, height: 320, title: 'Todoku（検証）', show: !headless });
   const page = { id: 'links-test', name: 'あおば町のリンク（作り物）', url: 'fixture:links.html', cards: [{ id: 'main', title: '本文', action: 'read', selector: 'main' }] };
   const other = { id: 'reveal-test', name: 'あおば町の練習（作り物）', url: 'fixture:practice.html', cards: [{ id: 'inbox', title: '受信箱', action: 'read', selector: 'body' }] };
   try {
@@ -532,11 +533,19 @@ async function linksAndRevealChecks() {
     const hiddenOther = BrowserWindow.getAllWindows().filter((w) => w !== home && w !== win).every((w) => !w.isVisible());
     let prevented = 0;
     const press = (key) => win.webContents.emit('before-input-event', { preventDefault: () => { prevented += 1; } }, { type: 'keyDown', key });
+    await new Promise((r) => setTimeout(r, 400));
+    const targetFocused = headless ? null : BrowserWindow.getFocusedWindow() === win;
     press('a');
     const afterA = isRevealed('reveal-test');
     press('Escape');
     const afterEsc = isRevealed('reveal-test');
-    home.emit('focus');
+    await new Promise((r) => setTimeout(r, 400));
+    const homeFocused = headless ? null : BrowserWindow.getFocusedWindow() === home;
+    if (headless) home.emit('focus');
+    if (!headless) {
+      check('元のページ（窓を出す smoke）: P キーで出した窓に焦点が移り、Esc キーで Todoku の窓に焦点が戻る',
+        targetFocused === true && homeFocused === true, { targetFocused, homeFocused });
+    }
     check('元のページ: 窓が無いアプリでも開いてから前に出し、焦点を取れる窓にする。ほかのアプリの窓は隠す',
       opened && focusable && hiddenOther && afterA === true, { opened, focusable, hiddenOther, afterA });
     check('元のページ: 出した窓で Esc キーを押すと、ページには渡さずに Todoku の窓へ戻り、窓は焦点を取れない窓に戻る',
@@ -544,6 +553,16 @@ async function linksAndRevealChecks() {
     // 出していない窓の Esc はページに渡す（ページの中のダイアログを閉じる Esc などを横取りしない）。
     press('Escape');
     check('元のページ: 出していないときの Esc キーは横取りしない', prevented === 1, { prevented });
+
+    // 前に出した元のページの窓を、使う人が閉じたときも、Todoku の窓へ戻す（Windows で、ほかのアプリの窓が前に来ないように）。
+    await revealTarget(BrowserWindow, other);
+    const before = homeReturnLog().length;
+    const shownWin = BrowserWindow.getAllWindows().find((w) => w !== home && w.getTitle() === '練習のページ（作り物）');
+    shownWin.close();
+    await new Promise((r) => setTimeout(r, 300));
+    const log = homeReturnLog().slice(before);
+    check('元のページ: 前に出した窓を閉じたときも Todoku の窓へ戻す（Esc のときは escape、閉じたときは closed と控える）',
+      JSON.stringify(homeReturnLog().slice(0, 1)) === '["escape"]' && JSON.stringify(log) === '["closed"]' && isRevealed('reveal-test') === false, { log });
   } finally {
     closeTarget('links-test');
     closeTarget('reveal-test');

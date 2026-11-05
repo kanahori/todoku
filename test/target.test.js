@@ -109,6 +109,9 @@ function fakeWindows() {
     setFocusable(v) { this.focusable = v; }
     setSkipTaskbar() {}
     moveTop() { raise(this); }
+    isMinimized() { return false; }
+    restore() {}
+    setAlwaysOnTop() {}
     destroy() {}
     on() {}
     removeListener() {}
@@ -180,4 +183,46 @@ test('設定ファイル: undatedLabel は list のカードだけで、20文字
   assert.deepEqual(validateConfig(base({ action: 'list', undatedLabel: '固定の記事' })), []);
   assert.deepEqual(validateConfig(base({ action: 'read', undatedLabel: '固定の記事' })).map((e) => e.where), ['cards[0].undatedLabel']);
   assert.deepEqual(validateConfig(base({ action: 'list', undatedLabel: '' })).map((e) => e.where), ['cards[0].undatedLabel']);
+});
+
+// 窓を前に出す作り（bringToFront）: Windows では focus だけに頼らず、一瞬だけ最前面にして moveTop し、後で最前面を外す。
+// どの OS でも、ページの中にも焦点を渡し、少し後にまだ焦点が無ければ、もう一度出し直す。
+function fakeFrontWindow({ focused = false, minimized = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    focused,
+    isDestroyed: () => false,
+    isMinimized: () => minimized,
+    isFocused() { return this.focused; },
+    restore: () => calls.push('restore'),
+    show: () => calls.push('show'),
+    focus: () => calls.push('focus'),
+    moveTop: () => calls.push('moveTop'),
+    setAlwaysOnTop: (v) => calls.push(`top:${v}`),
+    webContents: { focus: () => calls.push('page-focus') },
+  };
+}
+
+test('前に出す: Windows では一瞬だけ最前面にして moveTop し、300ミリ秒後に最前面を外す。ページにも焦点を渡す', () => {
+  const { bringToFront } = require('../src/main/target');
+  const timers = [];
+  const win = fakeFrontWindow({ minimized: true });
+  assert.equal(bringToFront(win, { platform: 'win32', later: (fn, ms) => timers.push({ fn, ms }) }), true);
+  assert.deepEqual(win.calls, ['restore', 'show', 'top:true', 'focus', 'moveTop', 'page-focus']);
+  assert.deepEqual(timers.map((t) => t.ms), [300, 150]);
+  win.focused = true;
+  for (const t of timers) t.fn();
+  assert.deepEqual(win.calls.slice(6), ['top:false']);
+});
+
+test('前に出す: Mac では最前面にしない。少し後にまだ焦点が来ていなければ、もう一度だけ出し直す', () => {
+  const { bringToFront } = require('../src/main/target');
+  const timers = [];
+  const win = fakeFrontWindow();
+  bringToFront(win, { platform: 'darwin', later: (fn, ms) => timers.push({ fn, ms }) });
+  assert.deepEqual(win.calls, ['show', 'focus', 'page-focus']);
+  assert.deepEqual(timers.map((t) => t.ms), [150]);
+  timers[0].fn();
+  assert.deepEqual(win.calls.slice(3), ['show', 'focus', 'page-focus']);
 });
