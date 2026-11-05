@@ -23,6 +23,7 @@ const {
 } = require('./generate');
 const { proxySwitches, chooseSystemProxy } = require('./proxy');
 const { createSettingsStore, registerSettingsHandlers, attachZoomKeys } = require('./settings');
+const { createBookmarksStore, registerBookmarksHandlers } = require('./bookmarks');
 
 // 環境変数にプロキシがあれば、Electron に渡す（学内のネットワークで、外のページに届くように）。窓を作る前に渡す。
 for (const [name, value] of proxySwitches()) app.commandLine.appendSwitch(name, value);
@@ -482,6 +483,8 @@ app.whenReady().then(async () => {
     logLine(`プロキシの確認が途中で止まりました: ${e.message}`);
   }
   registerSettingsHandlers(ipcMain, settingsStore());
+  // 最初のページのフォルダ・表示名・メモ（bookmarks.js）。置き場は userData の下の bookmarks.json。
+  registerBookmarksHandlers(ipcMain, createBookmarksStore(path.join(app.getPath('userData'), 'bookmarks.json')));
   attachEmbedReferer(session.defaultSession, require('../../package.json').build.appId);
   // ウェブアプリの窓で始まったダウンロードは、ダイアログを出さずにダウンロードのフォルダに保存する。
   // 押すカードの結果にならなかったもの（押してから遅れて始まったもの）は、終わったときに画面に知らせる。

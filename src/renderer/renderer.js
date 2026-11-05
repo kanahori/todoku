@@ -341,7 +341,7 @@ async function activateCard(card, node) {
     await ytLoad(card);
     return;
   }
-  if (card.kind === 'create') {
+  if (card.kind === 'create' || card.kind === 'newFolder') {
     // 入力欄へ移る（入れる所がすぐ分かるように）。
     const input = node.querySelector('[data-input]');
     if (input) input.focus();
@@ -360,7 +360,7 @@ async function activateCard(card, node) {
 // 2026-11-03 の Windows の確かめで 11回中9回）。新しい項目を先に入れ、焦点を移してから、古い項目を外す。
 // focusResult のときは、新しい項目の結果の最初（無ければ最初の項目）へ焦点を移す。
 // focusFirst のときは、焦点がこのカードにあれば、新しい項目の最初へ焦点を移す（押したボタンが消えるときにカードの中に留める）。
-function refreshCard(card, { focusResult = false, focusFirst = false } = {}) {
+function refreshCard(card, { focusResult = false, focusFirst = false, keepPosition = false } = {}) {
   const deck = current();
   const index = deck.cards.indexOf(card);
   if (index < 0 || !card.node || !card.node.isConnected) return null;
@@ -368,10 +368,15 @@ function refreshCard(card, { focusResult = false, focusFirst = false } = {}) {
   node.querySelector('h2').textContent = card.heading;
   const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
   const focusWasInside = node.contains(document.activeElement) && document.activeElement !== node;
+  const at = focusWasInside ? itemNodes(node).indexOf(document.activeElement) : -1;
   const oldBox = node.querySelector('.items');
   const newBox = renderItems(items);
   oldBox.after(newBox);
-  if (focusResult) {
+  if (keepPosition && at >= 0) {
+    // 押したボタンが消えても、同じ位置の項目に焦点を置く（カードの中に留める）。
+    const fresh = [...newBox.querySelectorAll('[data-item]')].filter((n) => !n.closest('[hidden]'));
+    (fresh[Math.min(at, fresh.length - 1)] || node).focus();
+  } else if (focusResult) {
     const target = newBox.querySelector('[data-result]') || newBox.querySelector('[data-item]');
     (target || node).focus();
   } else if (focusFirst && node.contains(document.activeElement)) {
@@ -621,6 +626,7 @@ function ytDeck(config, hasParent) {
       cards.push(card);
     }
   }
+  cards.push(organizeCard(config));
   return { name: config.name, appId: config.id, cards };
 }
 
@@ -1066,11 +1072,18 @@ function createCard() {
   return card;
 }
 
-// 作った束（と、読めた束）の行き先のカード。
+// 作った束（と、読めた束）の行き先のカード（ページのカード）。表示名があれば、タイトルは表示名にし、元の名前は説明の頭に一度だけ出す。
+// メモは説明として読む。説明（カードを選んだときに見出しの後で読む一文）は、元の名前・メモ・Enter キーで何が起きるか、の順。
 function gotoCard(config) {
-  const items = [{ text: `スペースキーまたはEnterキーで、「${config.name}」のカードへ進みます。`, describe: true }];
+  const mark = pageMark(config.id);
+  const label = pageLabel(config);
+  const parts = [];
+  if (mark.name) parts.push(`元の名前は「${config.name}」です。`);
+  if (mark.memo) parts.push(`メモ: ${endSentence(mark.memo)}`);
+  parts.push(`スペースキーまたはEnterキーで、「${label}」のカードへ進みます。`);
+  const items = [{ text: parts.join(''), describe: true }];
   if (generatedApps.has(config.id)) items.push({ text: 'Claude がページの構造から作ったカードです。' });
-  return { kind: 'goto', heading: config.name, appId: config.id, items, open: () => pushDeck(appDeck(config, true)) };
+  return { kind: 'goto', heading: label, appId: config.id, items, open: () => pushDeck(appDeck(config, true)) };
 }
 
 async function startGenerate(card) {
@@ -1119,27 +1132,17 @@ async function startGenerate(card) {
   refreshCard(card);
   generatedApps.add(r.config.id);
   appConfigs.push(r.config);
-  // はじめの束の「新しいページからカードを作る」の前に、作った束の行き先のカードを足す。
-  // はじめの束の作るカードから作ったときは、戻ったときに、そのカードに焦点を戻す。
-  const top = stack[0];
-  const at = top.cards.findIndex((c) => c.kind === 'create');
-  const k = at < 0 ? top.cards.length : at;
-  top.cards.splice(k, 0, gotoCard(r.config));
-  if (card.kind === 'create') top.index = k;
-  else if (top.index >= k) top.index += 1;
-  refreshTopIntro();
-  refreshSearchResults();
+  // 作った束のページのカードは、最初のページの、どのフォルダにも入っていないページのカードの最後に足す。
+  // 最初のページの作るカードから作ったときは、戻ったときに、そのカードに焦点を戻す。
+  rebuildHomeDecks();
+  if (card.kind === 'create') {
+    const top = stack[0];
+    top.index = Math.max(0, top.cards.findIndex((c) => c.kind === 'goto' && c.appId === r.config.id));
+  }
   // リンクの確認の束から作ったときは、確認の束を外してから、作った束を開く（Esc でリンクの一覧のその一件に戻る）。
   if (current().linkConfirm && current().cards.includes(card)) stack.pop();
   pushDeck(appDeck(r.config, true), { announcePosition: false });
   announce(r.message);
-}
-
-// はじめのカードの件数の一文を、いまのアプリの数に合わせる。
-function refreshTopIntro() {
-  const intro = stack[0] && stack[0].cards[0];
-  if (!intro || !intro.items || !intro.items[0]) return;
-  intro.items[0] = { text: topIntroText(appConfigs.length) };
 }
 
 // 数は「〇個」で言う（「〇つ」は10を越えると「14つ」になる。2026-11-05 の Windows の確かめ）。
@@ -1162,15 +1165,17 @@ async function deleteGenerated(config) {
   generatedApps.delete(config.id);
   repairsByApp.delete(config.id);
   appConfigs = appConfigs.filter((c) => c.id !== config.id);
+  // 消した束の表示名・メモ・フォルダも外す。
+  if (marks.pages[config.id]) {
+    delete marks.pages[config.id];
+    await saveMarks();
+  }
   stack.length = 1;
-  const top = stack[0];
-  const at = top.cards.findIndex((c) => c.kind === 'goto' && c.appId === config.id);
-  if (at >= 0) top.cards.splice(at, 1);
+  rebuildHomeDecks();
   // 焦点は「新しいページからカードを作る」のカードへ戻す。
+  const top = stack[0];
   const createAt = top.cards.findIndex((c) => c.kind === 'create');
   top.index = createAt >= 0 ? createAt : Math.min(top.index, top.cards.length - 1);
-  refreshTopIntro();
-  refreshSearchResults();
   renderDeck({ announcePosition: false });
   announce(r.message);
 }
@@ -1294,6 +1299,284 @@ async function openPageExternal(appId = pageAppId()) {
     r = { ok: false, message: 'いまのページを開けませんでした。' };
   }
   announce(r.message, !r.ok);
+}
+
+// ---- 最初のページのフォルダ・表示名・メモ（ブックマークのように使う）----
+// フォルダを作る・名前を変える・消す。ページのカード（アプリの束の行き先のカード）をフォルダに入れる・出す。表示名とメモを付ける。
+// 操作は全部、カードの中の入力欄とボタンで行い、新しいキーは足さない。操作のたびに、何をしたかを一文で一度だけ知らせる。
+// 保存は主の処理（bookmarks.js）が userData の bookmarks.json に書く。保存できなくても、開いている間は効く。
+const NEW_FOLDER_HEADING = 'フォルダを作る';
+const ORGANIZE_HEADING = '名前・メモ・フォルダ';
+const NOT_SAVED = 'このパソコンに保存できなかったので、次に起動したときには残りません。';
+let marks = { folders: [], pages: {} };
+let folderSeq = 0;
+
+function normalizeMarks(raw) {
+  const x = raw && typeof raw === 'object' ? raw : {};
+  return {
+    folders: Array.isArray(x.folders) ? x.folders.filter((f) => f && typeof f.id === 'string' && typeof f.name === 'string') : [],
+    pages: x.pages && typeof x.pages === 'object' && !Array.isArray(x.pages) ? x.pages : {},
+  };
+}
+
+function cleanName(value, max) { return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max); }
+function pageMark(appId) { return marks.pages[appId] || {}; }
+function pageLabel(config) { return pageMark(config.id).name || config.name; }
+function folderById(id) { return marks.folders.find((f) => f.id === id) || null; }
+function folderOfPage(appId) { return folderById(pageMark(appId).folder); }
+function pagesInFolder(folderId) { return appConfigs.filter((c) => pageMark(c.id).folder === folderId); }
+
+// ページの一件を書き換える（空の項目は外し、全部空なら一件ごと外す）。
+function setPageMark(appId, next) {
+  const entry = { ...pageMark(appId), ...next };
+  for (const k of Object.keys(entry)) if (!entry[k]) delete entry[k];
+  if (Object.keys(entry).length > 0) marks.pages[appId] = entry;
+  else delete marks.pages[appId];
+}
+
+// 保存する。書けたら true（主の処理がそろえた形を使う）。
+async function saveMarks() {
+  let r;
+  try {
+    r = await window.cardsApi.saveBookmarks(marks);
+  } catch (e) {
+    r = { ok: false };
+  }
+  if (r && r.ok && r.bookmarks) marks = normalizeMarks(r.bookmarks);
+  return Boolean(r && r.ok);
+}
+
+// 束の中で、同じカードを指す印（作り直した後も、同じカードを選んだままにするため）。
+function deckKey(c) {
+  if (!c) return '';
+  if (c.folderId && c.kind === 'goto') return `f:${c.folderId}`;
+  if (c.appId && c.kind === 'goto') return `a:${c.appId}`;
+  return `k:${c.kind}:${c.kind === 'results' ? c.appId : ''}`;
+}
+
+function rebuildDeck(deck, cards) {
+  const selected = deck.cards[deck.index];
+  const key = deckKey(selected);
+  deck.cards = cards;
+  let k = cards.findIndex((c) => deckKey(c) === key);
+  // 選んでいたページのカードがフォルダに入って見えなくなったら、そのフォルダのカードを選ぶ。
+  if (k < 0 && key.startsWith('a:')) {
+    const f = folderOfPage(selected.appId);
+    if (f) k = cards.findIndex((c) => deckKey(c) === `f:${f.id}`);
+  }
+  deck.index = k >= 0 ? k : Math.max(0, Math.min(deck.index, cards.length - 1));
+}
+
+// 最初のページと、開いているフォルダの束を、いまのフォルダ・表示名・メモから作り直す。
+// render のときは、いま見ている束が最初のページかフォルダなら、描き直す（焦点は選んでいたカードへ）。
+function rebuildHomeDecks({ render = false } = {}) {
+  for (const deck of stack) {
+    if (deck.home) {
+      rebuildDeck(deck, homeCards());
+      refreshSearchResults({ redraw: false });
+    } else if (deck.folderId) {
+      const f = folderById(deck.folderId);
+      if (!f) continue;
+      deck.name = folderDeckName(f);
+      rebuildDeck(deck, folderDeckCards(f));
+    }
+  }
+  if (render && (current().home || current().folderId)) renderDeck({ announcePosition: false });
+}
+
+// ---- フォルダのカードと、フォルダの束 ----
+function folderCard(f) {
+  const n = pagesInFolder(f.id).length;
+  const count = n === 0 ? 'まだページのカードは入っていません。' : `ページのカードが${n}件入っています。`;
+  return {
+    kind: 'goto', folderId: f.id, heading: `${f.name}（フォルダ）`,
+    items: [{ text: `${count}スペースキーまたはEnterキーで、「${f.name}」フォルダの中へ進みます。`, describe: true }],
+    open: () => pushDeck(folderDeck(f)),
+  };
+}
+
+function folderDeckName(f) { return `${f.name}（フォルダ）`; }
+
+function folderDeck(f) {
+  return { name: folderDeckName(f), folderId: f.id, cards: folderDeckCards(f) };
+}
+
+// フォルダの束: 一枚目はフォルダのカード（名前を変える・消す）、その後に中のページのカード。
+function folderDeckCards(f) {
+  const n = pagesInFolder(f.id).length;
+  const card = { kind: 'folderInfo', folderId: f.id, heading: `「${f.name}」フォルダ`, nameValue: f.name };
+  card.items = [
+    {
+      text: n === 0
+        ? `このフォルダには、まだページのカードが入っていません。ページのカードの束の「${ORGANIZE_HEADING}」のカードで入れられます。`
+        : `このフォルダには、ページのカードが${n}件入っています。このカードの後に並んでいます。`,
+      describe: true,
+    },
+    {
+      input: 'フォルダの名前',
+      type: 'text',
+      get value() { return card.nameValue || ''; },
+      onInput: (v) => { card.nameValue = v; },
+      onEnter: (v) => { card.nameValue = v; renameFolder(card); },
+    },
+    { button: 'フォルダの名前を変える', onPress: () => renameFolder(card) },
+    { button: 'このフォルダを消す（中のページのカードは最初のページに戻ります）', onPress: () => deleteFolder(card.folderId) },
+  ];
+  return [card, ...pagesInFolder(f.id).map(gotoCard)];
+}
+
+function newFolderCard() {
+  const card = { kind: 'newFolder', heading: NEW_FOLDER_HEADING, nameValue: '' };
+  card.items = [
+    { text: 'フォルダの名前を入れて Enter キーを押すと、フォルダを作ります。', describe: true },
+    {
+      input: '新しいフォルダの名前',
+      type: 'text',
+      get value() { return card.nameValue || ''; },
+      onInput: (v) => { card.nameValue = v; },
+      onEnter: (v) => { card.nameValue = v; createFolder(card); },
+    },
+    { button: 'フォルダを作る', onPress: () => createFolder(card) },
+  ];
+  return card;
+}
+
+// フォルダの名前を確かめる。だめなら知らせて null。
+function folderNameOrSay(value, exceptId = null) {
+  const name = cleanName(value, 40);
+  if (!name) {
+    announce('フォルダの名前を入れてください。', true);
+    return null;
+  }
+  if (marks.folders.some((f) => f.name === name && f.id !== exceptId)) {
+    announce(`「${name}」フォルダは、もうあります。別の名前にしてください。`, true);
+    return null;
+  }
+  return name;
+}
+
+async function createFolder(card) {
+  const name = folderNameOrSay(card.nameValue);
+  if (!name) return;
+  if (marks.folders.length >= 100) {
+    announce('フォルダは100個までです。', true);
+    return;
+  }
+  const id = `f-${Date.now().toString(36)}${(folderSeq++).toString(36)}`;
+  marks.folders.push({ id, name });
+  card.nameValue = '';
+  const saved = await saveMarks();
+  rebuildHomeDecks();
+  const top = stack[0];
+  top.index = Math.max(0, top.cards.findIndex((c) => c.folderId === id));
+  if (current().home) renderDeck({ announcePosition: false });
+  announce(`「${name}」フォルダを作りました。${saved ? '' : NOT_SAVED}`);
+}
+
+async function renameFolder(card) {
+  const f = folderById(card.folderId);
+  if (!f) return;
+  const name = folderNameOrSay(card.nameValue, f.id);
+  if (!name) return;
+  if (name === f.name) {
+    announce('フォルダの名前は変わっていません。');
+    return;
+  }
+  const before = f.name;
+  f.name = name;
+  const saved = await saveMarks();
+  rebuildHomeDecks({ render: true });
+  announce(`フォルダの名前を「${before}」から「${name}」に変えました。${saved ? '' : NOT_SAVED}`);
+}
+
+async function deleteFolder(folderId) {
+  const f = folderById(folderId);
+  if (!f) return;
+  const inside = pagesInFolder(f.id).map((c) => c.id);
+  marks.folders = marks.folders.filter((x) => x.id !== f.id);
+  for (const appId of inside) setPageMark(appId, { folder: '' });
+  const saved = await saveMarks();
+  // フォルダの束から出て、最初のページへ戻る。焦点は、戻したページのカードの最初（無ければ「フォルダを作る」）へ。
+  stack.length = 1;
+  rebuildHomeDecks();
+  const top = stack[0];
+  const at = inside.length > 0 ? top.cards.findIndex((c) => c.kind === 'goto' && c.appId === inside[0]) : -1;
+  top.index = at >= 0 ? at : Math.max(0, top.cards.findIndex((c) => c.kind === 'newFolder'));
+  renderDeck({ announcePosition: false });
+  const back = inside.length > 0 ? `中のページのカード${inside.length}件は、最初のページに戻しました。` : '';
+  announce(`「${f.name}」フォルダを消しました。${back}${saved ? '' : NOT_SAVED}`);
+}
+
+// ---- ページのカードの「名前・メモ・フォルダ」（アプリの束の中のカード）----
+function organizeCard(config) {
+  const mark = pageMark(config.id);
+  const card = { kind: 'organize', appId: config.id, heading: ORGANIZE_HEADING, nameValue: mark.name || '', memoValue: mark.memo || '' };
+  card.items = organizeItems(card, config);
+  return card;
+}
+
+function organizeItems(card, config) {
+  const folder = folderOfPage(config.id);
+  const items = [
+    { text: `最初のページでの、このページのカードの表示名とメモ、入れるフォルダを決めます。元の名前は「${config.name}」です。`, describe: true },
+    {
+      input: '表示名（空にすると元の名前に戻ります）',
+      type: 'text',
+      get value() { return card.nameValue || ''; },
+      onInput: (v) => { card.nameValue = v; },
+      onEnter: (v) => { card.nameValue = v; savePageNote(card, config); },
+    },
+    {
+      input: 'メモ',
+      type: 'text',
+      get value() { return card.memoValue || ''; },
+      onInput: (v) => { card.memoValue = v; },
+      onEnter: (v) => { card.memoValue = v; savePageNote(card, config); },
+    },
+    { button: '表示名とメモを保存する', onPress: () => savePageNote(card, config) },
+    { text: folder ? `いまは「${folder.name}」フォルダに入っています。` : 'いまは、どのフォルダにも入っていません。' },
+  ];
+  for (const f of marks.folders) {
+    if (folder && f.id === folder.id) continue;
+    items.push({ button: `「${f.name}」フォルダに入れる`, onPress: () => movePage(card, config, f.id) });
+  }
+  if (folder) items.push({ button: `「${folder.name}」フォルダから出す`, onPress: () => movePage(card, config, null) });
+  if (marks.folders.length === 0) items.push({ text: `フォルダはまだありません。最初のページの「${NEW_FOLDER_HEADING}」のカードで作れます。` });
+  return items;
+}
+
+async function savePageNote(card, config) {
+  const before = pageMark(config.id);
+  const name = cleanName(card.nameValue, 60);
+  const memo = cleanName(card.memoValue, 300);
+  const said = [];
+  if (name !== (before.name || '')) said.push(name ? `表示名を「${name}」にしました。` : `表示名を外し、元の名前「${config.name}」に戻しました。`);
+  if (memo !== (before.memo || '')) said.push(memo ? 'メモを保存しました。' : 'メモを消しました。');
+  if (said.length === 0) {
+    announce('表示名とメモは変わっていません。');
+    return;
+  }
+  setPageMark(config.id, { name, memo });
+  card.nameValue = name;
+  card.memoValue = memo;
+  const saved = await saveMarks();
+  rebuildHomeDecks();
+  card.items = organizeItems(card, config);
+  refreshCard(card, { keepPosition: true });
+  announce(`${said.join('')}${saved ? '' : NOT_SAVED}`);
+}
+
+async function movePage(card, config, folderId) {
+  const before = folderOfPage(config.id);
+  setPageMark(config.id, { folder: folderId || '' });
+  const saved = await saveMarks();
+  rebuildHomeDecks();
+  card.items = organizeItems(card, config);
+  refreshCard(card, { keepPosition: true });
+  const label = pageLabel(config);
+  const f = folderById(folderId);
+  const said = f ? `「${label}」を「${f.name}」フォルダに入れました。` : `「${label}」を「${before ? before.name : ''}」フォルダから出しました。`;
+  announce(`${said}${saved ? '' : NOT_SAVED}`);
 }
 
 // ---- 表示設定 ----
@@ -1422,16 +1705,21 @@ function normalizeForSearch(text) {
 }
 
 // アプリごとに、題と説明に全部の言葉を含むカードを集める。当たらないアプリは入れない。
-function searchCards(configs, query) {
+// ページそのもの（アプリの名前・利用者が付けた表示名とメモ）に全部の言葉があれば、page: true にする（そのページのカードを開くボタンを出す）。
+// pages は { appId: { name, memo } }（ブックマークの保存の pages）。
+function searchCards(configs, query, pages = {}) {
   const words = normalizeForSearch(query).split(' ').filter(Boolean);
   if (words.length === 0) return [];
   const groups = [];
   for (const config of configs) {
+    const mark = (pages && pages[config.id]) || {};
+    const pageHay = normalizeForSearch(`${config.name || ''} ${mark.name || ''} ${mark.memo || ''}`);
+    const page = words.every((w) => pageHay.includes(w));
     const matches = (config.cards || []).filter((c) => {
       const hay = normalizeForSearch(`${c.title || ''} ${c.description || ''}`);
       return words.every((w) => hay.includes(w));
     });
-    if (matches.length > 0) groups.push({ config, matches });
+    if (page || matches.length > 0) groups.push({ config, matches, page });
   }
   return groups;
 }
@@ -1469,22 +1757,30 @@ function searchCard() {
   };
 }
 
-function resultCard({ config, matches }) {
+function resultCard({ config, matches, page }) {
+  const label = pageLabel(config);
   const items = [];
+  // 表示名・メモ・アプリの名前に当たったときは、そのページのカードを開くボタンを先に置く。
+  if (page) {
+    items.push({ button: `「${label}」のカードを開く`, onPress: () => goToFound(config.id, null) });
+    const memo = pageMark(config.id).memo;
+    if (memo) items.push({ text: `メモ: ${endSentence(memo)}` });
+  }
   for (const c of matches) {
     // 同じ題でもアプリごとに働きが違うので、一件ずつアプリの名前を付ける。
-    items.push({ button: `「${config.name}」の「${c.title}」へ移る`, onPress: () => goToFound(config.id, c.id) });
+    items.push({ button: `「${label}」の「${c.title}」へ移る`, onPress: () => goToFound(config.id, c.id) });
     if (c.description) items.push({ text: endSentence(c.description) });
   }
-  return { kind: 'results', appId: config.id, heading: `「${config.name}」で見つかったカード（${matches.length}件）`, items };
+  const n = matches.length + (page ? 1 : 0);
+  return { kind: 'results', appId: config.id, heading: `「${label}」で見つかったカード（${n}件）`, items };
 }
 
 // はじめの束の、見つかったカードを作り直す。はじめの束が画面に出ているときは、そのカードの要素だけを入れ替える（焦点は動かさない）。
-function refreshSearchResults() {
+function refreshSearchResults({ redraw = true } = {}) {
   const top = stack[0];
   if (!top) return;
-  const groups = searchCards(appConfigs, search.query);
-  search.total = groups.reduce((n, g) => n + g.matches.length, 0);
+  const groups = searchCards(appConfigs, search.query, marks.pages);
+  search.total = groups.reduce((n, g) => n + g.matches.length + (g.page ? 1 : 0), 0);
   const selected = top.cards[top.index];
   const old = top.cards.filter((c) => c.kind === 'results');
   top.cards = top.cards.filter((c) => c.kind !== 'results');
@@ -1495,7 +1791,7 @@ function refreshSearchResults() {
   const sc = top.cards[at];
   top.index = Math.max(0, top.cards.indexOf(old.includes(selected) ? sc : selected));
   sc.items[sc.items.length - 1] = { text: searchCountText(search.query, search.total), searchCount: true };
-  if (!(sc.node && sc.node.isConnected)) return;
+  if (!redraw || !(sc.node && sc.node.isConnected)) return;
   for (const c of old) if (c.node) c.node.remove();
   let anchor = sc.node;
   for (const c of fresh) {
@@ -1542,7 +1838,7 @@ function goToFound(appId, cardId) {
     return;
   }
   const deck = appDeck(config, true);
-  const index = deck.cards.findIndex((c) => c.cardId === cardId);
+  const index = cardId ? deck.cards.findIndex((c) => c.cardId === cardId) : 0;
   pushDeck({ ...deck, index: Math.max(0, index) });
 }
 
@@ -1641,42 +1937,63 @@ function appDeck(config, hasParent = true) {
     });
   }
   cards.push(linksCard(config));
+  cards.push(organizeCard(config));
   // 自動で直した所があれば、支援者向けのカードを最後に置く。
   if (repairsOf(config.id).size > 0) cards.push(maintCard(config.id));
   return { name: config.name, appId: config.id, cards };
 }
 
-function topDeck(configs, problems) {
-  const cards = [{
+// 最初のページのカード（作り直すたびに使う、状態を持つカードは同じものを使う）。
+const home = { settings: null, search: null, create: null, newFolder: null, problems: [] };
+
+function topIntroCard() {
+  return {
     kind: 'info',
     heading: APP_NAME,
     items: sentences([
-      topIntroText(configs.length),
+      topIntroText(appConfigs.length),
       '上下矢印キーでカードを選びます。',
       'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
       'スペースキーまたはEnterキーで、カードの中に入ります。',
-      'ただし、アプリの名前のカードでは、スペースキーまたはEnterキーで、そのアプリのカードへ進みます。',
+      'ただし、ページのカードとフォルダのカードでは、スペースキーまたはEnterキーで、そのページやフォルダのカードへ進みます。',
       `「${CREATE_HEADING}」のカードでは、スペースキーまたはEnterキーで、ページのURLを入れる欄へ移ります。`,
       'カードの中では、上下矢印キーで項目を一つずつ選びます。',
       'Homeキーで最初、Endキーで最後の項目へ移動します。',
       'Escキーで、カードの中からカードへ戻ります。',
       `「${SETTINGS_HEADING}」のカードで、読みやすさ、1列リフロー表示、配色を変えられます。`,
       `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、タイトルと説明から探せます。`,
+      `「${NEW_FOLDER_HEADING}」のカードで、ページのカードをまとめるフォルダを作れます。`,
+      `ページのカードの表示名・メモ・フォルダは、そのページのカードの束の「${ORGANIZE_HEADING}」のカードで変えられます。`,
       ...READER_TEXTS,
     ]),
-  }];
-  // 基のカード型ページと同じく、二枚目を表示設定にする。三枚目が探す欄で、見つかったカードはそのすぐ後に並ぶ。
-  cards.push(settingsCard(), searchCard());
-  for (const config of configs) cards.push(gotoCard(config));
-  cards.push(createCard());
-  if (problems.length > 0) {
+  };
+}
+
+// 最初のページのカードの並び: はじめのカード・表示設定・カードを探す（見つかったカード）・フォルダのカード・
+// どのフォルダにも入っていないページのカード・フォルダを作る・新しいページからカードを作る・読めなかった設定ファイル。
+function homeCards() {
+  const cards = [topIntroCard(), home.settings, home.search];
+  for (const f of marks.folders) cards.push(folderCard(f));
+  for (const config of appConfigs) if (!folderOfPage(config.id)) cards.push(gotoCard(config));
+  cards.push(home.newFolder, home.create);
+  if (home.problems.length > 0) {
     cards.push({
       kind: 'info',
-      heading: `読めなかった設定ファイル（${problems.length}件）`,
-      items: problems.map((p) => ({ text: p })),
+      heading: `読めなかった設定ファイル（${home.problems.length}件）`,
+      items: home.problems.map((p) => ({ text: p })),
     });
   }
-  return { name: APP_NAME, cards };
+  return cards;
+}
+
+function topDeck(configs, problems) {
+  // 基のカード型ページと同じく、二枚目を表示設定にする。三枚目が探す欄で、見つかったカードはそのすぐ後に並ぶ。
+  home.settings = settingsCard();
+  home.search = searchCard();
+  home.create = createCard();
+  home.newFolder = newFolderCard();
+  home.problems = problems;
+  return { name: APP_NAME, home: true, cards: homeCards() };
 }
 
 // ---- キー ----
@@ -1808,6 +2125,12 @@ if (window.cardsApi.onZoom) window.cardsApi.onZoom((r) => { if (r.message) annou
     for (const x of r.repairs || []) repairsOf(r.config.id).set(x.cardId, x);
   }
   appConfigs = configs.slice();
+  // フォルダ・表示名・メモ（読めなければ空のまま）。
+  try {
+    if (window.cardsApi.loadBookmarks) marks = normalizeMarks(await window.cardsApi.loadBookmarks());
+  } catch (e) {
+    marks = normalizeMarks(null);
+  }
   const problems = [];
   for (const r of results) {
     for (const e of r.errors || []) problems.push(`${r.file} の ${e.where}: ${e.message}`);

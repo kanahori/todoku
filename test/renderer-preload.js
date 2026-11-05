@@ -258,6 +258,9 @@ contextBridge.exposeInMainWorld('cardsApi', {
   },
   publishRepair: async () => ({ ok: true, message: '「画面が変わった読む所」の直しを、設定ファイルに書きました。' }),
   // 表示設定は偽物にせず、smoke が本物の settings.js の口（一時のフォルダの settings.json）につなぐ。
+  // フォルダ・表示名・メモは偽物にせず、smoke が本物の bookmarks.js の口（一時のフォルダの bookmarks.json）につなぐ。
+  loadBookmarks: () => ipcRenderer.invoke('bookmarks:load'),
+  saveBookmarks: (b) => ipcRenderer.invoke('bookmarks:save', b),
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (s) => ipcRenderer.invoke('settings:save', {
     preset: String((s && s.preset) || ''), reflow: Boolean(s && s.reflow), scheme: String((s && s.scheme) || ''),

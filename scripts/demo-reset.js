@@ -1,6 +1,6 @@
 'use strict';
 // 収録の前に、Todoku をはじめの状態に戻す台本（npm run demo:reset）。消さずに、userData の中の控えのフォルダへ移す。
-// 移すもの: 作ったカードの束（generated/）・その場の直し（repairs/）・表示設定と文字の大きさ（settings.json）。
+// 移すもの: 作ったカードの束（generated/）・その場の直し（repairs/）・表示設定と文字の大きさ（settings.json）・最初のページのフォルダ・表示名・メモ（bookmarks.json）。
 // 移す先: userData/reset-backup/<日時>/ 。戻すときは npm run demo:reset -- --restore（いちばん新しい控え）か --restore <日時>。
 // userData は、いまの「Todoku」（npm start も包んだアプリも。package.json の productName から決まる）と、前の版が使っていた「hackathon2026」の両方を見る（--dir で一つを指せる）。
 // Todoku を閉じてから動かす（動いている間は、表示設定が閉じるときに書き戻されることがある）。
@@ -9,7 +9,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const TARGETS = ['generated', 'repairs', 'settings.json'];
+const TARGETS = ['generated', 'repairs', 'settings.json', 'bookmarks.json'];
 const BACKUP_DIR = 'reset-backup';
 const APP_NAMES = ['hackathon2026', 'Todoku'];
 

@@ -194,7 +194,7 @@ test('はじめのカードの案内に、NVDA と並べて Mac の VoiceOver �
   const readers = source.slice(source.indexOf('const READER_TEXTS = ['), source.indexOf('function sentences('));
   assert.match(readers, /'NVDAでは、/);
   assert.match(readers, /'MacのVoiceOverでは、左矢印キーと右矢印キーを同時に押してクイックナビをオフにすると、上下矢印キーでカードを選べます。'/);
-  const topDeckBody = source.slice(source.indexOf('function topDeck('));
+  const topDeckBody = source.slice(source.indexOf('function topIntroCard('));
   assert.match(topDeckBody, /\.\.\.READER_TEXTS,/);
 });
 
@@ -223,4 +223,16 @@ test('数は「〇個」で言う（「〇つ」は10を越えると「12つ」�
   assert.doesNotMatch(source, /\}つ/);
   assert.match(source, /直しの候補が\$\{proposals\.length\}個あります。/);
   assert.match(source, /（全部で\$\{r\.proposals\.length\}個）/);
+});
+
+test('探す: アプリの名前・利用者が付けた表示名とメモにも当たり、当たったアプリは page: true になる', () => {
+  const { searchCards } = loadSearchFunctions();
+  const pages = { b: { name: 'よく見る町', memo: '毎朝 ゴミの日を見る' } };
+  assert.deepEqual(searchCards(searchConfigs, 'よく見る', pages).map((g) => [g.config.id, g.page, g.matches.length]), [['b', true, 0]]);
+  assert.deepEqual(searchCards(searchConfigs, '毎朝', pages).map((g) => [g.config.id, g.page]), [['b', true]]);
+  // アプリの名前でも当たる。カードにも当たれば、両方を持つ。
+  assert.deepEqual(searchCards(searchConfigs, '学習', pages).map((g) => [g.config.id, g.page, g.matches.length]), [['a', true, 0]]);
+  assert.deepEqual(searchCards(searchConfigs, 'ゴミ', pages).map((g) => [g.config.id, g.page, g.matches.map((c) => c.id)]), [['b', true, ['b1']]]);
+  // 表示名もメモも無いときは、今までどおりカードだけ。
+  assert.deepEqual(searchCards(searchConfigs, 'ゴミ').map((g) => [g.config.id, g.page, g.matches.map((c) => c.id)]), [['b', false, ['b1']]]);
 });

@@ -392,6 +392,10 @@ async function main() {
   const settingsFile = path.join(settingsDir, 'settings.json');
   const settingsStore = createSettingsStore(settingsFile);
   registerSettingsHandlers(require('electron').ipcMain, settingsStore);
+  // フォルダ・表示名・メモも、本物の口（bookmarks.js）を一時のフォルダの bookmarks.json につなぐ。
+  const { createBookmarksStore, registerBookmarksHandlers } = require('../src/main/bookmarks');
+  const bookmarksFile = path.join(settingsDir, 'bookmarks.json');
+  registerBookmarksHandlers(require('electron').ipcMain, createBookmarksStore(bookmarksFile));
   try {
     await rendererItemTargetChecks(settingsStore);
     await rendererBusyChecks();
@@ -405,6 +409,7 @@ async function main() {
     await rendererSettingsChecks(settingsStore, settingsFile);
     await rendererSearchChecks(settingsStore);
     await rendererLinksChecks();
+    await rendererBookmarksChecks(bookmarksFile);
   } finally {
     fs.rmSync(settingsDir, { recursive: true, force: true });
   }
@@ -1357,7 +1362,7 @@ async function rendererYouTubeChecks() {
         && first.includes('Google のプライバシーポリシーを開く') && !first.some((x) => x.includes('設定ファイルを確認する')), first);
     check('YouTube: 一枚目のキーの説明は、ほかのアプリと同じく Home・End の一文と Esc の一文を含む',
       first.includes('Homeキーで最初のカード、Endキーで最後のカードへ移動します。') && first.includes('Escキーで、カードの中からカードへ戻ります。'), first);
-    const emptyPlayer = await t.js("[...document.querySelectorAll('#deck > article.card')].pop().querySelectorAll('[data-item]').length === 1 ? [...document.querySelectorAll('#deck > article.card')].pop().querySelector('[data-item]').textContent : [...[...document.querySelectorAll('#deck > article.card')].pop().querySelectorAll('[data-item]')].map((x) => x.textContent)");
+    const emptyPlayer = await t.js("(() => { const p = document.querySelector('#deck > article.card-yt-player'); const items = [...p.querySelectorAll('[data-item]')]; return items.length === 1 ? items[0].textContent : items.map((x) => x.textContent); })()");
     check('YouTube: 動画を選ぶ前の再生のカードは「まだ動画を選んでいません。…」の一文だけ（ボタンの説明は出さない）',
       emptyPlayer === 'まだ動画を選んでいません。「動画を探す」か、新しい動画の一覧で一件を選んで Enter キーを押すと、ここで再生します。', emptyPlayer);
     // 探す欄で探す。
@@ -1695,9 +1700,9 @@ async function rendererFocusChecks() {
         && maintTexts.some((t) => /^2026年11月3日 \d+時05分$/.test(t))
         && maintTexts.includes('「画面が変わった読む所」の直しを設定ファイルに書く（ほかの人にも配れるようにする）') && maintTexts.includes('「画面が変わった読む所」を直す前に戻す'), maintTexts);
 
-    // 直す前に戻す（読む所のカードの中のボタン）。支援者向けのカードから4枚上（このページのリンク・直せない押す所・直せない読む所の上）。
+    // 直す前に戻す（読む所のカードの中のボタン）。支援者向けのカードから5枚上（名前・メモ・フォルダ・このページのリンク・直せない押す所・直せない読む所の上）。
     await key('Escape');
-    for (let k = 0; k < 4; k++) await key('ArrowUp');
+    for (let k = 0; k < 5; k++) await key('ArrowUp');
     await key('Enter');
     await wait(900);
     await key('End');
@@ -1803,7 +1808,7 @@ async function rendererGenerateChecks() {
 
     const top = await headings();
     check('はじめの束に「新しいページからカードを作る」のカードがある（アプリが一つでも、はじめの束を出す）',
-      JSON.stringify(top) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る']), top);
+      JSON.stringify(top) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る']), top);
 
     await key('End');
     await key('Enter');
@@ -1823,7 +1828,7 @@ async function rendererGenerateChecks() {
     await wait(400);
     const failSaid = await alertSaid();
     const afterFail = await active();
-    const failItems = await js("[...document.querySelectorAll('#deck > article.card')[4].querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + (n.value || n.textContent))");
+    const failItems = await js("[...document.querySelectorAll('#deck > article.card')[5].querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + (n.value || n.textContent))");
     check('作れなかったときは、理由を一文で知らせ、理由の項目に焦点を移し、入れた URL を残した入力欄をもう一度出す',
       failSaid === 'ページを開けなかったので、カードを作れませんでした。' && afterFail.text === failSaid
         && failItems.includes('INPUT:https://example.com/fail'), { failSaid, afterFail, failItems });
@@ -1843,7 +1848,7 @@ async function rendererGenerateChecks() {
     const deckHeadings = await headings();
     check('作り終えたら、その束を開き、「「作り物の町のページ」のカードを2枚作りました。」と一度だけ知らせる',
       doneSaid === '「作り物の町のページ」のカードを2枚作りました。' && done.tag === 'ARTICLE' && done.heading === '作り物の町のページ'
-        && JSON.stringify(deckHeadings) === JSON.stringify(['作り物の町のページ', '新着', '本文 1', 'このページのリンク']), { doneSaid, done, deckHeadings });
+        && JSON.stringify(deckHeadings) === JSON.stringify(['作り物の町のページ', '新着', '本文 1', 'このページのリンク', '名前・メモ・フォルダ']), { doneSaid, done, deckHeadings });
 
     await key('Enter');
     await key('End');
@@ -1863,7 +1868,7 @@ async function rendererGenerateChecks() {
     const back = await active();
     const topAfter = await headings();
     check('Esc ではじめの束へ戻ると、作った束の行き先のカードが足されていて、そこに焦点がある',
-      back.heading === '作り物の町のページ' && JSON.stringify(topAfter) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '作り物の町のページ', '新しいページからカードを作る']), { back, topAfter });
+      back.heading === '作り物の町のページ' && JSON.stringify(topAfter) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '作り物の町のページ', 'フォルダを作る', '新しいページからカードを作る']), { back, topAfter });
 
     await key('Enter');
     await key('Enter');
@@ -1875,7 +1880,7 @@ async function rendererGenerateChecks() {
     const topAfterDel = await headings();
     check('消すボタンで、束を消し、はじめの束の作るカードへ戻り、「「作り物の町のページ」のカードを消しました。」と知らせる',
       delSaid === '「作り物の町のページ」のカードを消しました。' && afterDel.heading === '新しいページからカードを作る'
-        && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
+        && JSON.stringify(topAfterDel) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る'])
         && JSON.stringify(await js('window.fakeLog.deleted()')) === '["page-test"]', { delSaid, afterDel, topAfterDel });
 
     // 欄の Enter で作り始めた直後に、焦点を移した先へ Enter が続けて届いても（押したままの繰り返し・読み上げソフトが続けて渡すもの）、
@@ -2110,7 +2115,7 @@ async function rendererSearchChecks(settingsStore) {
     const countText = await t.js("document.querySelector('[data-search-count]').textContent");
     check('探す欄: 「すぐ返る」で「2件見つかりました。」と一度だけ知らせ、探す欄のすぐ後に、アプリの名前と件数の見出しのカードが出る',
       JSON.stringify(said) === JSON.stringify(['2件見つかりました。']) && countText === '2件見つかりました。'
-        && JSON.stringify(heads) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '「試しのアプリ（作り物）」で見つかったカード（2件）', '試しのアプリ（作り物）', '新しいページからカードを作る']),
+        && JSON.stringify(heads) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '「試しのアプリ（作り物）」で見つかったカード（2件）', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る']),
       { said, heads, countText });
     check('探す欄: 打っている間、焦点は欄から動かない', stay.tag === 'INPUT' && stay.connected && stay.value === 'すぐ返る', stay);
 
@@ -2121,9 +2126,9 @@ async function rendererSearchChecks(settingsStore) {
     const result = await t.active();
     await t.wait(100);
     const pos = await t.status();
-    check('探す欄: Esc で「カードを探す」のカードへ戻り、下矢印キーで見つかったカードへ移る（「6枚中4枚目」）',
+    check('探す欄: Esc で「カードを探す」のカードへ戻り、下矢印キーで見つかったカードへ移る（「7枚中4枚目」）',
       out.tag === 'ARTICLE' && out.heading === 'カードを探す' && result.tag === 'ARTICLE'
-        && result.heading === '「試しのアプリ（作り物）」で見つかったカード（2件）' && pos === '6枚中4枚目', { out, result, pos });
+        && result.heading === '「試しのアプリ（作り物）」で見つかったカード（2件）' && pos === '7枚中4枚目', { out, result, pos });
 
     // 移る: 見つかったカードの中のボタンで、そのアプリの束のそのカードへ。
     await t.key('Enter');
@@ -2136,7 +2141,7 @@ async function rendererSearchChecks(settingsStore) {
     const movedPos = await t.status();
     check('探す欄: 見つかったカードの中は「「アプリの名前」の「〇〇」へ移る」のボタンで、押すとそのアプリの束のそのカードへ移り、位置を知らせる',
       first.text === '「試しのアプリ（作り物）」の「すぐ返る読む所」へ移る' && second.text === '「試しのアプリ（作り物）」の「すぐ返る一覧」へ移る'
-        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '8枚中3枚目', { first, second, moved, movedPos });
+        && moved.tag === 'ARTICLE' && moved.heading === 'すぐ返る一覧' && movedPos === '9枚中3枚目', { first, second, moved, movedPos });
     await t.key('Escape');
     await t.wait(100);
     const backTop = await t.active();
@@ -2157,7 +2162,7 @@ async function rendererSearchChecks(settingsStore) {
       again.tag === 'INPUT' && again.value === 'すぐ返る'
         && JSON.stringify(saidNone) === JSON.stringify(['見つかりませんでした。別の言い方でお試しください。'])
         && countNone === '見つかりませんでした。別の言い方でお試しください。'
-        && JSON.stringify(headsNone) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る']),
+        && JSON.stringify(headsNone) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る']),
       { again, saidNone, headsNone, countNone });
 
     // 日本語入力の変換を確定する Enter（isComposing が立つもの・keyCode 229 だけが来るもの）では移らない。
@@ -2179,9 +2184,9 @@ async function rendererSearchChecks(settingsStore) {
     await t.wait(150);
     const jumped = await t.active();
     const saidJump = await t.said();
-    check('探す欄: 欄の中の Enter で、最初の見つかったカードへ移り、「1件見つかりました。6枚中4枚目」と知らせる',
+    check('探す欄: 欄の中の Enter で、最初の見つかったカードへ移り、「1件見つかりました。7枚中4枚目」と知らせる',
       jumped.tag === 'ARTICLE' && jumped.heading === '「試しのアプリ（作り物）」で見つかったカード（1件）'
-        && JSON.stringify(saidJump) === JSON.stringify(['1件見つかりました。6枚中4枚目']), { jumped, saidJump });
+        && JSON.stringify(saidJump) === JSON.stringify(['1件見つかりました。7枚中4枚目']), { jumped, saidJump });
 
     // 消す: 欄を空にすると、見つかったカードは消え、数の文は始めの案内に戻る。
     await t.key('ArrowUp');
@@ -2193,7 +2198,7 @@ async function rendererSearchChecks(settingsStore) {
     await t.key('Escape');
     const outEmpty = await t.active();
     check('探す欄: 欄を空にすると見つかったカードが消え、Esc でカードへ戻れる',
-      JSON.stringify(headsEmpty) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '新しいページからカードを作る'])
+      JSON.stringify(headsEmpty) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る'])
         && countEmpty === '探す言葉を入れると、ここに見つかった数が出ます。' && outEmpty.tag === 'ARTICLE' && outEmpty.heading === 'カードを探す',
       { headsEmpty, countEmpty, outEmpty });
   } finally {
@@ -2240,14 +2245,15 @@ async function rendererLinksChecks() {
         && revealSaid === '元のページを表示しました。元のページでEscキーを押すと、Todoku に戻ります。'
         && openSaid.startsWith('いまのページを、既定のブラウザで開きました。'), { revealSaid, openSaid });
 
-    // 「このページのリンク」は束の最後のカード。中に入るとリンクを一件ずつ読む。
+    // 「このページのリンク」は束の最後から二枚目のカード（最後は「名前・メモ・フォルダ」）。中に入るとリンクを一件ずつ読む。
     await t.key('End');
+    await t.key('ArrowUp');
     const linksCardHead = await t.active();
     await t.key('Enter');
     await t.wait(700);
     const firstLink = await t.active();
     const linkItems = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + n.textContent)");
-    check('「このページのリンク」: 束の最後にあり、中に入ると、説明の一文の後にリンクを一件ずつ読み、最初の一件に焦点が移る',
+    check('「このページのリンク」: 束の最後のほうにあり、中に入ると、説明の一文の後にリンクを一件ずつ読み、最初の一件に焦点が移る',
       linksCardHead.heading === 'このページのリンク' && firstLink.tag === 'LI' && firstLink.text === '読めるページ（作り物）'
         && firstLink.heading === 'このページのリンク（3件）'
         && JSON.stringify(linkItems) === JSON.stringify(['P:一件を選んで Enter キーを押すと、そのページへ移ります。まだ読めないページは、開く前に確認します。',
@@ -2310,7 +2316,197 @@ async function rendererLinksChecks() {
     const top = await t.headings();
     check('作った束から Esc でリンクのその一件に戻り（確認の束は残らない）、はじめの束には作った束のカードが足される',
       afterMade.tag === 'LI' && afterMade.text === '作り物の町のページ'
-        && JSON.stringify(top) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '作り物の町のページ', '新しいページからカードを作る']), { afterMade, top });
+        && JSON.stringify(top) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', '作り物の町のページ', 'フォルダを作る', '新しいページからカードを作る']), { afterMade, top });
+  } finally {
+    t.win.destroy();
+  }
+}
+
+// 最初のページのフォルダ・表示名・メモ（ブックマークのように使う）。操作は全部、カードの中の入力欄とボタンと、今までのキーだけ。
+// 保存は本物の bookmarks.js の口（一時のフォルダの bookmarks.json）。開き直しても残ること・壊れたファイルでも開けることも確かめる。
+async function rendererBookmarksChecks(bookmarksFile) {
+  const fresh = ['Todoku', '表示設定', 'カードを探す', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る'];
+  let t = await openRendererWindow(null);
+  const alertSaid = () => t.js("document.getElementById('alert').textContent");
+  const said = async () => { await t.wait(150); return t.status(); };
+  const items = () => t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + (n.tagName === 'INPUT' ? n.labels[0].textContent + '=' + n.value : n.textContent))");
+  try {
+    check('フォルダ: はじめは、ページのカードの後に「フォルダを作る」のカードがある', JSON.stringify(await t.headings()) === JSON.stringify(fresh), await t.headings());
+
+    // フォルダを作る: カードの上の Enter で名前の欄へ。名前を入れて Enter で作る。
+    await t.key('End');
+    await t.key('ArrowUp');
+    await t.key('Enter');
+    const field = await t.active();
+    await t.type('天気');
+    await t.key('Enter');
+    const made = await said();
+    const afterMade = await t.active();
+    const headsMade = await t.headings();
+    check('フォルダを作る: 名前の欄で Enter を押すと作り、「「天気」フォルダを作りました。」と知らせ、フォルダのカードを選ぶ',
+      field.tag === 'INPUT' && field.label === '新しいフォルダの名前' && made === '「天気」フォルダを作りました。'
+        && afterMade.tag === 'ARTICLE' && afterMade.heading === '天気（フォルダ）'
+        && JSON.stringify(headsMade) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '天気（フォルダ）', '試しのアプリ（作り物）', 'フォルダを作る', '新しいページからカードを作る']),
+      { field, made, afterMade, headsMade });
+
+    // 同じ名前と空の名前は作らない。
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.type('天気');
+    await t.key('ArrowDown');
+    await t.js('document.activeElement.click()');
+    await t.wait(150);
+    const dup = await alertSaid();
+    await t.key('ArrowUp');
+    await t.type('');
+    await t.key('Enter');
+    await t.wait(150);
+    const empty = await alertSaid();
+    check('フォルダを作る: 同じ名前は「「天気」フォルダは、もうあります。…」、空なら「フォルダの名前を入れてください。」と知らせ、作らない',
+      dup === '「天気」フォルダは、もうあります。別の名前にしてください。' && empty === 'フォルダの名前を入れてください。'
+        && (await t.headings()).filter((h) => h.endsWith('（フォルダ）')).length === 1, { dup, empty });
+
+    // ページのカードの束の「名前・メモ・フォルダ」で、表示名とメモを付け、フォルダに入れる。
+    await t.key('Escape');
+    await t.key('ArrowUp');
+    const page = await t.active();
+    await t.key('Enter');
+    await t.key('End');
+    const organize = await t.active();
+    await t.key('Enter');
+    const organizeItems = await items();
+    await t.key('ArrowDown');
+    await t.type('よく見るアプリ');
+    await t.key('ArrowDown');
+    await t.type('毎朝見る');
+    await t.key('ArrowDown');
+    const saveButton = await t.active();
+    await t.js('document.activeElement.click()');
+    const noteSaid = await said();
+    const afterSave = await t.active();
+    check('名前とメモ: ページのカードの束の最後の「名前・メモ・フォルダ」で、表示名とメモを入れ、保存のボタンで「表示名を「…」にしました。メモを保存しました。」と知らせ、焦点はボタンのまま',
+      page.heading === '試しのアプリ（作り物）' && organize.heading === '名前・メモ・フォルダ'
+        && organizeItems[0] === 'P:最初のページでの、このページのカードの表示名とメモ、入れるフォルダを決めます。元の名前は「試しのアプリ（作り物）」です。'
+        && organizeItems.includes('INPUT:表示名（空にすると元の名前に戻ります）=') && organizeItems.includes('INPUT:メモ=')
+        && organizeItems.includes('P:いまは、どのフォルダにも入っていません。') && organizeItems.includes('BUTTON:「天気」フォルダに入れる')
+        && saveButton.text === '表示名とメモを保存する' && noteSaid === '表示名を「よく見るアプリ」にしました。メモを保存しました。'
+        && afterSave.tag === 'BUTTON' && afterSave.text === '表示名とメモを保存する', { page, organize, organizeItems, saveButton, noteSaid, afterSave });
+
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    const intoButton = await t.active();
+    await t.js('document.activeElement.click()');
+    const intoSaid = await said();
+    const afterInto = await t.active();
+    const intoItems = await items();
+    check('フォルダに入れる: 「「天気」フォルダに入れる」で、「「よく見るアプリ」を「天気」フォルダに入れました。」と知らせ、中の一文と出すボタンが変わる',
+      intoButton.text === '「天気」フォルダに入れる' && intoSaid === '「よく見るアプリ」を「天気」フォルダに入れました。'
+        && afterInto.text === '「天気」フォルダから出す' && intoItems.includes('P:いまは「天気」フォルダに入っています。'), { intoButton, intoSaid, afterInto, intoItems });
+
+    // 最初のページへ戻ると、ページのカードはフォルダの中にあり、フォルダのカードを選んでいる。保存のファイルにも残る。
+    await t.key('Escape');
+    await t.key('Escape');
+    const backTop = await t.active();
+    const headsTop = await t.headings();
+    const describe = await t.js("document.getElementById(document.activeElement.getAttribute('aria-describedby')).textContent");
+    const onDisk = JSON.parse(fs.readFileSync(bookmarksFile, 'utf8'));
+    check('最初のページ: フォルダに入れたページのカードは最初のページから消え、フォルダのカードに「ページのカードが1件入っています。」と出る。保存のファイルに残る',
+      backTop.heading === '天気（フォルダ）'
+        && JSON.stringify(headsTop) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '天気（フォルダ）', 'フォルダを作る', '新しいページからカードを作る'])
+        && describe === 'ページのカードが1件入っています。スペースキーまたはEnterキーで、「天気」フォルダの中へ進みます。'
+        && onDisk.folders.length === 1 && onDisk.folders[0].name === '天気'
+        && JSON.stringify(onDisk.pages['fake-app']) === JSON.stringify({ folder: onDisk.folders[0].id, name: 'よく見るアプリ', memo: '毎朝見る' }),
+      { backTop, headsTop, describe, onDisk });
+
+    // フォルダの中へ。ページのカードは表示名で読み、説明の頭に元の名前、次にメモ。
+    await t.key('Enter');
+    const inFolder = await t.headings();
+    await t.key('ArrowDown');
+    const pageDescribe = await t.js("document.getElementById(document.activeElement.getAttribute('aria-describedby')).textContent");
+    check('フォルダの中: 一枚目はフォルダのカード、その後にページのカード。ページのカードは表示名で読み、説明は元の名前・メモ・Enter キーの順',
+      JSON.stringify(inFolder) === JSON.stringify(['「天気」フォルダ', 'よく見るアプリ'])
+        && pageDescribe === '元の名前は「試しのアプリ（作り物）」です。メモ: 毎朝見る。スペースキーまたはEnterキーで、「よく見るアプリ」のカードへ進みます。',
+      { inFolder, pageDescribe });
+
+    // フォルダの名前を変える（フォルダの束の一枚目のカードで）。
+    await t.key('ArrowUp');
+    await t.key('Enter');
+    await t.key('ArrowDown');
+    const renameField = await t.active();
+    await t.type('天気予報');
+    await t.key('Enter');
+    const renameSaid = await said();
+    const renamed = await t.headings();
+    check('フォルダの名前を変える: 「フォルダの名前」の欄で Enter を押すと、「フォルダの名前を「天気」から「天気予報」に変えました。」と知らせる',
+      renameField.tag === 'INPUT' && renameField.label === 'フォルダの名前' && renameField.value === '天気'
+        && renameSaid === 'フォルダの名前を「天気」から「天気予報」に変えました。' && renamed[0] === '「天気予報」フォルダ', { renameField, renameSaid, renamed });
+
+    // 探す: 表示名とメモでも見つかる。
+    await t.key('Escape');
+    await t.key('Escape');
+    await t.key('Home');
+    await t.key('ArrowDown');
+    await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.type('毎朝');
+    await t.wait(600);
+    const found = await t.headings();
+    await t.key('Enter');
+    // 欄の Enter の直後の Enter は捨てる決まり（FIELD_ENTER_GUARD_MS）なので、少し待ってから見つかったカードの中へ。
+    await t.wait(600);
+    await t.key('Enter');
+    const openButton = await t.active();
+    t.win.destroy();
+
+    // 開き直しても残る。
+    t = await openRendererWindow(null);
+    const reopened = await t.headings();
+    check('探す: メモの言葉で、表示名の見出しの見つかったカードが出て、中に「「よく見るアプリ」のカードを開く」ボタンがある。開き直してもフォルダと表示名が残る',
+      found.includes('「よく見るアプリ」で見つかったカード（1件）') && openButton.text === '「よく見るアプリ」のカードを開く'
+        && JSON.stringify(reopened) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', '天気予報（フォルダ）', 'フォルダを作る', '新しいページからカードを作る']),
+      { found, openButton, reopened });
+
+    // フォルダを消す: 中のページのカードは最初のページに戻る。
+    for (let k = 0; k < 3; k++) await t.key('ArrowDown');
+    await t.key('Enter');
+    await t.key('Enter');
+    await t.key('End');
+    const delButton = await t.active();
+    await t.js('document.activeElement.click()');
+    const delSaid = await said();
+    const afterDel = await t.active();
+    const headsDel = await t.headings();
+    check('フォルダを消す: 「「天気予報」フォルダを消しました。中のページのカード1件は、最初のページに戻しました。」と知らせ、戻したページのカードを選ぶ',
+      delButton.text === 'このフォルダを消す（中のページのカードは最初のページに戻ります）'
+        && delSaid === '「天気予報」フォルダを消しました。中のページのカード1件は、最初のページに戻しました。'
+        && afterDel.heading === 'よく見るアプリ'
+        && JSON.stringify(headsDel) === JSON.stringify(['Todoku', '表示設定', 'カードを探す', 'よく見るアプリ', 'フォルダを作る', '新しいページからカードを作る'])
+        && JSON.parse(fs.readFileSync(bookmarksFile, 'utf8')).folders.length === 0, { delButton, delSaid, afterDel, headsDel });
+
+    // 表示名とメモを空にして保存すると、元の名前に戻る。
+    await t.key('Enter');
+    await t.key('End');
+    await t.key('Enter');
+    await t.key('ArrowDown');
+    await t.type('');
+    await t.key('ArrowDown');
+    await t.type('');
+    await t.key('Enter');
+    const clearSaid = await said();
+    await t.key('Escape');
+    await t.key('Escape');
+    const cleared = await t.headings();
+    check('名前とメモ: 空にして保存すると「表示名を外し、元の名前「…」に戻しました。メモを消しました。」と知らせ、元の名前に戻る',
+      clearSaid === '表示名を外し、元の名前「試しのアプリ（作り物）」に戻しました。メモを消しました。' && JSON.stringify(cleared) === JSON.stringify(fresh),
+      { clearSaid, cleared });
+    t.win.destroy();
+
+    // 保存のファイルが壊れていても開ける（フォルダも表示名も無いものとして）。
+    fs.writeFileSync(bookmarksFile, 'こわれた{');
+    t = await openRendererWindow(null);
+    const broken = await t.headings();
+    check('保存のファイルが壊れていても、最初のページを開ける（フォルダも表示名も無いものとして）', JSON.stringify(broken) === JSON.stringify(fresh), broken);
   } finally {
     t.win.destroy();
   }

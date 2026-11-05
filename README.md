@@ -130,6 +130,13 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 - P key, or the "元のページを表示する" button on the app's first card: shows the original web page as it is, in its own window in front (for example to show how complex the Japan Meteorological Agency pages look). Esc in that window returns to Todoku. If the page was not opened yet, it is opened first.
 - B key, or the "いまのページを既定のブラウザで開く" button on the app's first card: opens the current page of the app (the page the web app window is on, or the config's `url`) in the default browser, and says so. Only `http`/`https` pages are opened. The keys are the same on Windows and macOS, work on a card or an item (not in a text field), and do nothing on the first screen except saying "このキーは、アプリのカードを開いているときに使えます。". The two buttons carry `aria-keyshortcuts`.
 
+## Folders, names and notes on the first screen
+
+- The first screen can be used like bookmarks. The "フォルダを作る" card makes a folder: Enter moves to the name field, and Enter in the field makes it ("「天気」フォルダを作りました。"). Folder cards ("天気（フォルダ）") come before the page cards that are not in a folder; Enter on a folder card opens the folder. Its first card renames the folder or deletes it (the pages inside go back to the first screen, "…中のページのカード1件は、最初のページに戻しました。").
+- Every app deck ends with a card "名前・メモ・フォルダ": a display name, a note, and one button per folder ("「天気」フォルダに入れる", "「天気」フォルダから出す"). With a display name, the page card is read by that name, and its description starts with the original name once, then the note. Every change is announced once ("「よく見るアプリ」を「天気」フォルダに入れました。"). No new keys: everything is done with the fields and buttons in the cards.
+- "カードを探す" also searches app names, display names and notes; a match adds a "「{name}」のカードを開く" button.
+- New decks (from a URL or from a link) are added to the first screen outside any folder. All of this is saved in `bookmarks.json` in the app's user data folder; if that file is broken, the app starts with no folders. `npm run demo:reset` moves it aside with the other saved data.
+
 ## YouTube cards
 
 - `cards/youtube.json` ("YouTube の動画") searches YouTube and plays a video, without opening youtube.com in a window. The list comes from the official YouTube Data API v3 (`search.list`, then `videos.list` for the length), and each video is read as one item: title, length, date published and channel name. Enter on an item moves to the player card and plays it in the official embedded player (`youtube-nocookie.com`), shown inside the card screen at 640×360 with nothing drawn over it. The buttons (play, pause, back 10 seconds, forward 10 seconds, volume up and down) are below the player, and the focus stays on these buttons, never inside the player, so that a screen reader does not get lost in it. Volume changes are announced with the new level, e.g. "音量を60%にしました。". Playback starts only after the player is loaded and more than half of it is visible on the screen.
@@ -162,8 +169,8 @@ Built during Built with Claude: Japan 2026 (2026-11-02 to 2026-11-08), theme 2: 
 
 ## Tests
 
-- `npm test`: 145 tests, 138 passed, 7 skipped (the Electron-only scripts), 0 failed.
-- `npm run smoke`: 236 checks, 236 passed, against the practice pages (and a local test server that never answers) only.
+- `npm test`: 150 tests, 143 passed, 7 skipped (the Electron-only scripts), 0 failed.
+- `npm run smoke`: 248 checks, 248 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
 - `npm test` and `npm run smoke` were measured on macOS on 2026-11-06. On 2026-11-04 (with fewer tests), `npm run smoke` was also measured on a fresh clone of this repository, following "Getting started (macOS)", and both `npm test` and `npm run smoke` on a fresh clone on Windows 11, following "Getting started (Windows)". `npm run real:tsukuba` was measured on 2026-11-04; it loads the real site, so it is run by hand only.
 
@@ -217,6 +224,8 @@ Claude がしていること（まとめ）
 - リンクの一件で Enter キーを押すと、行き先に Todoku の束（設定ファイルか、Claude が作った束）があれば、その束（のそのカード）へ移ります。無ければ、「このページは、まだ Todoku で読めるようになっていません。これから Claude がカードを作ります。90秒ほどかかります。」と告げ、「カードを作って開く」「既定のブラウザで開く」「やめる」から選べます。作る流れは「新しいページからカードを作る」と同じです。Esc キーで、そのリンクに戻ります。一件ごとに「未対応」とは読まず、カードの説明で一度だけ「まだ読めないページは、開く前に確認します。」と知らせます。
 - 元のページを表示する: Pキーか、アプリのはじめのカードの「元のページを表示する」ボタンで、元のウェブページを、そのままの見た目で前に出します（気象庁のページがどれだけ複雑かを見せるときなど）。そのウィンドウで Esc キーを押すと、Todoku に戻ります。まだ開いていないページは、開いてから出します。
 - いまのページを既定のブラウザで開く: Bキーか、アプリのはじめのカードの「いまのページを既定のブラウザで開く」ボタンで、いまのページ（ウェブアプリの窓が開いているページか、設定ファイルの url）を既定のブラウザで開き、開いたことを知らせます。開くのは http と https のページだけです。キーは Windows と Mac で同じで、カードの上でも項目の上でも使えます（入力欄の中では使えません）。はじめの画面では「このキーは、アプリのカードを開いているときに使えます。」と知らせます。
+- 最初のページを、ブックマークのように使えます。「フォルダを作る」のカードでフォルダを作り（Enter キーで名前の欄へ移り、欄の中の Enter キーで作ります）、フォルダのカード（「天気（フォルダ）」）で Enter キーを押すと、その中のページのカードへ進みます。フォルダの一枚目のカードで、名前を変えたり、フォルダを消したりできます（中のページのカードは最初のページに戻ります）。
+- ページのカードの束の最後にある「名前・メモ・フォルダ」のカードで、表示名とメモを付け、フォルダに入れたり出したりできます。表示名を付けると、ページのカードはその名前で読まれ、説明の頭で一度だけ元の名前を、次にメモを読みます。操作のたびに「「よく見るアプリ」を「天気」フォルダに入れました。」のように一度だけ知らせます。新しいキーは足さず、カードの中の入力欄とボタンで操作します。「カードを探す」では、アプリの名前・表示名・メモでも探せます。URL やリンクから新しく作った束は、どのフォルダにも入っていない所に足します。保存はこのパソコンの userData の bookmarks.json で、壊れていてもフォルダの無い状態で起動します。
 - テストを Electron で走らせる間（`npm run smoke` など）は、窓を画面に出さず、前のアプリから焦点を奪いません。
 - YouTube のカード（`cards/youtube.json`「YouTube の動画」）で、動画を探して再生できます。一覧は YouTube の公式の API から読み、一件を「タイトル、長さ、公開日、チャンネル名」で読みます。一件で Enter キーを押すと、再生のカードに移り、YouTube の公式の埋め込みプレーヤーで再生します。プレーヤーはカードの画面の中に見える形で置き、上に何も重ねません。操作のボタン（再生・一時停止・10秒戻る・10秒進む・音量を上げる・下げる）はプレーヤーの下にあり、焦点はプレーヤーの中ではなく、このボタンに置きます。音量を変えると「音量を60%にしました。」のように知らせます。API キーは環境変数 TODOKU_YOUTUBE_API_KEY から読み、画面には渡さず、ファイルやログにも書きません。キーが無いときは「YouTube の API キーが設定されていません。」と知らせます。
 - 検索の言葉は YouTube（Google）に送られます。Todoku は検索の言葉も結果も保存しません（探すたびに API に問い合わせます）。YouTube の束の一枚目でもそう知らせ、YouTube の利用規約と Google のプライバシーポリシーを既定のブラウザで開くボタンを置いています。YouTube のカードを使うことは、YouTube の利用規約に同意することになります。

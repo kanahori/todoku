@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('cardsApi', {
   deleteGenerated: (appId) => ipcRenderer.invoke('generate:delete', String(appId)),
   exportGenerated: (appId) => ipcRenderer.invoke('generate:export', String(appId)),
   // 表示設定（読みやすさ・1列リフロー表示・配色）を読む・書く。書くのは三つだけ。
+  // 最初のページのフォルダ・表示名・メモを読む・書く（形は主の処理がそろえる）。
+  loadBookmarks: () => ipcRenderer.invoke('bookmarks:load'),
+  saveBookmarks: (b) => ipcRenderer.invoke('bookmarks:save', b),
   loadSettings: () => ipcRenderer.invoke('settings:load'),
   saveSettings: (s) => ipcRenderer.invoke('settings:save', {
     preset: String((s && s.preset) || ''), reflow: Boolean(s && s.reflow), scheme: String((s && s.scheme) || ''),
