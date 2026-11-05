@@ -1296,8 +1296,8 @@ async function rendererClickAnnounceChecks() {
     const fastButton = await press();
     await wait(900);
     const fastSaid = await js('window.__said.slice()');
-    check('すぐ終わる押す所: 「実行しています。」を出さず、「実行しました。」だけを知らせる',
-      fastButton === '「すぐ終わる押す所」を実行する' && JSON.stringify(fastSaid) === JSON.stringify(['「すぐ終わる押す所」を実行しました。']), { fastButton, fastSaid });
+    check('すぐ終わる押す所: 「クリックしています。」を出さず、「クリックしました。」だけを知らせる',
+      fastButton === '「すぐ終わる押す所」をクリックする' && JSON.stringify(fastSaid) === JSON.stringify(['「すぐ終わる押す所」をクリックしました。']), { fastButton, fastSaid });
     await key('Escape');
     const slowButton = await press();
     await wait(800);
@@ -1306,11 +1306,11 @@ async function rendererClickAnnounceChecks() {
     await wait(1000);
     const slowSaid = await js('window.__said.slice()');
     const buttonAfter = await js('document.activeElement.textContent');
-    check('時間のかかる押す所: 0.5秒たっても終わらなければ「実行しています。」を出し（ボタンも「（実行しています）」）、終わったら「実行しました。」',
-      slowButton === '「時間のかかる押す所」を実行する' && JSON.stringify(slowDuring) === JSON.stringify(['「時間のかかる押す所」を実行しています。'])
-        && buttonDuring === '「時間のかかる押す所」を実行する（実行しています）'
-        && JSON.stringify(slowSaid) === JSON.stringify(['「時間のかかる押す所」を実行しています。', '「時間のかかる押す所」を実行しました。'])
-        && buttonAfter === '「時間のかかる押す所」を実行する',
+    check('時間のかかる押す所: 0.5秒たっても終わらなければ「クリックしています。」を出し（ボタンも「（クリックしています）」）、終わったら「クリックしました。」',
+      slowButton === '「時間のかかる押す所」をクリックする' && JSON.stringify(slowDuring) === JSON.stringify(['「時間のかかる押す所」をクリックしています。'])
+        && buttonDuring === '「時間のかかる押す所」をクリックする（クリックしています）'
+        && JSON.stringify(slowSaid) === JSON.stringify(['「時間のかかる押す所」をクリックしています。', '「時間のかかる押す所」をクリックしました。'])
+        && buttonAfter === '「時間のかかる押す所」をクリックする',
       { slowButton, slowDuring, buttonDuring, slowSaid, buttonAfter });
   } finally {
     win.destroy();
@@ -1741,9 +1741,9 @@ async function rendererFocusChecks() {
     await js('document.activeElement.click()');
     await wait(300);
     const clickSaid = await js("document.getElementById('alert').textContent");
-    check('直せなかった押す所: 「実行できませんでした。…。自動で直すこともできませんでした（Claude の API キーがありません）。」と知らせる',
-      pressButton.text === '「直せない押す所」を実行する'
-        && clickSaid === '「直せない押す所」を実行できませんでした。ページの中に読む場所が見つかりません。自動で直すこともできませんでした（Claude の API キーがありません）。',
+    check('直せなかった押す所: 「クリックできませんでした。…。自動で直すこともできませんでした（Claude の API キーがありません）。」と知らせる',
+      pressButton.text === '「直せない押す所」をクリックする'
+        && clickSaid === '「直せない押す所」をクリックできませんでした。ページの中に読む場所が見つかりません。自動で直すこともできませんでした（Claude の API キーがありません）。',
       { pressButton, clickSaid });
 
     // 支援者向けのカードの「直す前に戻す」: 焦点は支援者向けのカードの中の最初の項目（「いまはありません」）に移る。

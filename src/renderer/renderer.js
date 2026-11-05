@@ -524,17 +524,17 @@ function notFixedSentence(result) {
 // ---- 押すカード（押す前に確かめる二段）----
 function showClickConfirm(card, node) {
   card.items = [
-    { text: `「${card.title}」を実行します。`, result: true },
+    { text: `「${card.title}」をクリックします。`, result: true },
     {
-      button: `「${card.title}」を実行する`,
+      button: `「${card.title}」をクリックする`,
       onPress: async (button) => {
         if (busy) return;
         busy = true;
         // 「押しています。」は、読み込み中の知らせと同じく、0.5秒たっても終わらないときだけ出す（すぐ終われば「押しました。」だけ）。
         // 押す9枚の束で、一枚ごとに「押します。」「押す ボタン」「押しています。」「押しました。」の4つが読まれ、長かった（Windows の通し稽古・押して約1.0秒）。
         const pressingTimer = setTimeout(() => {
-          button.textContent = `「${card.title}」を実行する（実行しています）`;
-          announce(`「${card.title}」を実行しています。`);
+          button.textContent = `「${card.title}」をクリックする（クリックしています）`;
+          announce(`「${card.title}」をクリックしています。`);
         }, LOADING_DELAY_MS);
         const key = `${card.appId}/${card.cardId}`;
         repairingNow.delete(key);
@@ -547,21 +547,21 @@ function showClickConfirm(card, node) {
           clearTimeout(pressingTimer);
           repairingNow.delete(key);
           busy = false;
-          button.textContent = `「${card.title}」を実行する`;
+          button.textContent = `「${card.title}」をクリックする`;
         }
         if (r.repaired) {
           // 押す所を直したときは、押し直さない。直したことを知らせ、もう一度押すかは使う人に任せる。
           repairsOf(card.appId).set(card.cardId, r.repaired);
           card.items = (card.items || []).filter((it) => !it.repairItem).concat(repairItems(card));
-          // 実行するボタンは作り直されるので、焦点は「「〇〇」を実行します。」の項目へ移す（下矢印キーで押すボタンへ）。
+          // 実行するボタンは作り直されるので、焦点は「「〇〇」をクリックします。」の項目へ移す（下矢印キーで押すボタンへ）。
           refreshCard(card, { focusResult: true });
           ensureMaintCard(card.appId);
-          announce(`ページが変わったので、ボタンやリンクの場所を直しました。もう一度実行するときは、「${card.title}」を実行するボタンを押してください。`);
+          announce(`ページが変わったので、ボタンやリンクの場所を直しました。もう一度クリックするときは、「${card.title}」をクリックするボタンを押してください。`);
           return;
         }
         // 押した結果ダウンロードが始まったときは、保存したか（できなかったか）を知らせる。
         if (r.ok && r.download) announce(r.download.message, !r.download.ok);
-        else announce(r.ok ? `「${card.title}」を実行しました。` : `「${card.title}」を実行できませんでした。${r.message}${r.autoRepairFailed ? `。${notFixedSentence(r)}` : ''}`, !r.ok);
+        else announce(r.ok ? `「${card.title}」をクリックしました。` : `「${card.title}」をクリックできませんでした。${r.message}${r.autoRepairFailed ? `。${notFixedSentence(r)}` : ''}`, !r.ok);
       },
     },
     ...repairItems(card),
@@ -1580,7 +1580,7 @@ function appDeck(config, hasParent = true) {
     'スペースキーまたはEnterキーで、カードの中に入ります。',
     '読むカードでは、カードの中に入るときに、ウェブアプリのその場所を読みます。',
     '読むカードの上で、もう一度スペースキーまたはEnterキーを押すと、読み直します。',
-    '操作するカードでは、カードの中の「実行する」ボタンで、ページのボタンやリンクを操作します。',
+    '操作するカードでは、カードの中のボタンで、ページのボタンやリンクをクリックします。',
     'カードの中では、上下矢印キーで項目を一つずつ選びます。',
     'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
@@ -1592,7 +1592,7 @@ function appDeck(config, hasParent = true) {
     // 基を使い慣れた方は、二枚目に表示設定があると思って探すので、在処と戻り方を言う。
     texts.push(`表示設定は、はじめの画面の「${SETTINGS_HEADING}」のカードにあります。`);
   }
-  if (clicks === 0) texts.splice(texts.indexOf('操作するカードでは、カードの中の「実行する」ボタンで、ページのボタンやリンクを操作します。'), 1);
+  if (clicks === 0) texts.splice(texts.indexOf('操作するカードでは、カードの中のボタンで、ページのボタンやリンクをクリックします。'), 1);
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);

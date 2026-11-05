@@ -62,8 +62,8 @@ test('押した結果のダウンロードは、保存したか（できなか�
   assert.match(source, /onDownloadDone\(\(r\) => announce\(r\.message, !r\.ok\)\)/);
 });
 
-test('操作するカードを自動で直したときは実行し直さず、もう一度実行するかを使う人に任せる知らせを出す（「押す」は、キーとボタンのときだけ）', () => {
-  assert.match(source, /ページが変わったので、ボタンやリンクの場所を直しました。もう一度実行するときは、「\$\{card\.title\}」を実行するボタンを押してください。/);
+test('操作するカードを自動で直したときはクリックし直さず、もう一度クリックするかを使う人に任せる知らせを出す（「押す」は、キーとボタンのときだけ）', () => {
+  assert.match(source, /ページが変わったので、ボタンやリンクの場所を直しました。もう一度クリックするときは、「\$\{card\.title\}」をクリックするボタンを押してください。/);
   assert.match(source, /ページが変わったので、ボタンやリンクの場所を直しています。少しお待ちください。/);
   // 押せなかったときも、読めないときと同じ一文（理由つき）を足す。
   assert.match(source, /r\.autoRepairFailed \? `。\$\{notFixedSentence\(r\)\}` : ''/);
@@ -204,18 +204,18 @@ test('束に入ったら窓の題を「Todoku - 束の題」にし、一番上�
   assert.doesNotMatch(body, /page-title/);
 });
 
-test('操作するカード: 「実行しています。」は 0.5秒（読み込み中と同じ待ち）たっても終わらないときだけ出し、終わったら出さない', () => {
+test('操作するカード: 「クリックしています。」は 0.5秒（読み込み中と同じ待ち）たっても終わらないときだけ出し、終わったら出さない', () => {
   const body = source.slice(source.indexOf('function showClickConfirm('), source.indexOf("const MAINT_HEADING"));
   const timer = body.match(/const pressingTimer = setTimeout\(\(\) => \{([\s\S]*?)\}, LOADING_DELAY_MS\);/);
   assert.ok(timer, '押しているの知らせが、待ちの中に無い');
-  assert.match(timer[1], /announce\(`「\$\{card\.title\}」を実行しています。`\);/);
-  assert.match(timer[1], /button\.textContent = `「\$\{card\.title\}」を実行する（実行しています）`;/);
-  // 待ちの外では「実行しています。」を出さない。
-  assert.equal(body.split('を実行しています。').length - 1, 1);
+  assert.match(timer[1], /announce\(`「\$\{card\.title\}」をクリックしています。`\);/);
+  assert.match(timer[1], /button\.textContent = `「\$\{card\.title\}」をクリックする（クリックしています）`;/);
+  // 待ちの外では「クリックしています。」を出さない。
+  assert.equal(body.split('をクリックしています。').length - 1, 1);
   assert.match(body, /\} finally \{\s+clearTimeout\(pressingTimer\);/);
   // 言い回しは変えない。
-  assert.match(body, /`「\$\{card\.title\}」を実行しました。`/);
-  assert.match(body, /text: `「\$\{card\.title\}」を実行します。`/);
+  assert.match(body, /`「\$\{card\.title\}」をクリックしました。`/);
+  assert.match(body, /text: `「\$\{card\.title\}」をクリックします。`/);
   assert.doesNotMatch(body, /を押します。|を押しました。|を押せませんでした。/);
 });
 
