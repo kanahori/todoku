@@ -54,9 +54,11 @@ test('公開する cards/ には、手元だけで使う相手の語が入って
   // 大学の業務システムと大学の Moodle の設定ファイルは、手元の置き場（CARDS_LOCAL_DIR）にだけ置く。
   const fs = require('node:fs');
   const dir = path.join(__dirname, '..', 'cards');
-  // つくば市の公式サイト（公開のページ）の設定ファイルは、その名前と URL だけを除いて見る（大学の語は、いままでどおり止める）。
+  // つくば市の公式サイト（公開のページ）の設定ファイルは、その名前と URL だけを除いて見る。
+  // 大学の公開のページ（大学・学部の公式サイトとウェブマガジン）は、社長のご選択（2026-11-06）で cards/ に入れたので、その URL だけを除く。
+  // 大学の業務システム（aims・portal.k.）の語は、いままでどおり止める。
   const banned = [/aims/i, /tsukuba-tech/i, /tsukuba/i, /portal\.k\./i];
-  const publicCity = /www\.city\.tsukuba\.lg\.jp|tsukuba-city/g;
+  const publicCity = /www\.city\.tsukuba\.lg\.jp|tsukuba-city|https:\/\/www\.(i\.)?tsukuba-tech\.ac\.jp\/(?=")/g;
   for (const name of fs.readdirSync(dir)) {
     const text = (name + '\n' + fs.readFileSync(path.join(dir, name), 'utf8')).replace(publicCity, '');
     for (const re of banned) assert.ok(!re.test(text), `cards/${name} に ${re} が入っています`);

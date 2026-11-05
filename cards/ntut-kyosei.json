@@ -1,0 +1,31 @@
+{
+  "id": "ntut-kyosei",
+  "name": "筑波技術大学 共生社会創成学部",
+  "description": "出典：筑波技術大学 共生社会創成学部ホームページ。学部の公式サイトのページを開いて、書いてあるとおりに読みます。",
+  "sourceUrl": "https://www.i.tsukuba-tech.ac.jp/",
+  "url": "https://www.i.tsukuba-tech.ac.jp/",
+  "cards": [
+    {
+      "id": "news",
+      "title": "学部のお知らせを読む",
+      "action": "list",
+      "selector": "#site-content ul.border_list > li",
+      "container": "#site-content ul.border_list",
+      "description": "出典：筑波技術大学 共生社会創成学部ホームページ。",
+      "skipItemsMatching": "入試|入学者選抜|募集要項"
+    },
+    {
+      "id": "research",
+      "title": "教育研究活動の新しい記事を読む",
+      "action": "list",
+      "selector": "#site-content ul.card_list > li",
+      "container": "#site-content ul.card_list"
+    },
+    {
+      "id": "intro",
+      "title": "学部の紹介を読む",
+      "action": "read",
+      "selector": "#site-content .intro_wrapper .intro"
+    }
+  ]
+}

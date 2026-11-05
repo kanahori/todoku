@@ -1,0 +1,33 @@
+{
+  "id": "ntut-top",
+  "name": "筑波技術大学ホームページ",
+  "description": "出典：筑波技術大学ホームページ。大学の公式サイトのページを開いて、書いてあるとおりに読みます。",
+  "sourceUrl": "https://www.tsukuba-tech.ac.jp/",
+  "url": "https://www.tsukuba-tech.ac.jp/",
+  "cards": [
+    {
+      "id": "pickup",
+      "title": "ピックアップニュースを全部読む",
+      "action": "list",
+      "selector": ".pc-header section.slider .swiper-slide:not(.swiper-slide-duplicate) .box",
+      "description": "出典：筑波技術大学ホームページ。トップページの上で、横に切り替わるニュースです。"
+    },
+    {
+      "id": "announcements",
+      "title": "お知らせを読む",
+      "action": "list",
+      "selector": "section.event .wrap > .box",
+      "container": "section.event .wrap",
+      "skipItemsMatching": "入試|入学者選抜|募集要項"
+    },
+    {
+      "id": "topics",
+      "title": "トピックスを読む",
+      "action": "list",
+      "selector": "section.information .container > .row > div > .box .col-8",
+      "container": "section.information .container > .row",
+      "skipItemsMatching": "入試|入学者選抜|募集要項",
+      "undatedLabel": "固定の記事"
+    }
+  ]
+}

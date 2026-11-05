@@ -9,7 +9,7 @@
       "title": "最後の返事を読む",
       "action": "read",
       "selector": ".log > li.ai:last-child .body",
-      "description": "いちばん新しい返事を読みます。返事を書いている途中なら、書き終わるのを待ってから読みます。待っても書き終わらないときは、途中までを読み、途中までだと知らせます"
+      "description": "いちばん新しい返事です。返事を書いている途中なら、書き終わるまで待ってから読みます。"
     },
     {
       "id": "questions",
@@ -23,7 +23,7 @@
         "next": "li.ai",
         "find": ".body"
       },
-      "description": "自分が送った質問を、古い順に、番号を付けて全部読みます。一件を選んで Enter キーを押すと、その質問への返事を読みます。1件も無いときは、「0件」と知らせます"
+      "description": "自分が送った質問です。古い順に並びます。"
     },
     {
       "id": "all-turns",
@@ -31,7 +31,7 @@
       "action": "list",
       "selector": ".log > li.turn",
       "container": ".log",
-      "description": "質問と返事を、古い順に、番号を付けて全部読みます。上下矢印キーで、前の発言と次の発言に一件ずつ移れます"
+      "description": "質問と返事を、古い順に並べたものです。"
     },
     {
       "id": "history",
@@ -39,7 +39,7 @@
       "action": "list",
       "selector": ".history-list > li",
       "container": ".history-list",
-      "description": "前に話したチャットの題を、番号を付けて全部読みます。1件も無いときは、「0件」と知らせます"
+      "description": "前に話したチャットの題です。"
     },
     {
       "id": "last-code",
@@ -47,7 +47,7 @@
       "action": "list",
       "selector": ".log > li.ai:last-child .body pre",
       "container": ".log > li.ai:last-child .body",
-      "description": "いちばん新しい返事の中の、コードの部分だけを、番号を付けて読みます。1件も無いときは、「0件」と知らせます"
+      "description": "いちばん新しい返事の中の、コードの部分です。"
     }
   ]
 }

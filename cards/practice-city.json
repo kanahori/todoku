@@ -5,10 +5,10 @@
   "cards": [
     {
       "id": "carousel",
-      "title": "大きな画像のお知らせを全部読む",
+      "title": "トップの画像のお知らせを全部読む",
       "action": "list",
       "selector": ".hero .slide",
-      "description": "自動で切り替わるお知らせを、番号を付けて全部読みます"
+      "description": "トップページの上に、画像で順に出るお知らせです。"
     },
     {
       "id": "news",

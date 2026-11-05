@@ -2,7 +2,10 @@
   "id": "moodle-demo",
   "name": "学習のサイト（公式デモ）",
   "url": "https://school.moodledemo.net/",
-  "login": { "selector": "[data-region=\"usermenu\"] a[href$=\"/login/index.php\"]", "path": "/login/index.php" },
+  "login": {
+    "selector": "[data-region=\"usermenu\"] a[href$=\"/login/index.php\"]",
+    "path": "/login/index.php"
+  },
   "cards": [
     {
       "id": "next-deadlines",
@@ -10,7 +13,7 @@
       "action": "list",
       "path": "/my/",
       "selector": ".block_timeline [data-region=\"event-list-item\"]",
-      "description": "ダッシュボードのタイムラインを読みます"
+      "description": "ダッシュボードの「タイムライン」に出る、これからの締め切りです。"
     },
     {
       "id": "my-courses",

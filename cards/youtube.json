@@ -4,7 +4,17 @@
   "kind": "youtube",
   "description": "出典：YouTube。動画の一覧は YouTube Data API から読み、再生は YouTube の埋め込みプレーヤーで行います。",
   "cards": [
-    { "id": "search", "title": "動画を探す", "action": "youtube-search", "description": "探す言葉を入れて Enter キーを押すと、見つかった動画を、題・長さ・公開日・チャンネル名で一件ずつ読みます。" },
-    { "id": "player", "title": "再生中の動画を操作する", "action": "youtube-player", "description": "再生・一時停止・10秒戻る・10秒進む・音量の上げ下げのボタンがあります。" }
+    {
+      "id": "search",
+      "title": "動画を探す",
+      "action": "youtube-search",
+      "description": "探す言葉を入れて Enter キーを押すと、見つかった動画の題・長さ・公開日・チャンネル名を読みます。"
+    },
+    {
+      "id": "player",
+      "title": "再生中の動画を操作する",
+      "action": "youtube-player",
+      "description": "再生・一時停止・10秒戻る・10秒進む・音量の上げ下げのボタンがあります。"
+    }
   ]
 }

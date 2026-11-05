@@ -1,6 +1,6 @@
 {
   "id": "tsukuba-city-old-line-for-test",
-  "name": "つくば市公式ウェブサイト（試しのための古い行を一つ含む写し）",
+  "name": "つくば市公式ウェブサイト（検証のため、古い行を一つ含む写し）",
   "description": "出典：つくば市公式ウェブサイト。つくば市の公式サイトのページを開いて、書いてあるとおりに読みます。",
   "sourceUrl": "https://www.city.tsukuba.lg.jp/",
   "url": "https://www.city.tsukuba.lg.jp/",
@@ -11,22 +11,21 @@
       "action": "list",
       "selector": ".top-emergency .category-contents ul.list > li",
       "container": ".top-emergency .category-contents",
-      "description": "出典：つくば市公式ウェブサイト。災害などの緊急のお知らせを、日付と題で、番号を付けて全部読みます。1件も無いときは、「0件」と知らせます"
+      "description": "出典：つくば市公式ウェブサイト。災害などの緊急のお知らせの日付と題です。"
     },
     {
       "id": "news",
       "title": "新着情報を読む",
       "action": "list",
       "selector": ".top-topic .news-box > ul.news-list > li",
-      "description": "新しく載ったページを、日付と題で、番号を付けて全部読みます"
+      "description": "新しく掲載されたページの日付と題です。"
     },
     {
       "id": "notice",
       "title": "お知らせを読む",
       "action": "list",
       "selector": ".top-topic .notice-box ul.news-list > li",
-      "container": ".top-topic .notice-box .list-box",
-      "description": "トップページのお知らせの題を、番号を付けて全部読みます"
+      "container": ".top-topic .notice-box .list-box"
     },
     {
       "id": "events",
@@ -37,28 +36,27 @@
       "container": "#calListTable",
       "dateSelector": "td.date",
       "tagSelector": ".event_icon",
-      "description": "イベントカレンダーの今月の一覧を開き、催しを一件ずつ、日付と曜日、催しの題、分類（括弧の中）の順に読みます。1件も無いときは、「0件」と知らせます"
+      "description": "イベントカレンダーにある、今月の催しの日付と題です。"
     },
     {
       "id": "carousel",
-      "title": "大きな画像のお知らせを全部読む",
+      "title": "トップの画像のお知らせを全部読む",
       "action": "list",
       "selector": ".wrap-mv ul.mv-slider > li:not(.bx-clone) > a",
-      "description": "自動で切り替わるお知らせを、画像の説明から、番号を付けて全部読みます。切り替えのために作られた同じお知らせは、二度は読みません"
+      "description": "トップページの上に、画像で順に出るお知らせです。"
     },
     {
       "id": "pickup",
       "title": "ピックアップを全部読む",
       "action": "list",
       "selector": ".top-pickup ul.pickup-slider > li:not(.bx-clone) > a",
-      "description": "横に切り替わる注目のページの案内を、番号を付けて全部読みます。切り替えのために作られた同じお知らせは、二度は読みません"
+      "description": "トップページの「ピックアップ」に並ぶ、注目のページの案内です。"
     },
     {
       "id": "kurashi",
       "title": "くらしの情報（こんなときは）を読む",
       "action": "list",
-      "selector": ".top-kurashi .konnatoki-box ul.list > li",
-      "description": "くらしの場面ごとの案内の題を、番号を付けて全部読みます"
+      "selector": ".top-kurashi .konnatoki-box ul.list > li"
     }
   ]
 }

@@ -520,3 +520,11 @@ test('題の頭の飾りの記号（▼・■・●・※ など）は落とす�
   );
   assert.equal(cards[0].title, '作り物の説明');
 });
+
+test('カードを作る指示に、利用者の目線の題の書き方（中身が分かる題・ページに無いことを書かない・説明は付けない）がある', () => {
+  const { SYSTEM_PROMPT } = require('../src/main/generate-prompt');
+  assert.match(SYSTEM_PROMPT, /カードの題と説明の書き方（利用者の目線）/);
+  assert.match(SYSTEM_PROMPT, /そのカードに何が書いてあるか、そのカードで何を得られるか/);
+  assert.match(SYSTEM_PROMPT, /ページに書いていないことを、題の元にしないこと/);
+  assert.match(SYSTEM_PROMPT, /アプリはカードに説明を付けません。/);
+});
