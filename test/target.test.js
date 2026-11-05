@@ -161,3 +161,23 @@ test('Todoku の窓を閉じたときに、ウェブアプリの窓を全部閉�
   assert.deepEqual(destroyed.sort(), ['A', 'B']);
   assert.equal(closeAllTargets(), 0);
 });
+
+// 一覧の一件の頭の飾り（「＼Hot!／」）と、日付の無い一件の印（undatedLabel）。
+test('一覧の一件: 頭の「＼…／」の記号は読まず、undatedLabel があれば、日付で始まらない一件の頭に付ける', () => {
+  const { tidyListItems } = require('../src/main/target');
+  const items = ['＼Hot!／学生の活躍、作り物の記事', '2026年11月04日、学生の活躍、作り物の記事', '2026.10.16 作り物の記事'];
+  assert.deepEqual(tidyListItems(items), ['Hot!、学生の活躍、作り物の記事', items[1], items[2]]);
+  assert.deepEqual(tidyListItems(items, '固定の記事'), ['固定の記事、Hot!、学生の活躍、作り物の記事', items[1], items[2]]);
+  // 日付で始まる一件が一つも無い一覧には付けない（日付の無い一覧のカード）。
+  assert.deepEqual(tidyListItems(['作り物の一件', '作り物の二件'], '固定の記事'), ['作り物の一件', '作り物の二件']);
+  // 頭でない所の記号と、長い文を挟む記号はそのまま。
+  assert.deepEqual(tidyListItems(['作り物の＼Hot!／記事']), ['作り物の＼Hot!／記事']);
+});
+
+test('設定ファイル: undatedLabel は list のカードだけで、20文字までの空でない文字列', () => {
+  const { validateConfig } = require('../src/main/config');
+  const base = (card) => ({ id: 'u', name: '作り物', url: 'https://example.com/', cards: [{ id: 'a', title: 'A', selector: 'li', ...card }] });
+  assert.deepEqual(validateConfig(base({ action: 'list', undatedLabel: '固定の記事' })), []);
+  assert.deepEqual(validateConfig(base({ action: 'read', undatedLabel: '固定の記事' })).map((e) => e.where), ['cards[0].undatedLabel']);
+  assert.deepEqual(validateConfig(base({ action: 'list', undatedLabel: '' })).map((e) => e.where), ['cards[0].undatedLabel']);
+});

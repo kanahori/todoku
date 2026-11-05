@@ -217,3 +217,9 @@ test('押すカード: 「押しています。」は 0.5秒（読み込み中�
   assert.match(body, /`「\$\{card\.title\}」を押しました。`/);
   assert.match(body, /text: `「\$\{card\.title\}」を押します。`/);
 });
+
+test('数は「〇個」で言う（「〇つ」は10を越えると「12つ」になる）: 支援者の確認の直しの候補の数も', () => {
+  assert.doesNotMatch(source, /\}つ/);
+  assert.match(source, /直しの候補が\$\{proposals\.length\}個あります。/);
+  assert.match(source, /（全部で\$\{r\.proposals\.length\}個）/);
+});

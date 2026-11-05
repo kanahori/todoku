@@ -821,7 +821,7 @@ function reviewItems(card, justDecided = null) {
   for (const e of r.errors) items.push({ text: `「${e.title || e.where}」（${placeOf(e.where)}）: ${e.message}` });
   const pending = r.proposals.findIndex((p) => !p.decided);
   r.proposals.forEach((p, k) => {
-    const head = `直しの候補${k + 1}（全部で${r.proposals.length}つ）: 「${p.title}」の${placeWord(p.action)}`;
+    const head = `直しの候補${k + 1}（全部で${r.proposals.length}個）: 「${p.title}」の${placeWord(p.action)}`;
     if (p.decided) {
       const done = p.decided === 'accepted' ? 'この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。' : 'この直しは使いませんでした。設定ファイルは変えていません。';
       items.push({ text: `${head}: ${done}`, result: p === justDecided });
@@ -838,7 +838,7 @@ function reviewItems(card, justDecided = null) {
   });
   if (r.proposals.length > 0 && pending < 0) {
     const accepted = r.proposals.filter((p) => p.decided === 'accepted').length;
-    items.push({ text: `すべての直しの候補を確認しました。使った直しは${accepted}つ、使わなかった直しは${r.proposals.length - accepted}つです。`, result: !justDecided });
+    items.push({ text: `すべての直しの候補を確認しました。使った直しは${accepted}個、使わなかった直しは${r.proposals.length - accepted}個です。`, result: !justDecided });
   }
   return items;
 }
@@ -891,7 +891,7 @@ async function openReview(card) {
         const proposals = (proposed.proposals || []).filter((p) => p.newSelector).map((p) => ({ ...p, decided: null }));
         const noIdea = (proposed.proposals || []).filter((p) => !p.newSelector).map((p) => ({ where: p.where, title: p.title, message: '直しの候補がありませんでした' }));
         const errors = [...noIdea, ...(proposed.errors || []).map((e) => ({ ...e, title: (checked.problems.find((p) => p.where === e.where) || {}).title }))];
-        summary = `読めなくなった場所が${n}か所あり、直しの候補が${proposals.length}つあります。`;
+        summary = `読めなくなった場所が${n}か所あり、直しの候補が${proposals.length}個あります。`;
         card.review = { summary, proposals, errors };
         card.items = reviewItems(card);
       }
@@ -901,7 +901,7 @@ async function openReview(card) {
     reviewing = false;
     busy = false;
   }
-  card.heading = card.review ? `${REVIEW_HEADING}（直しの候補${card.review.proposals.length}つ）` : REVIEW_HEADING;
+  card.heading = card.review ? `${REVIEW_HEADING}（直しの候補${card.review.proposals.length}個）` : REVIEW_HEADING;
   refreshCard(card, { focusResult: true });
   announce(summary);
 }

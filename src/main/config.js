@@ -27,6 +27,8 @@
 //       "joinWith": ".values tr",         // 任意・list のカードだけ。二つ目の表の行。一覧の n 件目の後ろに、その n 件目をつないで読む
 //       "tagSelector": ".tag",           // 任意・list のカードだけ。項目の中の分類の言葉の要素。題の後ろに括弧で読む
 //       "skipItemsMatching": "入試|募集要項", // 任意・list のカードだけ。項目の文がこの正規表現に当たれば、その一件を読まず、件数にも入れない
+//       "undatedLabel": "固定の記事",     // 任意・list のカードだけ。ほかに日付で始まる一件があるのに、日付で始まらない一件の頭に
+//                                        // 「固定の記事、」と付けて読む（日付の無い件だと分かるように）
 //       "itemTarget": {                  // 任意・list のカードだけ。一覧の一件を選んで Enter を押すと読む、その項目に結び付いた所。
 //         "label": "返事",               //   読む所の呼び名（「3件目の返事」と言う）。要る
 //         "closest": "li.turn",          //   任意。項目から上へたどる要素。無ければ項目そのもの
@@ -210,6 +212,13 @@ function validateConfig(config) {
       }
       if (!ok) add(`${at}.skipItemsMatching`, '空でない正規表現の文字列が必要です');
       else if (card.action !== 'list') add(`${at}.skipItemsMatching`, 'action が "list" のカードにだけ使えます');
+    }
+    if (card.undatedLabel !== undefined) {
+      if (typeof card.undatedLabel !== 'string' || card.undatedLabel.trim() === '' || card.undatedLabel.length > 20) {
+        add(`${at}.undatedLabel`, '20文字までの、空でない文字列が必要です');
+      } else if (card.action !== 'list') {
+        add(`${at}.undatedLabel`, 'action が "list" のカードにだけ使えます');
+      }
     }
     if (card.tagSelector !== undefined) {
       if (typeof card.tagSelector !== 'string' || card.tagSelector.trim() === '') {

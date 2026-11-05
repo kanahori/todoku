@@ -166,7 +166,9 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       if (node.nodeType !== 1) return;
       const tag = node.tagName;
       if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEMPLATE') return;
-      if (tag === 'BR') { out += '\n'; return; }
+      // 見出し（h1〜h6）の中の改行は、見た目の折り返しなので、行を分けずにつなぐ（印 \u0008。行を整えるときに、日本語どうしなら
+      // そのまま、英数字が隣なら空白でつなぐ）。「共生社会を希究する、」「そして未来へ」が二つの段落に割れた（2026-11-05 の Windows の確かめ）。
+      if (tag === 'BR') { out += node.closest('h1, h2, h3, h4, h5, h6') ? '\u0008' : '\n'; return; }
       if (!isRoot && node.getAttribute('aria-hidden') === 'true') return;
       const cs = getComputedStyle(node);
       if (visibleOnly && !isRoot && cs.display === 'none') return;
@@ -201,6 +203,8 @@ async function pageAction(selector, action, loginSelector, limit, waitMs, contai
       const line = settleAlts(raw)
         // 要素の境目の区切りは、日本語の後ろの開き括弧の前では入れない（別々の要素の「利用料」「（税込）」が、題と違って空白つきで読まれた）。
         // ページの文字にもとからある空白は、そのまま残す。
+        .replace(/([^\x00-\x7F])\s*\u0008\s*(?=[^\x00-\x7F])/g, '$1')
+        .replace(/\s*\u0008\s*/g, ' ')
         .replace(/([^\x00-\x7F])\u0007+(?=[（「『【])/g, '$1')
         .replace(/\u0007/g, ' ')
         .replace(/[^\S\n]+/g, ' ')
@@ -782,10 +786,35 @@ async function runCard(BrowserWindow, config, cardId, options = {}) {
     const download = await watch.wait({ startMs: options.downloadStartMs ?? 1000 });
     return { ok: true, action: card.action, ...(download ? { download } : {}) };
   }
+  let { text, items } = result;
+  if (card.action === 'list' && Array.isArray(items) && items.length > 0) {
+    const next = tidyListItems(items, card.undatedLabel || null);
+    if (next.some((t, i) => t !== items[i])) {
+      items = next;
+      text = `${items.length}件あります。\n${items.map((t, i) => `${i + 1}件目: ${t}`).join('\n')}`;
+    }
+  }
   return {
-    ok: true, action: card.action, text: result.text, truncated: result.truncated,
-    ...(result.items ? { items: result.items } : {}), ...(result.keys ? { keys: result.keys } : {}), ...(result.partial ? { partial: true } : {}),
+    ok: true, action: card.action, text, truncated: result.truncated,
+    ...(items ? { items } : {}), ...(result.keys ? { keys: result.keys } : {}), ...(result.partial ? { partial: true } : {}),
   };
+}
+
+// 一覧の一件の頭の飾り「＼Hot!／」の「＼」「／」は読まない（「Hot!、…」にする）。本学のトピックスの固定の記事で、記号まで読まれた
+// （2026-11-05 の Windows の確かめ）。
+const HEAD_DECORATION = /^＼\s*([^＼／、。\n]{1,12}?)\s*／[、\s]*/;
+// 日付で始まる一件か（「2026年11月04日、」「2026.10.16 」「2026/11/4」「11月4日」「令和8年」）。
+const HEAD_DATE = /^(\d{4}\s*[年./-]\s*\d{1,2}\s*[月./-]\s*\d{1,2}|\d{1,2}月\d{1,2}日|令和\d+年)/;
+
+// 一覧の一件ずつの文を整える。undatedLabel（設定ファイルの list のカードだけ・任意）があれば、ほかに日付で始まる一件があるのに
+// 日付で始まらない一件の頭に「固定の記事、」のように付ける（日付の無い件だと分かるように）。
+function tidyListItems(items, undatedLabel = null) {
+  const tidied = items.map((t) => {
+    const m = HEAD_DECORATION.exec(t);
+    return m ? `${m[1]}、${t.slice(m[0].length)}` : t;
+  });
+  if (!undatedLabel || !tidied.some((t) => HEAD_DATE.test(t))) return tidied;
+  return tidied.map((t) => (HEAD_DATE.test(t) || t.trim() === '' ? t : `${undatedLabel}、${t}`));
 }
 
 // ページの中で動く関数。一覧の index 件目（0 から）の項目から、itemTarget の closest・next・find の順にたどり、着いた要素に印を付ける。
@@ -955,5 +984,5 @@ function closeTarget(appId) {
 
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
-  readItemTarget, closeAllTargets,
+  readItemTarget, closeAllTargets, tidyListItems,
 };

@@ -161,9 +161,13 @@ async function main() {
   check('作り物の大学: 読まない決まり（skipItemsMatching）に当たる入試案内の一件は読まず、件数にも入れない',
     univAnn.ok && univAnn.text.startsWith('3件あります。') && !univAnn.items.some((t) => t.includes('入試')) && !univAnn.text.includes('入試'), univAnn);
   const univTopics = await runCard(BrowserWindow, univ, 'topics');
-  check('大学のトップ: トピックスを、写真の説明を読まずに、日付（無ければ印）・分類・題で読む',
+  check('大学のトップ: トピックスを、写真の説明を読まずに、日付・分類・題で読む。日付の無い固定の記事は、頭の「＼」「／」を読まず、「固定の記事、」を付ける（undatedLabel）',
     univTopics.ok && JSON.stringify(univTopics.items) === JSON.stringify([
-      '＼Hot!／学生・卒業生の活躍、卒業生が大会で金メダルを取りました', '2026年11月04日、学生・卒業生の活躍、情報の学科の学生が大会で優勝しました']), univTopics.items);
+      '固定の記事、Hot!、学生・卒業生の活躍、卒業生が大会で金メダルを取りました', '2026年11月04日、学生・卒業生の活躍、情報の学科の学生が大会で優勝しました'])
+      && univTopics.text.split('\n')[1] === '1件目: 固定の記事、Hot!、学生・卒業生の活躍、卒業生が大会で金メダルを取りました', univTopics);
+  const univIntro = await runCard(BrowserWindow, univ, 'intro');
+  check('学部の紹介: 見出しの中の改行（br）では段落を分けず、「みんなで学ぶ、あしたの町へ」の一つの段落として読む',
+    univIntro.ok && univIntro.text === 'みんなで学ぶ、あしたの町へ\n作り物の学部の紹介の一つ目の文です。\n作り物の学部の紹介の二つ目の文です。', univIntro.text);
   check('大学のトップ: 入試の案内へのリンクを読むカードは無い（ピックアップのリンクはカードにしない）',
     !univ.cards.some((c) => /入試|pickuplink|admission/.test(`${c.title} ${c.selector} ${c.container || ''}`)), univ.cards.map((c) => c.selector));
 
@@ -1408,9 +1412,9 @@ async function rendererReviewChecks() {
     const first = await t.state();
     check('確認: アプリの案内のカードのボタンから確認の画面へ進み、読めなくなった場所と直しの候補の数を一文で知らせ、焦点は一つ目の候補の見出し',
       pressed && first.title === 'Todoku - 「作り物の講座（画面が変わった後）」の設定ファイルの確認（支援者向け）'
-        && first.heading === '設定ファイルを確認して直す（支援者向け）（直しの候補2つ）'
-        && first.focus === '直しの候補1（全部で2つ）: 「締め切りを読む」の読む場所'
-        && first.said[first.said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2つあります。'
+        && first.heading === '設定ファイルを確認して直す（支援者向け）（直しの候補2個）'
+        && first.focus === '直しの候補1（全部で2個）: 「締め切りを読む」の読む場所'
+        && first.said[first.said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2個あります。'
         && first.buttons.includes('「締め切りを読む」の直しを使う（設定ファイルに書く）') && first.buttons.includes('「お知らせを読む」の直しを使わない'), first);
     // 見出しと値は一つの段落（dl にしない。NVDA が項目ごとに役割の名前を付けて、一件で6回読んだ）。断っても使う人の画面では直す、の一文がある。
     const reviewItems = await t.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.tagName + ' ' + x.textContent)");
@@ -1426,8 +1430,8 @@ async function rendererReviewChecks() {
     const nextHead = await t.state();
     check('確認: 直しを使うと、その一件だけを書くように頼み、書くのに 0.5秒を越えたら「書いています。」と一言知らせ、焦点はその候補の結果の文。下矢印で次の候補の見出し',
       JSON.stringify(accepted.applied) === JSON.stringify(['cards[0].selector']) && JSON.stringify(accepted.said) === JSON.stringify(['書いています。'])
-        && accepted.focus === '直しの候補1（全部で2つ）: 「締め切りを読む」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。'
-        && nextHead.focus === '直しの候補2（全部で2つ）: 「お知らせを読む」の読む場所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
+        && accepted.focus === '直しの候補1（全部で2個）: 「締め切りを読む」の読む場所: この直しを使いました。設定ファイルに書き、前の版はバックアップとして残しました。'
+        && nextHead.focus === '直しの候補2（全部で2個）: 「お知らせを読む」の読む場所' && !accepted.buttons.some((b) => b.startsWith('「締め切りを読む」')), { accepted, nextHead });
     await t.js('window.__said.length = 0');
     await t.press('「お知らせを読む」の直しを使わない');
     await t.wait(300);
@@ -1436,8 +1440,8 @@ async function rendererReviewChecks() {
     const summary = await t.state();
     check('確認: 直しを使わないと書かず、焦点はその候補の結果の文。全部見たら、下矢印で使った数と使わなかった数の一文',
       JSON.stringify(rejected.applied) === JSON.stringify(['cards[0].selector']) && rejected.said.length === 0
-        && rejected.focus === '直しの候補2（全部で2つ）: 「お知らせを読む」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。'
-        && summary.focus === 'すべての直しの候補を確認しました。使った直しは1つ、使わなかった直しは1つです。' && rejected.buttons.length === 0, { rejected, summary });
+        && rejected.focus === '直しの候補2（全部で2個）: 「お知らせを読む」の読む場所: この直しは使いませんでした。設定ファイルは変えていません。'
+        && summary.focus === 'すべての直しの候補を確認しました。使った直しは1個、使わなかった直しは1個です。' && rejected.buttons.length === 0, { rejected, summary });
     await t.key('Escape');
     await t.key('Escape');
     const back = await t.state();
@@ -1460,7 +1464,7 @@ async function rendererReviewChecks() {
     const said = s.said.filter((t) => !/枚中/.test(t));
     check('確認の間: キーを押しても「読み込み中です。」を出さず、5秒ごとに「確認を始めて、〇秒たちました。」と知らせ、終わったら数の一文',
       !s.said.some((t) => t.includes('読み込み中')) && said[0] === '確認しています。' && said.includes('確認を始めて、5秒たちました。')
-        && said[said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2つあります。', s.said);
+        && said[said.length - 1] === '読めなくなった場所が2か所あり、直しの候補が2個あります。', s.said);
   } finally {
     w.win.destroy();
   }

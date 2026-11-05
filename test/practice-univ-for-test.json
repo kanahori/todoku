@@ -23,7 +23,14 @@
       "title": "トピックスを読む",
       "action": "list",
       "selector": "section.information .container > .row > div > .box .col-8",
-      "container": "section.information .container > .row"
+      "container": "section.information .container > .row",
+      "undatedLabel": "固定の記事"
+    },
+    {
+      "id": "intro",
+      "title": "学部の紹介を読む",
+      "action": "read",
+      "selector": "#site-content .intro_wrapper .intro"
     }
   ]
 }
