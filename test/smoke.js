@@ -573,6 +573,9 @@ async function linksAndRevealChecks() {
       check('元のページ（窓を出す smoke）: P キーで出した窓に焦点が移り、Esc キーで Todoku の窓に焦点が戻る',
         targetFocused === true && homeFocused === true, { targetFocused, homeFocused });
     }
+    // メニューを外した窓は、メニューの帯を見せない（Windows・Linux。Mac はアプリのメニューで、窓にメニューの帯が無い）。
+    const menuBar = process.platform === 'darwin' ? false : win.isMenuBarVisible();
+    check('元のページ: 前に出した窓にメニューの帯が無い（作るときに removeMenu）', menuBar === false, { menuBar, platform: process.platform });
     check('元のページ: 窓が無いアプリでも開いてから前に出し、焦点を取れる窓にする。ほかのアプリの窓は隠す',
       opened && focusable && hiddenOther && afterA === true, { opened, focusable, hiddenOther, afterA });
     check('元のページ: 出した窓で Esc キーを押すと、ページには渡さずに Todoku の窓へ戻り、窓は焦点を取れない窓に戻る',

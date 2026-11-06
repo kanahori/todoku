@@ -738,6 +738,9 @@ async function openTarget(BrowserWindow, config, url, options = {}) {
     });
     // 新しい窓を勝手に開かせない。
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    // メニューを外す（Todoku の窓と同じ）。Windows では、P キーで前に出した元のページの窓の上に「File Edit View Window」の
+    // 既定のメニューが映り、Alt キーで NVDA が英語のメニューに入った（2026-11-07 の録画）。
+    if (typeof win.removeMenu === 'function') win.removeMenu();
     windows.set(config.id, win);
     const id = config.id;
     // 元のページやログインのために前に出していた窓を、使う人が閉じたときは、Todoku の窓へ戻す

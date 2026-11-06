@@ -257,3 +257,16 @@ test('前面の見張り: Windows では150ミリ秒後と600ミリ秒後に、T
   assert.equal(guardHomeFront(home, { platform: 'darwin', headless: false, later: () => { throw new Error('見ない'); } }), 0);
   assert.equal(guardHomeFront(home, { platform: 'win32', headless: true, later: () => { throw new Error('見ない'); } }), 0);
 });
+
+test('ウェブアプリの窓（元のページ・ログインの窓）も、作るときにメニューを外す（Alt キーで英語のメニューに入らないように）', async () => {
+  const { openTarget, closeAllTargets, setHomeWindow } = require('../src/main/target');
+  const { FakeWindow } = fakeWindows();
+  const removed = [];
+  class Win extends FakeWindow { removeMenu() { removed.push(this.title); } }
+  setHomeWindow(null);
+  await openTarget(Win, { id: 'menu-a', name: 'メニューを外す窓', url: 'https://example.com/', cards: [] }, 'https://example.com/a');
+  // 同じ窓をもう一度使うときは作り直さないので、外すのは作ったときの一度だけ。
+  await openTarget(Win, { id: 'menu-a', name: 'メニューを外す窓', url: 'https://example.com/', cards: [] }, 'https://example.com/b');
+  assert.deepEqual(removed, ['メニューを外す窓']);
+  closeAllTargets();
+});
