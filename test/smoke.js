@@ -590,7 +590,9 @@ async function linksAndRevealChecks() {
       let loginPrevented = 0;
       loginWin.webContents.emit('before-input-event', { preventDefault: () => { loginPrevented += 1; } }, { type: 'keyDown', key: 'Escape' });
       const back = homeReturnLog().slice(before);
+      // 窓を出す形では、Todoku の窓に焦点が戻る（focus の知らせが来る）のを待ってから見る（元のページの窓の試しと同じく400ミリ秒）。
       if (headless) home.emit('focus');
+      else await new Promise((r) => setTimeout(r, 400));
       check('ログインの窓: 前に出したログインの窓で Esc キーを押すと、ページには渡さずに Todoku の窓へ戻り、焦点を取れない窓に戻る',
         loginPrevented === 1 && JSON.stringify(back) === '["escape"]' && loginWin.isFocusable() === false, { loginPrevented, back, focusable: loginWin.isFocusable() });
     }
