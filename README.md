@@ -171,7 +171,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 - `npm test`: 155 tests, 148 passed, 7 skipped (the Electron-only scripts), 0 failed.
 - `npm run smoke`: 251 checks, 251 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
-- `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (last measured on 2026-11-06 with an earlier version: 260 checks, 260 passed).
+- `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (last measured on Windows on 2026-11-06: 252 checks, 252 passed).
 - All four were measured on macOS on 2026-11-06. On 2026-11-04 (with fewer tests), `npm run smoke` was also measured on a fresh clone of this repository, following "Getting started (macOS)", and both `npm test` and `npm run smoke` on a fresh clone on Windows 11, following "Getting started (Windows)". `npm run real:tsukuba` loads the real site, so it is run by hand only.
 
 ## Future
@@ -651,7 +651,7 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 - `npm test`: 155件。148件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
 - `npm run smoke`: 251件。251件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
 - `npm run real:tsukuba`: 13件。本物のつくば市のサイトで、13件が通りました。
-- `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（最後に測ったのは 2026年11月6日の前の版で、260件。260件が通りました）。
+- `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（最後に Windows で測ったのは 2026年11月6日で、252件。252件が通りました）。
 - 四つとも、2026年11月6日に macOS で測りました。
   2026年11月4日（テストがまだ少なかったとき）には、このリポジトリを新しく clone して「使い始める（macOS）」のとおりに `npm run smoke` を、Windows 11 でも新しく clone して「使い始める（Windows）」のとおりに `npm test` と `npm run smoke` を走らせました。
   `npm run real:tsukuba` は本物のサイトを読み込むので、手で走らせるだけにしています。
