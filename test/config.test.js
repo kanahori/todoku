@@ -249,3 +249,10 @@ test('大学の三つの一覧のカードは、入試と入学の案内（入�
   }
   assert.equal(n, 6);
 });
+
+test('kind を書いた設定ファイルは誤りにし、何がいけないかを書いた文で知らせる（前の版の "kind": "youtube" も）', () => {
+  const errors = validateConfig({ ...good(), kind: 'youtube' });
+  assert.deepEqual(errors.map((e) => e.where), ['kind']);
+  assert.equal(errors[0].message, '設定ファイルに kind は書けません（kind: "youtube"）。消してください');
+  assert.deepEqual(validateConfig(good()), []);
+});

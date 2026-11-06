@@ -80,7 +80,8 @@ function validateConfig(config) {
   if (typeof config.name !== 'string' || config.name.trim() === '') {
     add('name', '空でない文字列が必要です');
   }
-  if (config.kind !== undefined) add('kind', '書きません（いまの設定ファイルに kind はありません）');
+  // kind は、前の版の YouTube のカード（"kind": "youtube"）だけが使っていた。いまの設定ファイルには書けない。
+  if (config.kind !== undefined) add('kind', `設定ファイルに kind は書けません（kind: ${JSON.stringify(config.kind)}）。消してください`);
   if (typeof config.url !== 'string' || !(/^https?:\/\//.test(config.url) || FIXTURE_PATTERN.test(config.url))) {
     add('url', 'http:// か https:// で始まる文字列か、fixture:名前.html が必要です');
   }
