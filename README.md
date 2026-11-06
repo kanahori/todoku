@@ -19,7 +19,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 ## What it does
 
 - Each web app (a learning site, a city website, ...) has a small config file that says, card by card, where to read and what to press.
-- The app turns that config into a deck of cards. Up and Down Arrow move between cards, Enter or Space opens a card or reads the web app, Up and Down Arrow then read the result item by item (past the last item the app says "ここが最後です。", above the first "ここが一番上です。"), and Esc goes back. Tab stops only on the current card. The web app itself stays in a separate window behind the card screen and never takes the keyboard focus (except for a login, when the user asks for it).
+- The app turns that config into a deck of cards. Up and Down Arrow move between cards, Enter or Space opens a card or reads the web app, Up and Down Arrow then read the result item by item (past the last item the app says "ここが最後です。", above the first "ここが一番上です。"), and Esc goes back. Tab stops only on the current card. A key pressed while a card is still loading is not acted on: the app says "読み込み中です。少しお待ちください。" and, once loading has finished, "読み込みが終わりました。もう一度、キーを押してください。". The web app itself stays in a separate window behind the card screen and never takes the keyboard focus (except for a login, when the user asks for it).
 - Items of a numbered list (`ol`) are read with their number first ("1 前の日の夜に、…"), following `start`, `reversed` and `value`; lists whose numbers are hidden with `list-style: none` are read without numbers.
 - In a table row, when only the heading cell (the `th` cells, or the first cell if there is none) has text and every other cell is empty, the row is read as "{name} なし", so an empty row is not mistaken for a row that could not be read.
 - When a card is selected, its description (the config's `description`) is read after the title (`aria-describedby`), as on the first screen.
@@ -132,7 +132,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 - Every app deck (from a config file or made by Claude) ends with a card "このページのリンク" (links on this page). Enter reads the links of the app's page one by one, by their link text (or `aria-label`, or the `alt` of an image inside the link). Only `http`/`https` links are listed; links to a place on the same page (`#...`), links to the page itself, links without a name, and duplicates (the same address, ignoring `#...`) are left out. The link text is read on this computer only; nothing new is sent to Claude.
 - When the links are in more than one place on the page, they open as a deck with one card per place, for example "本文（リンク4件）", "トピックス（リンク17件）", "メニュー（リンク47件）", "フッター（リンク7件）" and "そのほか（リンク5件）". Places are the page's landmarks (`main`, `nav`, `header`, `footer`, `aside`, `role="search"`, named `section` and `role="region"`, with or without `role`), and inside `main` the h2/h3 sections. A place is named by its `aria-label`, `aria-labelledby` or first heading, otherwise "本文", "メニュー", "ページの上", "フッター" and so on. The main content comes first; language switches, "スマートフォン版" and similar page tools go to "そのほか" at the end. Every link is in exactly one card, so the counts add up to the total (on the real Tsukuba City top page: 157 links in 22 cards, checked on macOS on 2026-11-06). The grouping is done on this computer; nothing is sent to Claude.
 - Enter on a link: if Todoku already has a deck for that address (a config file or a deck Claude made, matched by the deck's `url` or a card's `path`), the app opens that deck (on that card). Otherwise it asks first: "このページは、まだ Todoku で読めるようになっていません。これから Claude がカードを作ります。90秒ほどかかります。", with three buttons: "カードを作って開く" (make cards and open them; the same flow as "新しいページからカードを作る"), "既定のブラウザで開く" (open in the default browser) and "やめる" (cancel). Esc returns to the same link. The card's description says this once ("まだ読めないページは、開く前に確認します。"), so it is not repeated on every link.
-- P and B first say what will happen and how to come back ("元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。"), wait about a second, and only then bring the other window to the front, because Todoku's announcements are not heard while another window is in front. Links whose text is only digits or one or two characters (a calendar day such as "6") are read by their `aria-label` or `title`, or with the place in front ("イベント情報：6").
+- P and B first say what will happen and how to come back, in a short sentence ("元のページを表示します。Escキーで戻ります。" / "既定のブラウザで開きます。Altキーと Tabキーで戻ります。", Command instead of Alt on macOS), wait 2.5 seconds, and only then bring the other window to the front, because NVDA stops reading Todoku's announcement as soon as another window comes to the front. Links whose text is only digits or one or two characters (a calendar day such as "6") are read by their `aria-label` or `title`, or with the place in front ("イベント情報：6").
 - P key, or the "元のページを表示する" button on the app's first card: shows the original web page as it is, in its own window in front (for example to show how complex the Japan Meteorological Agency pages look). Esc in that window returns to Todoku, and so does closing that window. If the page was not opened yet, it is opened first.
 - B key, or the "いまのページを既定のブラウザで開く" button on the app's first card: opens the current page of the app (the page the web app window is on, or the config's `url`) in the default browser, and says so. Only `http`/`https` pages are opened. The keys are the same on Windows and macOS, work on a card or an item (not in a text field), and do nothing on the first screen except saying "このキーは、アプリのカードを開いているときに使えます。". The two buttons carry `aria-keyshortcuts`.
 
@@ -140,7 +140,8 @@ Without an API key, everything except these Claude features works. To try it: `n
 
 - The first screen can be used like bookmarks. The "フォルダを作る" card makes a folder: Enter moves to the name field, and Enter in the field makes it ("「天気」フォルダを作りました。"). Folder cards ("天気（フォルダ）") come before the page cards that are not in a folder; Enter on a folder card opens the folder. Its first card renames the folder or deletes it (the pages inside go back to the first screen, "…中のページのカード1件は、最初のページに戻しました。").
 - Every app deck ends with a card "名前・メモ・フォルダ": a display name, a note, and one button per folder ("「天気」フォルダに入れる", "「天気」フォルダから出す"). With a display name, the page card is read by that name, and its description starts with the original name once, then the note. Every change is announced once ("「よく見るアプリ」を「天気」フォルダに入れました。"). No new keys: everything is done with the fields and buttons in the cards.
-- "カードを探す" also searches app names, display names and notes; a match adds a "「{name}」のカードを開く" button.
+- "カードを探す" also searches app names, display names and notes (its description says so); a match adds a "「{name}」のカードを開く" button.
+- A page with a display name is read by that name inside its deck too: the deck's first card and the window title use the display name, and the first card's description says the original name once ("元の名前は「…」です。").
 - New decks (from a URL or from a link) are added to the first screen outside any folder. All of this is saved in `bookmarks.json` in the app's user data folder; if that file is broken, the app starts with no folders. `npm run demo:reset` moves it aside with the other saved data.
 
 ## YouTube cards
@@ -175,10 +176,10 @@ Without an API key, everything except these Claude features works. To try it: `n
 
 ## Tests
 
-- `npm test`: 159 tests, 152 passed, 7 skipped (the Electron-only scripts), 0 failed.
-- `npm run smoke`: 257 checks, 257 passed, against the practice pages (and a local test server that never answers) only.
+- `npm test`: 160 tests, 153 passed, 7 skipped (the Electron-only scripts), 0 failed.
+- `npm run smoke`: 259 checks, 259 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
-- `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (258 checks, 258 passed).
+- `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (260 checks, 260 passed).
 - All four were measured on macOS on 2026-11-06. On 2026-11-04 (with fewer tests), `npm run smoke` was also measured on a fresh clone of this repository, following "Getting started (macOS)", and both `npm test` and `npm run smoke` on a fresh clone on Windows 11, following "Getting started (Windows)". `npm run real:tsukuba` loads the real site, so it is run by hand only.
 
 ## Future
@@ -249,6 +250,7 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
   最後の項目で下矢印キーを押すと「ここが最後です。」、最初の項目で上矢印キーを押すと「ここが一番上です。」と知らせます。
   Esc キーで戻ります。
   Tab キーが止まるのは、いまのカードだけです。
+  カードを読み込んでいる間に押したキーは働かせず、「読み込み中です。少しお待ちください。」と知らせ、読み込みが終わったら「読み込みが終わりました。もう一度、キーを押してください。」と知らせます。
   ウェブアプリそのものは、カードの画面の後ろの別のウィンドウにあり、キーボードの焦点を取りません（ログインのときだけ、使う人が前に出せます）。
 - 番号の付いた一覧（`ol`）の項目は、「1 前の日の夜に、…」のように、頭に番号を付けて読みます（`start`・`reversed`・`value` に従います）。
   `list-style: none` で番号を出していない一覧には付けません。
@@ -561,8 +563,8 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
   まだ開いていないページは、開いてから出します。
 - B キーか、アプリの一枚目のカードの「いまのページを既定のブラウザで開く」ボタン: アプリのいまのページ（ウェブアプリのウィンドウが開いているページか、設定ファイルの `url`）を既定のブラウザで開きます。
   開くのは `http` と `https` のページだけです。
-- P キーと B キーは、先に何をするかと戻り方を知らせ（「元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。」）、1秒ほど待ってから、ほかのウィンドウを前に出します。
-  ほかのウィンドウが前にある間は、Todoku の知らせが聞こえないためです。
+- P キーと B キーは、先に何をするかと戻り方を短い文で知らせ（「元のページを表示します。Escキーで戻ります。」「既定のブラウザで開きます。Altキーと Tabキーで戻ります。」。macOS では Alt キーの代わりに Command キー）、2.5秒待ってから、ほかのウィンドウを前に出します。
+  ほかのウィンドウが前に出ると、NVDA が Todoku の知らせを途中で止めるためです。
   キーは Windows と macOS で同じで、カードの上でも項目の上でも使えます（入力欄の中では使えません）。
   最初のページでは、「このキーは、アプリのカードを開いているときに使えます。」と知らせるだけです。
   二つのボタンには `aria-keyshortcuts` を付けています。
@@ -581,7 +583,9 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
   変えるたびに、一度だけ知らせます（「「よく見るアプリ」を「天気」フォルダに入れました。」）。
   新しいキーは足していません。
   全部、カードの中の欄とボタンでできます。
-- 「カードを探す」は、アプリの名前・表示名・メモからも探し、当たったら「「{名前}」のカードを開く」ボタンを足します。
+- 「カードを探す」は、アプリの名前・表示名・メモからも探し（カードの説明にもそう書いてあります）、当たったら「「{名前}」のカードを開く」ボタンを足します。
+- 表示名を付けたページは、束の中でも表示名で読みます。
+  束の一枚目の見出しとウィンドウの題を表示名にし、一枚目の説明で一度だけ元の名前を読みます（「元の名前は「…」です。」）。
 - 新しく作った束（URL からもリンクからも）は、最初のページの、どのフォルダにも入っていない所に足します。
   これらは全部、アプリのデータのフォルダの `bookmarks.json` に残します。
   このファイルが壊れていても、フォルダの無い状態で起動します。
@@ -678,10 +682,10 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 
 ### テスト
 
-- `npm test`: 159件。152件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
-- `npm run smoke`: 257件。257件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
+- `npm test`: 160件。153件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
+- `npm run smoke`: 259件。259件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
 - `npm run real:tsukuba`: 13件。本物のつくば市のサイトで、13件が通りました。
-- `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（258件。258件が通りました）。
+- `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（260件。260件が通りました）。
 - 四つとも、2026年11月6日に macOS で測りました。
   2026年11月4日（テストがまだ少なかったとき）には、このリポジトリを新しく clone して「使い始める（macOS）」のとおりに `npm run smoke` を、Windows 11 でも新しく clone して「使い始める（Windows）」のとおりに `npm test` と `npm run smoke` を走らせました。
   `npm run real:tsukuba` は本物のサイトを読み込むので、手で走らせるだけにしています。

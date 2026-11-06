@@ -615,10 +615,23 @@ function endLoginFocus() {
     const w = windows.get(id);
     loginFocus.delete(id);
     if (!w || w.isDestroyed()) continue;
-    if (w.isFocusable()) w.setFocusable(false);
-    // Windows では、ログインの間だけタスクバーに出していたのを戻す。
-    if (process.platform === 'win32') w.setSkipTaskbar(true);
+    restoreUnfocusable(w);
   }
+}
+
+// 前に出していたウェブアプリの窓を、焦点を取れない窓に戻す（Windows では、タスクバーからも外す）。
+// Windows では、Todoku の窓に焦点が戻った直後にこれをすると、一つ前の窓（ターミナルなど）へ一瞬焦点が移り、
+// NVDA がその窓の題を読んでから Todoku に戻った（P → Esc で2回中2回。2026-11-06 の WinCC の確かめ）。
+// そこで Windows では、焦点が落ち着くのを待ってから（500ミリ秒後）戻す。その間も、守りの印（loginFocus）は先に外してあるので、
+// ウェブアプリの窓に焦点が来れば Todoku の窓へ返す。
+function restoreUnfocusable(w, { platform = process.platform, later = setTimeout } = {}) {
+  const run = () => {
+    if (w.isDestroyed()) return;
+    if (w.isFocusable()) w.setFocusable(false);
+    if (platform === 'win32') w.setSkipTaskbar(true);
+  };
+  if (platform === 'win32') later(run, 500);
+  else run();
 }
 function setHomeWindow(win) {
   if (homeWindow && !homeWindow.isDestroyed()) homeWindow.removeListener('focus', endLoginFocus);
@@ -1084,5 +1097,5 @@ function closeTarget(appId) {
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
   readItemTarget, closeAllTargets, tidyListItems, revealTarget, backToHome, isRevealed, currentPageUrl, readLinks,
-  bringToFront, homeReturnLog,
+  bringToFront, homeReturnLog, restoreUnfocusable,
 };

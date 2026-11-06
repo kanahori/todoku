@@ -1294,6 +1294,8 @@ async function rendererBusyChecks() {
     await key('Enter');
     await wait(100);
     const headings = () => js("[...document.querySelectorAll('#deck > article.card h2')].map((h) => h.textContent)");
+    await js(`(() => { window.__saidAll = []; const n = document.getElementById('status');
+      new MutationObserver(() => { if (n.textContent) window.__saidAll.push(n.textContent); }).observe(n, { childList: true, characterData: true, subtree: true }); return true; })()`);
     // 時間のかかる読む所（四枚目）をクリックし、すぐにすぐ返る読む所（二枚目）をクリックする。
     await js("document.querySelectorAll('#deck > article.card')[3].click()");
     await wait(50);
@@ -1306,6 +1308,13 @@ async function rendererBusyChecks() {
     check('読んでいる最中: 別のカードをクリックしても読み始めず、「読み込み中です。少しお待ちください。」と知らせ、先のカードだけを読み終える',
       said === '読み込み中です。少しお待ちください。' && during[1] === 'すぐ返る読む所' && after[1] === 'すぐ返る読む所' && after[3] === '時間のかかる読む所',
       { said, during, after });
+    // 読み込みが終わったら、読んだ結果の知らせの後に、「読み込みが終わりました。もう一度、キーを押してください。」と一度だけ知らせる。
+    await wait(1600);
+    const all = await js('window.__saidAll.slice()');
+    const done = all.indexOf('「時間のかかる読む所」を読みました。');
+    const again = all.indexOf('読み込みが終わりました。もう一度、キーを押してください。');
+    check('読んでいる最中に押されたときは、読み終わった知らせの後で「読み込みが終わりました。もう一度、キーを押してください。」と一度だけ知らせる',
+      done >= 0 && again > done && all.filter((x) => x.startsWith('読み込みが終わりました')).length === 1, all);
   } finally {
     win.destroy();
   }
@@ -2148,7 +2157,7 @@ async function rendererSearchChecks(settingsStore) {
     await t.key('Enter');
     const input = await t.active();
     check('探す欄: 三枚目のカード「カードを探す」で、Enter でラベル「探す言葉」の欄へ移る（カードを選ぶと何を探すかも読む）',
-      card.heading === 'カードを探す' && described === 'タイトルと説明から、全部のアプリのカードを探します。'
+      card.heading === 'カードを探す' && described === 'カードのタイトルと説明、アプリの名前、自分で付けた表示名とメモから、全部のアプリのカードを探します。'
         && input.tag === 'INPUT' && input.label === '探す言葉', { card, described, input });
     check('探す欄: 説明の項目に、欄の中で Enter キーを押すと何が起きるかの一文がある',
       searchTexts.includes('欄の中でEnterキーを押すと、最初に見つかったカードへ移ります。'), searchTexts);
@@ -2284,19 +2293,20 @@ async function rendererLinksChecks() {
         && JSON.stringify(info.buttons.slice(0, 2)) === JSON.stringify(['元のページを表示する/P', 'いまのページを既定のブラウザで開く/B'])
         && info.buttons[info.buttons.length - 1] === '出典のページを開く', info);
 
-    // P キー: 先に「元のページを表示します。…」と知らせ、読み終わるのを待ってから（1.2秒）元のページを前に出す。
+    // P キー: 先に「元のページを表示します。Escキーで戻ります。」と知らせ、読み終わるのを待ってから（2.5秒）元のページを前に出す。
     await pressLetter('p');
     await t.wait(150);
     const revealSaid = await t.status();
+    await t.wait(1500);
     const revealedEarly = await t.js('window.fakeLog.revealed()');
-    await t.wait(1400);
+    await t.wait(1200);
     const revealedLater = await t.js('window.fakeLog.revealed()');
     // B キー: 練習のページ（fixture:）は既定のブラウザで開けないので、頼まずにそう知らせる。
     await pressLetter('B');
     await t.wait(150);
     const openRefused = await t.js("document.getElementById('alert').textContent");
-    check('P キーは、先に「元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。」と知らせ、少し待ってから元のページを前に出す。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
-      revealSaid === '元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。' && JSON.stringify(revealedEarly) === '[]'
+    check('P キーは、先に「元のページを表示します。Escキーで戻ります。」と知らせ、2.5秒待ってから元のページを前に出す（1.6秒ではまだ出さない）。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
+      revealSaid === '元のページを表示します。Escキーで戻ります。' && JSON.stringify(revealedEarly) === '[]'
         && JSON.stringify(revealedLater) === '["fake-app"]' && openRefused === 'このページは、既定のブラウザでは開けません。'
         && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '[]', { revealSaid, revealedEarly, revealedLater, openRefused });
 
@@ -2341,10 +2351,10 @@ async function rendererLinksChecks() {
     await t.js('document.activeElement.click()');
     await t.wait(150);
     const extSaid = await t.status();
-    await t.wait(1400);
-    check('確認の「既定のブラウザで開く」は、先に「…のページを、既定のブラウザで開きます。Todoku に戻るには…」と知らせ、少し待ってから、その一件を番号で頼んで開く',
+    await t.wait(2700);
+    check('確認の「既定のブラウザで開く」は、先に「…のページを、既定のブラウザで開きます。Commandキー（Windows は Altキー）と Tabキーで戻ります。」と知らせ、少し待ってから、その一件を番号で頼んで開く',
       JSON.stringify(await t.js('window.fakeLog.linksOpened()')) === '["fake-app/1"]'
-        && /^「作り物の町のページ」のページを、既定のブラウザで開きます。Todoku に戻るには (Command|Alt) キーと Tab キーを押してください。$/.test(extSaid), extSaid);
+        && /^「作り物の町のページ」のページを、既定のブラウザで開きます。(Command|Alt)キーと Tabキーで戻ります。$/.test(extSaid), extSaid);
 
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
@@ -2486,6 +2496,19 @@ async function rendererBookmarksChecks(bookmarksFile) {
         && pageDescribe === '元の名前は「試しのアプリ（作り物）」です。メモ: 毎朝見る。スペースキーまたはEnterキーで、「よく見るアプリ」のカードへ進みます。',
       { inFolder, pageDescribe });
 
+    // 表示名を付けたページの束は、一枚目の見出しと窓の題を表示名にし、元の名前は一枚目の説明で一度読む。
+    await t.key('Enter');
+    const inDeck = await t.active();
+    const deckTitle = await t.js('document.title');
+    const deckDescribe = await t.js("document.getElementById(document.activeElement.getAttribute('aria-describedby') || '') ? document.getElementById(document.activeElement.getAttribute('aria-describedby')).textContent : ''");
+    const deckFirst = await t.js("document.querySelector('#deck > article.card p[data-item]').textContent");
+    check('表示名の束: 一枚目の見出しと窓の題は表示名、一枚目の説明は「元の名前は「…」です。」、案内の一文も表示名',
+      inDeck.heading === 'よく見るアプリ' && deckTitle === 'Todoku - よく見るアプリ' && deckDescribe === '元の名前は「試しのアプリ（作り物）」です。'
+        && deckFirst === '元の名前は「試しのアプリ（作り物）」です。'
+        && (await t.js("[...document.querySelectorAll('#deck > article.card p[data-item]')].map((p) => p.textContent)")).includes('「よく見るアプリ」の画面を、カードで読めます（読むカード6枚、操作するカード1枚）。'),
+      { inDeck, deckTitle, deckDescribe, deckFirst });
+    await t.key('Escape');
+
     // フォルダの名前を変える（フォルダの束の一枚目のカードで）。
     await t.key('ArrowUp');
     await t.key('Enter');
@@ -2600,7 +2623,7 @@ async function rendererLinkGroupsChecks() {
     await t.key('ArrowDown');
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
-    await t.wait(1500);
+    await t.wait(2800);
     const opened = await t.js('window.fakeLog.linksOpened()');
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
@@ -2616,9 +2639,9 @@ async function rendererLinkGroupsChecks() {
     await t.wait(150);
     const bSaid = await t.status();
     const bEarly = await t.js('window.fakeLog.pagesOpened()');
-    await t.wait(1400);
-    check('B キー: 先に「いまのページを、既定のブラウザで開きます。Todoku に戻るには…」と知らせ、少し待ってから開くよう頼む',
-      /^いまのページを、既定のブラウザで開きます。Todoku に戻るには (Command|Alt) キーと Tab キーを押してください。$/.test(bSaid)
+    await t.wait(2700);
+    check('B キー: 先に「既定のブラウザで開きます。Commandキー（Windows は Altキー）と Tabキーで戻ります。」と知らせ、少し待ってから開くよう頼む',
+      /^既定のブラウザで開きます。(Command|Alt)キーと Tabキーで戻ります。$/.test(bSaid)
         && JSON.stringify(bEarly) === '[]' && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '["fake-app"]', { bSaid, bEarly });
 
     // Esc で「このページのリンク」のカードへ戻ると、分けたことの一文と、場所ごとのカードを開き直すボタンがある。

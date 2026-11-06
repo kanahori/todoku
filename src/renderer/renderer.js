@@ -329,7 +329,7 @@ async function activateCard(card, node) {
   // 読んでいる最中は、ほかのカードを動かさない。キーの守り（keydown）はあったが、クリックと、読み上げソフトが click として
   // 送る操作（NVDA の閲覧モードの Enter・VoiceOver の VO+Space）には無く、二枚を同時に読めた（見直しの4。smoke で確かめた）。
   if (busy) {
-    if (!reviewing) announce('読み込み中です。少しお待ちください。');
+    if (!reviewing) sayBusy();
     return;
   }
   if (card.kind === 'goto') {
@@ -410,6 +410,28 @@ function refreshCard(card, { focusResult = false, focusFirst = false, keepPositi
   oldBox.remove();
   linkDescription(node);
   return node;
+}
+
+// 読み込み中に押されたキーは働かせず、「読み込み中です。少しお待ちください。」と言う。
+// 読み込みが終わったら、「読み込みが終わりました。もう一度、キーを押してください。」と一度だけ知らせる
+// （束を出入りした直後に Enter キーが黙って効かず、少し待って押し直すと入れた。2026-11-06 の WinCC の確かめ）。
+let busyWatch = null;
+function sayBusy() {
+  announce('読み込み中です。少しお待ちください。');
+  if (busyWatch) return;
+  // 終わった直後の読んだ結果の知らせ（「〇〇」を読みました。など）を先に聞かせるため、終わってから1秒おいて知らせる。
+  let idleSince = 0;
+  busyWatch = setInterval(() => {
+    if (busy) {
+      idleSince = 0;
+      return;
+    }
+    if (!idleSince) idleSince = Date.now();
+    if (Date.now() - idleSince < 1000) return;
+    clearInterval(busyWatch);
+    busyWatch = null;
+    announce('読み込みが終わりました。もう一度、キーを押してください。');
+  }, 250);
 }
 
 const PROGRESS_EVERY_MS = 5000; // 進み具合を知らせる間隔（5秒に一度）
@@ -625,7 +647,7 @@ let ytState = { card: null, iframe: null, ready: false, current: 0, volume: null
 
 function ytDeck(config, hasParent) {
   const texts = [
-    `「${config.name}」で、YouTube の動画を探して、再生できます。`,
+    `「${pageLabel(config)}」で、YouTube の動画を探して、再生できます。`,
     // キーの説明は、ほかのアプリのはじめのカード（appDeck）と同じ形にそろえる（Home・End の一文と Esc の一文。WinCC の確かめ）。
     '上下矢印キーでカードを選びます。',
     'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
@@ -638,6 +660,8 @@ function ytDeck(config, hasParent) {
   if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);
+  // 表示名を付けたページは、一枚目を選んだときに、元の名前を説明として一度読む。
+  if (pageMark(config.id).name) items.unshift({ text: `元の名前は「${config.name}」です。`, describe: true });
   const policy = (name, label) => ({
     button: label,
     onPress: async () => {
@@ -651,7 +675,7 @@ function ytDeck(config, hasParent) {
     },
   });
   items.push(policy('youtube-terms', 'YouTube の利用規約を開く'), policy('google-privacy', 'Google のプライバシーポリシーを開く'));
-  const cards = [{ kind: 'info', heading: config.name, items }];
+  const cards = [{ kind: 'info', heading: pageLabel(config), items }];
   for (const c of config.cards) {
     const base = { appId: config.id, cardId: c.id, title: c.title, heading: c.title, note: c.description ? endSentence(c.description) : undefined, items: [] };
     if (c.action === 'youtube-search') {
@@ -669,7 +693,8 @@ function ytDeck(config, hasParent) {
     }
   }
   cards.push(organizeCard(config));
-  return { name: config.name, appId: config.id, cards };
+  // 表示名を付けたページは、束の名前（ウィンドウの題）も一枚目の見出しも表示名で読む。
+  return { name: pageLabel(config), appId: config.id, cards };
 }
 
 function ytSearchItems(card) {
@@ -847,7 +872,7 @@ function reviewCard(appId) {
 // はじめのカードのボタンから、点検の束（カード一枚）へ進み、すぐ点検を始める。Esc でアプリの束へ戻る。
 async function openReviewDeck(config) {
   if (busy) {
-    announce('読み込み中です。少しお待ちください。');
+    sayBusy();
     return;
   }
   const card = reviewCard(config.id);
@@ -1284,7 +1309,7 @@ async function followLink(card, i) {
     const deck = appDeck(config, true);
     const index = found.cardId ? Math.max(0, deck.cards.findIndex((c) => c.cardId === found.cardId)) : 0;
     pushDeck({ ...deck, index }, { announcePosition: false });
-    announce(`「${config.name}」のカードへ移りました。`);
+    announce(`「${pageLabel(config)}」のカードへ移りました。`);
     return;
   }
   pushDeck(linkConfirmDeck(card, link, index), { announcePosition: false });
@@ -1311,7 +1336,7 @@ function linkConfirmDeck(fromCard, link, i) {
 }
 
 async function openLinkExternal(card) {
-  await announceThenSwitch(`「${card.linkText}」のページを、既定のブラウザで開きます。Todoku に戻るには ${backKeyName()} キーと Tab キーを押してください。`,
+  await announceThenSwitch(`「${card.linkText}」のページを、既定のブラウザで開きます。${backKeyName()}キーと Tabキーで戻ります。`,
     () => window.cardsApi.openLinkExternal(card.appId, card.linkIndex), 'リンクのページを開けませんでした。');
 }
 
@@ -1326,7 +1351,8 @@ const PAGE_KEYS_ONLY_IN_APP = 'このキーは、アプリのカードを開い�
 // 元のページや既定のブラウザを前に出すと、Todoku のウィンドウが後ろへ回り、Todoku の知らせが聞こえない
 // （「元のページを表示しました。…」が、P キーのときでなく、Esc で戻った後に読まれた。2026-11-06 の WinCC の確かめ）。
 // そこで、先に何をするかと戻り方を知らせ、読み終わるのを少し待ってから、前に出す。うまくいかなかったときだけ、後で知らせる。
-const SWITCH_DELAY_MS = 1200;
+// 待ちは 2.5秒（1.2秒では、ウィンドウが前に出たところで NVDA が文を途中で止めた。文も短くした。2026-11-06 の WinCC の確かめ）。
+const SWITCH_DELAY_MS = 2500;
 let switching = false;
 function backKeyName() { return /Mac/i.test(navigator.platform || '') ? 'Command' : 'Alt'; }
 
@@ -1355,7 +1381,7 @@ function pageConfig(appId) { return appConfigs.find((c) => c.id === appId) || nu
 async function revealPage(appId = pageAppId()) {
   // カードを読んでいる間は、同じ窓のページを動かさない。
   if (busy) {
-    if (!reviewing) announce('読み込み中です。少しお待ちください。');
+    if (!reviewing) sayBusy();
     return;
   }
   if (!appId) {
@@ -1367,7 +1393,7 @@ async function revealPage(appId = pageAppId()) {
     announce('このアプリには、表示できる元のページがありません。', true);
     return;
   }
-  await announceThenSwitch('元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。',
+  await announceThenSwitch('元のページを表示します。Escキーで戻ります。',
     () => window.cardsApi.revealPage(appId), '元のページを表示できませんでした。');
 }
 
@@ -1382,7 +1408,7 @@ async function openPageExternal(appId = pageAppId()) {
     announce(config.kind === 'youtube' ? 'このアプリには、ブラウザで開けるページがありません。' : 'このページは、既定のブラウザでは開けません。', true);
     return;
   }
-  await announceThenSwitch(`いまのページを、既定のブラウザで開きます。Todoku に戻るには ${backKeyName()} キーと Tab キーを押してください。`,
+  await announceThenSwitch(`既定のブラウザで開きます。${backKeyName()}キーと Tabキーで戻ります。`,
     () => window.cardsApi.openPageExternal(appId), 'いまのページを開けませんでした。');
 }
 
@@ -1834,7 +1860,7 @@ function searchCard() {
         onInput: (v) => onSearchInput(v),
         onEnter: (v) => { onSearchInput(v); toFirstResult(); },
       },
-      { text: 'タイトルと説明から、全部のアプリのカードを探します。', describe: true },
+      { text: 'カードのタイトルと説明、アプリの名前、自分で付けた表示名とメモから、全部のアプリのカードを探します。', describe: true },
       { text: '入力した後、Escキーでこのカードへ戻り、下矢印キーで、アプリごとの見つかったカードへ移ります。' },
       { text: '欄の中でEnterキーを押すと、最初に見つかったカードへ移ります。' },
       { text: searchCountText(search.query, search.total), searchCount: true },
@@ -1954,8 +1980,9 @@ function appDeck(config, hasParent = true) {
   const reads = config.cards.filter((c) => c.action !== 'click').length + 1;
   const clicks = config.cards.length + 1 - reads;
   const counts = [reads > 0 ? `読むカード${reads}枚` : '', clicks > 0 ? `操作するカード${clicks}枚` : ''].filter(Boolean).join('、');
+  const label = pageLabel(config);
   const texts = [
-    `「${config.name}」の画面を、カードで読めます（${counts || 'カードはありません'}）。`,
+    `「${label}」の画面を、カードで読めます（${counts || 'カードはありません'}）。`,
     '上下矢印キーでカードを選びます。',
     'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
     'スペースキーまたはEnterキーで、カードの中に入ります。',
@@ -1977,6 +2004,8 @@ function appDeck(config, hasParent = true) {
   // 設定ファイルの頭の description（アプリの説明・出典など）は、はじめのカードの最後の項目にする。
   if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
   const items = sentences(texts);
+  // 表示名を付けたページは、一枚目を選んだときに、元の名前を説明として一度読む。
+  if (pageMark(config.id).name) items.unshift({ text: `元の名前は「${config.name}」です。`, describe: true });
   // 元のページを見る・ブラウザで開くボタン（P キーと B キーと同じ働き）。
   items.push(
     { button: '元のページを表示する', keys: 'P', onPress: () => revealPage(config.id) },
@@ -2006,7 +2035,7 @@ function appDeck(config, hasParent = true) {
       { button: 'このアプリのカードを消す', onPress: () => deleteGenerated(config) },
     );
   }
-  const cards = [{ kind: 'info', heading: config.name, items }];
+  const cards = [{ kind: 'info', heading: pageLabel(config), items }];
   for (const c of config.cards) {
     cards.push({
       kind: c.action === 'click' ? 'click' : 'read',
@@ -2025,7 +2054,8 @@ function appDeck(config, hasParent = true) {
   cards.push(organizeCard(config));
   // 自動で直した所があれば、支援者向けのカードを最後に置く。
   if (repairsOf(config.id).size > 0) cards.push(maintCard(config.id));
-  return { name: config.name, appId: config.id, cards };
+  // 表示名を付けたページは、束の名前（ウィンドウの題）も一枚目の見出しも表示名で読む。
+  return { name: pageLabel(config), appId: config.id, cards };
 }
 
 // 最初のページのカード（作り直すたびに使う、状態を持つカードは同じものを使う）。
@@ -2046,7 +2076,7 @@ function topIntroCard() {
       'Homeキーで最初、Endキーで最後の項目へ移動します。',
       'Escキーで、カードの中からカードへ戻ります。',
       `「${SETTINGS_HEADING}」のカードで、読みやすさ、1列リフロー表示、配色を変えられます。`,
-      `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、タイトルと説明から探せます。`,
+      `「${SEARCH_HEADING}」のカードで、全部のアプリのカードを、タイトルと説明、アプリの名前、表示名とメモから探せます。`,
       `「${NEW_FOLDER_HEADING}」のカードで、ページのカードをまとめるフォルダを作れます。`,
       `ページのカードの表示名・メモ・フォルダは、そのページのカードの束の「${ORGANIZE_HEADING}」のカードで変えられます。`,
       ...READER_TEXTS,
@@ -2103,7 +2133,7 @@ document.addEventListener('keydown', (e) => {
   if (letter && active.tagName !== 'INPUT') {
     e.preventDefault();
     if (busy) {
-      if (!reviewing) announce('読み込み中です。少しお待ちください。');
+      if (!reviewing) sayBusy();
       return;
     }
     if (letter === 'b') openPageExternal();
@@ -2120,7 +2150,7 @@ document.addEventListener('keydown', (e) => {
   }
   if (busy && key !== 'Escape') {
     e.preventDefault();
-    if (!reviewing) announce('読み込み中です。少しお待ちください。');
+    if (!reviewing) sayBusy();
     return;
   }
   if (onCard) {

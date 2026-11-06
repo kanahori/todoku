@@ -226,3 +226,22 @@ test('前に出す: Mac では最前面にしない。少し後にまだ焦点�
   timers[0].fn();
   assert.deepEqual(win.calls.slice(3), ['show', 'focus', 'page-focus']);
 });
+
+test('焦点を取れない窓に戻す: Windows では焦点が落ち着くまで500ミリ秒待ってから戻し、Mac ではすぐ戻す', () => {
+  const { restoreUnfocusable } = require('../src/main/target');
+  const make = () => {
+    const calls = [];
+    return { calls, focusable: true, isDestroyed: () => false, isFocusable() { return this.focusable; },
+      setFocusable(v) { this.focusable = v; calls.push(`focusable:${v}`); }, setSkipTaskbar(v) { calls.push(`skip:${v}`); } };
+  };
+  const timers = [];
+  const win = make();
+  restoreUnfocusable(win, { platform: 'win32', later: (fn, ms) => timers.push({ fn, ms }) });
+  assert.deepEqual(win.calls, []);
+  assert.deepEqual(timers.map((t) => t.ms), [500]);
+  timers[0].fn();
+  assert.deepEqual(win.calls, ['focusable:false', 'skip:true']);
+  const mac = make();
+  restoreUnfocusable(mac, { platform: 'darwin', later: () => { throw new Error('待たない'); } });
+  assert.deepEqual(mac.calls, ['focusable:false']);
+});
