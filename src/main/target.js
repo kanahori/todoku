@@ -619,7 +619,11 @@ function endLoginFocus() {
     restoreUnfocusable(w);
     restored += 1;
   }
-  if (restored > 0) guardHomeFront(homeWindow);
+  // ここでは前面の見張り（guardHomeFront）をしない。Todoku の窓に焦点が来たのは、使う人が Alt+Tab などで移したときで、
+  // その後に Windows が別のアプリを前面にしたなら、それは使う人の操作の結果かもしれない。前は見張りが Todoku の中の焦点だけを取り、
+  // 前面は一つ前の窓（WezTerm）なのに NVDA が Todoku を読んだ（ログインの窓から Alt+Tab。2026-11-06 夜の WinCC の確かめ）。
+  // 見張りは、Todoku へ戻すと決めたとき（backToHome: Esc・前に出した窓を閉じた）だけにする。
+  return restored;
 }
 
 // 前に出していたウェブアプリの窓を、焦点を取れない窓に戻す（Windows では、タスクバーからも外す）。すぐに戻す。
@@ -752,7 +756,8 @@ async function openTarget(BrowserWindow, config, url, options = {}) {
     // （node の試しの偽の窓には on が無いので、あるときだけ付ける。）
     if (typeof win.webContents.on === 'function') {
       win.webContents.on('before-input-event', (event, input) => {
-        if (input.type !== 'keyDown' || input.key !== 'Escape' || !revealed.has(id)) return;
+        // ログインのために前に出した窓（loginFocus）でも、Esc キーで Todoku に戻る。
+      if (input.type !== 'keyDown' || input.key !== 'Escape' || !(revealed.has(id) || loginFocus.has(id))) return;
         event.preventDefault();
         backToHome(id);
       });
@@ -1058,6 +1063,8 @@ function backToHome(id, reason = 'escape', { platform = process.platform } = {})
     bringToFront(homeWindow, { platform });
     const w = windows.get(id);
     if (platform === 'win32' && w && !w.isDestroyed() && w.isVisible()) w.hide();
+    // Todoku へ戻すと決めたときだけ、前面を見張る（Windows で、0.15秒後と0.6秒後に前面でなければ出し直す）。
+    guardHomeFront(homeWindow, { platform });
   }
   return true;
 }

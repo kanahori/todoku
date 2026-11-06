@@ -582,6 +582,19 @@ async function linksAndRevealChecks() {
     press('Escape');
     check('元のページ: 出していないときの Esc キーは横取りしない', prevented === 1, { prevented });
 
+    // ログインのために前に出した窓（showTarget）でも、Esc キーで Todoku に戻る（ページには渡さない）。
+    {
+      const loginWin = BrowserWindow.getAllWindows().find((w) => w !== home && w.webContents.getURL().endsWith('/test/fixtures/links.html'));
+      showTarget('links-test');
+      const before = homeReturnLog().length;
+      let loginPrevented = 0;
+      loginWin.webContents.emit('before-input-event', { preventDefault: () => { loginPrevented += 1; } }, { type: 'keyDown', key: 'Escape' });
+      const back = homeReturnLog().slice(before);
+      if (headless) home.emit('focus');
+      check('ログインの窓: 前に出したログインの窓で Esc キーを押すと、ページには渡さずに Todoku の窓へ戻り、焦点を取れない窓に戻る',
+        loginPrevented === 1 && JSON.stringify(back) === '["escape"]' && loginWin.isFocusable() === false, { loginPrevented, back, focusable: loginWin.isFocusable() });
+    }
+
     // 前に出した元のページの窓を、使う人が閉じたときも、Todoku の窓へ戻す（Windows で、ほかのアプリの窓が前に来ないように）。
     await revealTarget(BrowserWindow, other);
     const before = homeReturnLog().length;
@@ -2293,19 +2306,19 @@ async function rendererLinksChecks() {
         && JSON.stringify(info.buttons.slice(0, 2)) === JSON.stringify(['元のページを表示する/P', 'いまのページを既定のブラウザで開く/B'])
         && info.buttons[info.buttons.length - 1] === '出典のページを開く', info);
 
-    // P キー: 先に「元のページを表示します。Escキーで戻ります。」と知らせ、読み終わるのを待ってから（2.5秒）元のページを前に出す。
+    // P キー: 先に「元のページを表示します。」と知らせ、読み終わるのを待ってから（3秒）元のページを前に出す。
     await pressLetter('p');
     await t.wait(150);
     const revealSaid = await t.status();
     await t.wait(1500);
     const revealedEarly = await t.js('window.fakeLog.revealed()');
-    await t.wait(1200);
+    await t.wait(1700);
     const revealedLater = await t.js('window.fakeLog.revealed()');
     // B キー: 練習のページ（fixture:）は既定のブラウザで開けないので、頼まずにそう知らせる。
     await pressLetter('B');
     await t.wait(150);
     const openRefused = await t.js("document.getElementById('alert').textContent");
-    check('P キーは、先に「元のページを表示します。」と知らせ、2.5秒待ってから元のページを前に出す（1.6秒ではまだ出さない）。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
+    check('P キーは、先に「元のページを表示します。」と知らせ、3秒待ってから元のページを前に出す（1.6秒ではまだ出さない）。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
       revealSaid === '元のページを表示します。' && JSON.stringify(revealedEarly) === '[]'
         && JSON.stringify(revealedLater) === '["fake-app"]' && openRefused === 'このページは、既定のブラウザでは開けません。'
         && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '[]', { revealSaid, revealedEarly, revealedLater, openRefused });
@@ -2351,7 +2364,7 @@ async function rendererLinksChecks() {
     await t.js('document.activeElement.click()');
     await t.wait(150);
     const extSaid = await t.status();
-    await t.wait(2700);
+    await t.wait(3200);
     const backNote = await t.js("[...document.querySelectorAll('#deck > article.card p[data-item]')].map((p) => p.textContent).pop()");
     check('確認の「既定のブラウザで開く」は、先に「…のページを、既定のブラウザで開きます。」と知らせ、少し待ってから、その一件を番号で頼んで開く。戻り方は確認のカードの最後の一文',
       JSON.stringify(await t.js('window.fakeLog.linksOpened()')) === '["fake-app/1"]'
@@ -2625,7 +2638,7 @@ async function rendererLinkGroupsChecks() {
     await t.key('ArrowDown');
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
-    await t.wait(2800);
+    await t.wait(3300);
     const opened = await t.js('window.fakeLog.linksOpened()');
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
@@ -2641,7 +2654,7 @@ async function rendererLinkGroupsChecks() {
     await t.wait(150);
     const bSaid = await t.status();
     const bEarly = await t.js('window.fakeLog.pagesOpened()');
-    await t.wait(2700);
+    await t.wait(3200);
     check('B キー: 先に「既定のブラウザで開きます。」と知らせ、少し待ってから開くよう頼む',
       bSaid === '既定のブラウザで開きます。'
         && JSON.stringify(bEarly) === '[]' && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '["fake-app"]', { bSaid, bEarly });

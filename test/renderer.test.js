@@ -236,3 +236,8 @@ test('探す: アプリの名前・利用者が付けた表示名とメモにも
   // 表示名もメモも無いときは、今までどおりカードだけ。
   assert.deepEqual(searchCards(searchConfigs, 'ゴミ').map((g) => [g.config.id, g.page, g.matches.map((c) => c.id)]), [['b', false, ['b1']]]);
 });
+
+test('ログインが必要なカードには、ログインのウィンドウで Esc キーを押すと Todoku に戻ることを書く（知らせには入れない）', () => {
+  assert.match(readCardBody, /\{ text: 'ログインのウィンドウで Escキーを押すと、Todoku に戻ります。' \}/);
+  assert.match(source, /const SWITCH_DELAY_MS = 3000;/);
+});

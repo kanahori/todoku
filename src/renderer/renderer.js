@@ -530,6 +530,8 @@ async function readCard(card) {
         },
       },
       { text: 'ログインが済んだら、Enterキーでもう一度読みます。' },
+      // ログインのウィンドウを前に出すときは知らせを読まずにすぐ出すので、戻り方はここに置く。
+      { text: 'ログインのウィンドウで Escキーを押すと、Todoku に戻ります。' },
     ];
   } else {
     card.heading = `${card.title}（読めません）`;
@@ -1355,7 +1357,9 @@ const PAGE_KEYS_ONLY_IN_APP = 'このキーは、アプリのカードを開い�
 // 待ちは 2.5秒（1.2秒では、ウィンドウが前に出たところで NVDA が文を途中で止めた。2026-11-06 の WinCC の確かめ）。
 // 知らせは前半だけにする（社長のご選択・AUQ 11/6 19:50）。戻り方（Esc キー・Alt か Command と Tab）は、アプリの一枚目の説明と、
 // リンクの確認のカードに置く。
-const SWITCH_DELAY_MS = 2500;
+// 2.5秒では「元のページを表示します。」（約2.5秒）を読み終わるのと、ウィンドウが前に出るのがほぼ同時だったので、3秒にする
+// （2026-11-06 夜の WinCC の確かめ）。
+const SWITCH_DELAY_MS = 3000;
 let switching = false;
 function backKeyName() { return /Mac/i.test(navigator.platform || '') ? 'Command' : 'Alt'; }
 
