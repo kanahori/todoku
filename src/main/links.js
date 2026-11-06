@@ -212,7 +212,7 @@ function browserUrl(currentUrl, configUrl) {
 function findDeckFor(url, configs) {
   const key = sameKey(url);
   if (!key) return null;
-  const list = Array.isArray(configs) ? configs.filter((c) => c && c.kind !== 'youtube' && externalUrl(String(c.url || ''))) : [];
+  const list = Array.isArray(configs) ? configs.filter((c) => c && externalUrl(String(c.url || ''))) : [];
   for (const config of list) if (sameKey(config.url) === key) return { config, cardId: null };
   for (const config of list) {
     for (const card of config.cards || []) {

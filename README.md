@@ -72,7 +72,6 @@ Without an API key, everything except these Claude features works. To try it: `n
 - `CARDS_LOCAL_DIR` (optional): a folder of extra config files (`*.json`) that are loaded after the bundled `cards/`. Use it for sites whose configs you do not want to publish. A config whose `id` duplicates one already loaded is skipped and reported.
 - `CARDS_ANTHROPIC_API_KEY` (optional): the Anthropic API key used to ask Claude for repaired selectors and for new decks. Without it, the app says it cannot repair or make cards; everything else works. The app deliberately does not read `ANTHROPIC_API_KEY`, so that the key used by the app stays separate from other tools on the same machine.
 - `TODOKU_DUMP_DIR` (optional, for developers): each time a deck is made, the app writes three files there: `<id>-a-structure.txt` (the text-free structure sent to Claude), `<id>-b-proposals.json` (Claude's answer as returned) and `<id>-c-deck.json` (the deck after the app's own guards, with card titles, and every proposal that was dropped with a short reason). Page text (the titles) appears only in the third file, so only the first two may be shared.
-- `TODOKU_YOUTUBE_API_KEY` (optional): a YouTube Data API v3 key, used only by the YouTube cards (below). The key stays in the main process: it is not passed to the card screen and is not written to files or logs. Without it, the YouTube cards say "YouTube の API キーが設定されていません。"; everything else works.
 - `CARDS_REPAIR_MODEL` (optional): the Claude model used for every Claude call (repairs and new decks). Default: `claude-opus-5-5`.
 - `https_proxy` / `HTTPS_PROXY` (optional): passed to Electron as `--proxy-server`, so the app can reach outside pages from a network that needs a proxy. `no_proxy` / `NO_PROXY` (optional) is passed as `--proxy-bypass-list`. Without them, the app uses no proxy switches and follows the system proxy settings. At startup the app tries to reach the proxy it would use (from these variables or from the system settings, 2-second timeout); if it cannot (for example, off campus while the system proxy still points to the campus proxy), it connects directly inside the app only, without changing the system settings, and writes one line about it to the terminal (when started with `npm start`) and to `log.txt` in the app's user data folder. Each line starts with the computer's local time and its offset from UTC (for example `2026-11-04T09:30:05.123+09:00`).
 
@@ -144,13 +143,6 @@ Without an API key, everything except these Claude features works. To try it: `n
 - A page with a display name is read by that name inside its deck too: the deck's first card and the window title use the display name, and the first card's description says the original name once ("元の名前は「…」です。").
 - New decks (from a URL or from a link) are added to the first screen outside any folder. All of this is saved in `bookmarks.json` in the app's user data folder; if that file is broken, the app starts with no folders. `npm run demo:reset` moves it aside with the other saved data.
 
-## YouTube cards
-
-- `cards/youtube.json` ("YouTube の動画") searches YouTube and plays a video, without opening youtube.com in a window. The list comes from the official YouTube Data API v3 (`search.list`, then `videos.list` for the length), and each video is read as one item: title, length, date published and channel name. Enter on an item moves to the player card and plays it in the official embedded player (`youtube-nocookie.com`), shown inside the card screen at 640×360 with nothing drawn over it. The buttons (play, pause, back 10 seconds, forward 10 seconds, volume up and down) are below the player, and the focus stays on these buttons, never inside the player, so that a screen reader does not get lost in it. Volume changes are announced with the new level, e.g. "音量を60%にしました。". Playback starts only after the player is loaded and more than half of it is visible on the screen.
-- Search words are sent to YouTube (Google). Todoku does not save them, and does not save the results: every search asks the API again. The first card of the YouTube deck says so ("検索の言葉は YouTube（Google）に送られます。Todoku は保存しません。") and has two buttons that open the YouTube Terms of Service (https://www.youtube.com/t/terms) and the Google Privacy Policy (https://policies.google.com/privacy) in the default browser. By using the YouTube cards, you agree to the YouTube Terms of Service.
-- Only the API and the embedded player are used; the app does not read or operate youtube.com pages. The embedded player is told who embeds it: requests to `www.youtube-nocookie.com` carry the app id (`build.appId` in `package.json`) as the `Referer`, because the card screen is a local file and would otherwise send none, and the player then refuses to play. Links inside the player that open a new window ("Watch on YouTube") open in the default browser.
-- A YouTube config has `"kind": "youtube"` and no `url`. Card actions: `youtube-search` (a search box), `youtube-channel` (the newest videos of one channel, with `channelId`, the 24-character id starting with `UC`) and `youtube-player` (the player card; exactly one is needed). `maxResults` (1 to 50, default 10) is optional for the first two.
-
 ## Config file format (short)
 
 - `id`, `name`, optional `description` (a description of the app, such as a source credit; read as the last item of the app's first card; keep URLs out of it, because screen readers read them almost character by character), optional `sourceUrl` (the `http(s)://` page of the source; the app's first card gets a "出典のページを開く" button that opens it in the default browser), `url` (`http(s)://...` or `fixture:<name>.html` for the practice pages), optional `login` (`selector` that indicates a login is needed, and `path` of the login page), and `cards`.
@@ -176,10 +168,10 @@ Without an API key, everything except these Claude features works. To try it: `n
 
 ## Tests
 
-- `npm test`: 162 tests, 155 passed, 7 skipped (the Electron-only scripts), 0 failed.
-- `npm run smoke`: 260 checks, 260 passed, against the practice pages (and a local test server that never answers) only.
+- `npm test`: 154 tests, 147 passed, 7 skipped (the Electron-only scripts), 0 failed.
+- `npm run smoke`: 251 checks, 251 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
-- `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (260 checks, 260 passed).
+- `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (last measured on 2026-11-06 with an earlier version: 260 checks, 260 passed).
 - All four were measured on macOS on 2026-11-06. On 2026-11-04 (with fewer tests), `npm run smoke` was also measured on a fresh clone of this repository, following "Getting started (macOS)", and both `npm test` and `npm run smoke` on a fresh clone on Windows 11, following "Getting started (Windows)". `npm run real:tsukuba` loads the real site, so it is run by hand only.
 
 ## Future
@@ -362,9 +354,6 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 - `TODOKU_DUMP_DIR`（任意・開発する人向け）: 束を作るたびに、三つのファイルを書きます。
   `<id>-a-structure.txt`（Claude に送った、文字の無い構造）・`<id>-b-proposals.json`（Claude の返事のまま）・`<id>-c-deck.json`（アプリの守りを通した後の束と、カードのタイトル、作らなかった案とその短い理由）です。
   ページの文字（タイトル）は三つ目にだけ入るので、人に見せてよいのは初めの二つだけです。
-- `TODOKU_YOUTUBE_API_KEY`（任意）: YouTube Data API v3 のキーで、YouTube のカード（下）だけが使います。
-  キーは主の処理の中だけに置き、カードの画面には渡さず、ファイルやログにも書きません。
-  無いときは、YouTube のカードが「YouTube の API キーが設定されていません。」と知らせ、ほかは全部使えます。
 - `CARDS_REPAIR_MODEL`（任意）: Claude を呼ぶときに使うモデルです（直しと、新しい束の両方）。
   既定は `claude-opus-5-5` です。
 - `https_proxy` / `HTTPS_PROXY`（任意）: Electron に `--proxy-server` として渡し、プロキシの要るネットワークから外のページに届くようにします。
@@ -592,30 +581,6 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
   このファイルが壊れていても、フォルダの無い状態で起動します。
   `npm run demo:reset` は、ほかの保存と一緒に、このファイルも控えへ移します。
 
-### YouTube のカード
-
-- `cards/youtube.json`（「YouTube の動画」）で、youtube.com をウィンドウで開かずに、YouTube の動画を探して再生します。
-  一覧は公式の YouTube Data API v3（`search.list` と、長さのための `videos.list`）から取り、一件を「タイトル・長さ・公開日・チャンネル名」で読みます。
-  一件で Enter キーを押すと、再生のカードに移り、公式の埋め込みプレーヤー（`youtube-nocookie.com`）で再生します。
-  プレーヤーは、カードの画面の中に 640×360 で見える形で置き、上に何も重ねません。
-  ボタン（再生・一時停止・10秒戻る・10秒進む・音量を上げる・下げる）はプレーヤーの下にあり、焦点はプレーヤーの中ではなく、このボタンに置きます。
-  スクリーンリーダーがプレーヤーの中で迷わないためです。
-  音量を変えると、「音量を60%にしました。」のように新しい大きさを知らせます。
-  再生は、プレーヤーを読み込み、半分以上が画面に見えてから始めます。
-- 探す言葉は YouTube（Google）に送られます。
-  Todoku は探す言葉も結果も保存しません（探すたびに API に問い合わせます）。
-  YouTube の束の一枚目でもそう知らせ（「検索の言葉は YouTube（Google）に送られます。Todoku は保存しません。」）、YouTube の利用規約（https://www.youtube.com/t/terms）と Google のプライバシーポリシー（https://policies.google.com/privacy）を既定のブラウザで開くボタンを置いています。
-  YouTube のカードを使うことは、YouTube の利用規約に同意することになります。
-- 使うのは API と埋め込みプレーヤーだけで、youtube.com のページを読んだり操作したりはしません。
-  埋め込みプレーヤーには、だれが埋め込んでいるかを伝えます。
-  カードの画面は手元のファイルなので、そのままでは `Referer` を送らず、プレーヤーが再生を断ります。
-  そこで、`www.youtube-nocookie.com` への頼みには、アプリの id（`package.json` の `build.appId`）を `Referer` として付けます。
-  プレーヤーの中の、新しいウィンドウを開くリンク（「YouTube で見る」）は、既定のブラウザで開きます。
-- YouTube の設定ファイルは `"kind": "youtube"` で、`url` は書きません。
-  カードの働きは、`youtube-search`（探す欄）・`youtube-channel`（一つのチャンネルの新しい動画。`channelId` に UC で始まる24字の id）・`youtube-player`（再生のカード。ちょうど一枚要ります）です。
-  初めの二つには、`maxResults`（1〜50。既定は10）を書けます。
-- API キーは環境変数 `TODOKU_YOUTUBE_API_KEY` から読みます（上の「設定（環境変数）」）。
-
 ### 設定ファイルの形（短く）
 
 - `id`・`name`・任意の `description`（アプリの説明。出典など。アプリの一枚目のカードの最後の項目として読みます。スクリーンリーダーは URL をほぼ一文字ずつ読むので、URL は書かないでください）・任意の `sourceUrl`（出典の `http(s)://` のページ。アプリの一枚目のカードに「出典のページを開く」ボタンが付き、既定のブラウザで開きます）・`url`（`http(s)://...` か、練習のページの `fixture:<名前>.html`）・任意の `login`（ログインが要ることを示す `selector` と、ログインのページの `path`）・`cards` です。
@@ -683,10 +648,10 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 
 ### テスト
 
-- `npm test`: 162件。155件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
-- `npm run smoke`: 260件。260件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
+- `npm test`: 154件。147件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
+- `npm run smoke`: 251件。251件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
 - `npm run real:tsukuba`: 13件。本物のつくば市のサイトで、13件が通りました。
-- `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（260件。260件が通りました）。
+- `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（最後に測ったのは 2026年11月6日の前の版で、260件。260件が通りました）。
 - 四つとも、2026年11月6日に macOS で測りました。
   2026年11月4日（テストがまだ少なかったとき）には、このリポジトリを新しく clone して「使い始める（macOS）」のとおりに `npm run smoke` を、Windows 11 でも新しく clone して「使い始める（Windows）」のとおりに `npm test` と `npm run smoke` を走らせました。
   `npm run real:tsukuba` は本物のサイトを読み込むので、手で走らせるだけにしています。

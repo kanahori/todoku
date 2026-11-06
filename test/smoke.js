@@ -403,7 +403,6 @@ async function main() {
     await rendererFocusChecks();
     await rendererClickAnnounceChecks();
     await rendererReviewChecks();
-    await rendererYouTubeChecks();
     await rendererGenerateChecks();
     await rendererSettingsChecks(settingsStore, settingsFile);
     await rendererSearchChecks(settingsStore);
@@ -1394,112 +1393,6 @@ async function rendererClickAnnounceChecks() {
       { slowButton, slowDuring, buttonDuring, slowSaid, buttonAfter });
   } finally {
     win.destroy();
-  }
-}
-
-// YouTube のカード（"kind": "youtube"）: 探す欄で探し、結果を番号つきで読み、Enter で再生のカードへ移って再生する。
-// プレーヤーは作り物（test/fixtures/yt-fake-player.html。埋め込みプレーヤーの postMessage の決まりの一部をまねる）。API の答えも作り物（?fake=youtube）。
-// 確かめること: 一枚目に「検索の言葉は YouTube（Google）に送られます。…」と規約・プライバシーポリシーのボタン。再生のカードでは焦点がプレーヤーの外のボタンにあり、
-// ボタンはプレーヤーの下（重ならない）。プレーヤーが読み込めたら再生の命令を送る。10秒戻る・音量を上げる（何％かを一文で知らせる）・一時停止。
-async function rendererYouTubeChecks() {
-  const open = async (query) => {
-    const win = new BrowserWindow({
-      show: false,
-      width: 1000,
-      height: 900,
-      webPreferences: { preload: path.join(__dirname, 'renderer-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
-    });
-    await win.loadFile(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), { query });
-    const js = (code) => win.webContents.executeJavaScript(code);
-    const wait = pageWait(win);
-    for (let k = 0; k < 50 && (await js("document.querySelectorAll('#deck > article.card').length")) < 3; k++) await wait(50);
-    const key = (k) => js(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true, cancelable: true }))`);
-    for (let k = 0; k < 3; k++) await key('ArrowDown');
-    await key('Enter');
-    await wait(150);
-    await js(`(() => {
-      window.__said = [];
-      window.__ytMsgs = [];
-      window.addEventListener('message', (e) => { try { const d = JSON.parse(e.data); if (d.info && d.info.lastCommand) window.__ytMsgs.push(d.info.lastCommand); } catch (err) {} });
-      for (const id of ['status', 'alert']) {
-        const el = document.getElementById(id);
-        new MutationObserver(() => { if (el.textContent) window.__said.push(el.textContent); }).observe(el, { childList: true, characterData: true, subtree: true });
-      }
-      return true;
-    })()`);
-    return { win, js, wait, key };
-  };
-  const t = await open({ fake: 'youtube' });
-  try {
-    const first = await t.js("[...document.querySelectorAll('#deck > article.card')[0].querySelectorAll('[data-item]')].map((x) => x.textContent)");
-    check('YouTube: 一枚目に、検索の言葉が YouTube（Google）に送られ Todoku は保存しないことと、利用規約・プライバシーポリシーを開くボタンがある',
-      first.includes('検索の言葉は YouTube（Google）に送られます。Todoku は保存しません。') && first.includes('YouTube の利用規約を開く')
-        && first.includes('Google のプライバシーポリシーを開く') && !first.some((x) => x.includes('設定ファイルを確認する')), first);
-    check('YouTube: 一枚目のキーの説明は、ほかのアプリと同じく Home・End の一文と Esc の一文を含む',
-      first.includes('Homeキーで最初のカード、Endキーで最後のカードへ移動します。') && first.includes('Escキーで、カードの中からカードへ戻ります。'), first);
-    const emptyPlayer = await t.js("(() => { const p = document.querySelector('#deck > article.card-yt-player'); const items = [...p.querySelectorAll('[data-item]')]; return items.length === 1 ? items[0].textContent : items.map((x) => x.textContent); })()");
-    check('YouTube: 動画を選ぶ前の再生のカードは「まだ動画を選んでいません。…」の一文だけ（ボタンの説明は出さない）',
-      emptyPlayer === 'まだ動画を選んでいません。「動画を探す」か、新しい動画の一覧で一件を選んで Enter キーを押すと、ここで再生します。', emptyPlayer);
-    // 探す欄で探す。
-    await t.key('ArrowDown');
-    await t.key('Enter');
-    await t.js(`(() => { const i = document.activeElement; i.value = '授業'; i.dispatchEvent(new Event('input', { bubbles: true })); return i.tagName; })()`);
-    await t.js("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))");
-    await t.wait(400);
-    const found = await t.js(`(() => ({ focus: document.activeElement.tagName + ' ' + document.activeElement.textContent, said: window.__said.slice(), queries: window.fakeLog.ytQueries() }))()`);
-    check('YouTube: 探すと、結果を番号つきの一覧で出して最初の一件に焦点を置き、何件見つかったかを知らせる（探す言葉とカードを API の口に渡す）',
-      found.focus === 'LI 作り物の授業 第1回、長さ 12分34秒、公開日 2026年11月3日、作り物の大学' && found.said.includes('2件見つかりました。')
-        && JSON.stringify(found.queries) === JSON.stringify(['search:授業']), found);
-    // Enter で再生のカードへ（欄の Enter のすぐ後の Enter は捨てる守りがあるので、少し間を置く）。
-    await t.wait(300);
-    await t.key('Enter');
-    await t.wait(1200);
-    const play = await t.js(`(() => {
-      const a = document.activeElement;
-      const card = a.closest('article.card');
-      const f = card ? card.querySelector('iframe') : null;
-      const fr = f ? f.getBoundingClientRect() : null;
-      const buttons = card ? [...card.querySelectorAll('button')] : [];
-      return { focus: a.tagName + ' ' + a.textContent, heading: card ? card.querySelector('h2').textContent : null, iframe: Boolean(f), iframeTab: f ? f.getAttribute('tabindex') : null,
-        size: fr ? [Math.round(fr.width), Math.round(fr.height)] : null, below: fr ? buttons.every((b) => b.getBoundingClientRect().top >= fr.bottom - 0.5) : false,
-        msgs: window.__ytMsgs.slice(), said: window.__said.slice() };
-    })()`);
-    check('YouTube: 一件で Enter を押すと、再生のカードに移り、焦点はプレーヤーの外の「再生」のボタン。プレーヤーは 200×200 以上で、ボタンはプレーヤーの下（重ならない）',
-      play.focus === 'BUTTON 再生' && play.heading === '再生中の動画を操作する（作り物の授業 第1回）' && play.iframe && play.iframeTab === '-1'
-        && play.size[0] >= 200 && play.size[1] >= 200 && play.below, play);
-    check('YouTube: プレーヤーが読み込めて見えたら、再生の命令を送る', play.msgs.includes('playVideo:[]'), play);
-    await t.js('window.__said.length = 0; window.__ytMsgs.length = 0');
-    for (const label of ['10秒戻る', '音量を上げる', '一時停止']) {
-      await t.js(`[...document.querySelectorAll('button')].find((b) => b.textContent === ${JSON.stringify(label)}).click()`);
-      await t.wait(250);
-    }
-    const ctrl = await t.js('({ msgs: window.__ytMsgs.slice(), said: window.__said.slice() })');
-    check('YouTube: 10秒戻る・音量を上げる・一時停止をプレーヤーに送り、音量は何％にしたかを一文で知らせる',
-      JSON.stringify(ctrl.msgs) === JSON.stringify(['seekTo:[20,true]', 'setVolume:[60]', 'pauseVideo:[]'])
-        && JSON.stringify(ctrl.said) === JSON.stringify(['10秒戻しました。', '音量を60%にしました。', '一時停止しました。']), ctrl);
-    // 決まったチャンネルの新しい動画（二枚目）。
-    await t.key('Escape');
-    await t.key('ArrowUp');
-    await t.key('Enter');
-    await t.wait(400);
-    const latest = await t.js(`(() => ({ focus: document.activeElement.textContent, queries: window.fakeLog.ytQueries(), said: window.__said.slice() }))()`);
-    check('YouTube: 決まったチャンネルの新しい動画を、番号つきの一覧で読む',
-      latest.focus.startsWith('作り物の授業 第1回') && latest.queries.includes('latest:') && latest.said.includes('「授業の動画の新しいものを読む」から2件読みました。'), latest);
-  } finally {
-    t.win.destroy();
-  }
-  const n = await open({ fake: 'youtube', ytnokey: '1' });
-  try {
-    await n.key('ArrowDown');
-    await n.key('Enter');
-    await n.js(`(() => { const i = document.activeElement; i.value = '授業'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
-    await n.js("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))");
-    await n.wait(400);
-    const nk = await n.js(`(() => ({ focus: document.activeElement.textContent, said: window.__said.slice() }))()`);
-    check('YouTube（API キーが無いとき）: 「YouTube の API キーが設定されていません。」の文に焦点を置き、知らせの欄には何も入れない（すぐ返ったので「探しています。」も言わない）',
-      nk.focus === 'YouTube の API キーが設定されていません。' && !nk.said.includes('YouTube の API キーが設定されていません。') && !nk.said.includes('探しています。'), nk);
-  } finally {
-    n.win.destroy();
   }
 }
 

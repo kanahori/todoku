@@ -18,9 +18,6 @@ contextBridge.exposeInMainWorld('cardsApi', {
   readLinks: (appId) => ipcRenderer.invoke('page:links', String(appId)),
   findDeckForLink: (url) => ipcRenderer.invoke('link:find', String(url)),
   openLinkExternal: (appId, index) => ipcRenderer.invoke('link:open-external', String(appId), Number(index)),
-  // YouTube のカード: 動画を探す・チャンネルの新しい動画を読む（キーは主の処理だけが持つ）。利用規約・プライバシーポリシーを開く。
-  youtubeList: (appId, cardId, query) => ipcRenderer.invoke('youtube:list', String(appId), String(cardId), String(query || '')),
-  openPolicy: (name) => ipcRenderer.invoke('policy:open', String(name)),
   proposeRepairs: (appId) => ipcRenderer.invoke('repair:propose', String(appId)),
   applyRepairs: (appId, wheres) => ipcRenderer.invoke('repair:apply', String(appId), (wheres || []).map(String)),
   // 自動で直した所: 一覧・直す前に戻す・設定ファイルに書く（配る）。

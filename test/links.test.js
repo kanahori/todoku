@@ -40,14 +40,13 @@ test('既定のブラウザで開く URL: ウェブアプリの窓のいまの�
 
 test('行き先の束: 束の url と合えばその束、カードの path のページと合えばその束とカード、無ければ null（# から後と終わりの / は見ない）', () => {
   const configs = [
-    { id: 'yt', kind: 'youtube', cards: [] },
     { id: 'practice', url: 'fixture:city-top.html', cards: [] },
     { id: 'city', url: 'https://example.com/aoba/', cards: [{ id: 'events', path: '/aoba/events/' }, { id: 'top', title: 'x' }] },
     { id: 'weather', url: 'https://example.com/weather/#area=1', cards: [] },
   ];
-  assert.deepEqual(findDeckFor('https://example.com/aoba', configs), { config: configs[2], cardId: null });
-  assert.deepEqual(findDeckFor('https://example.com/aoba/events/#today', configs), { config: configs[2], cardId: 'events' });
-  assert.deepEqual(findDeckFor('https://example.com/weather/', configs), { config: configs[3], cardId: null });
+  assert.deepEqual(findDeckFor('https://example.com/aoba', configs), { config: configs[1], cardId: null });
+  assert.deepEqual(findDeckFor('https://example.com/aoba/events/#today', configs), { config: configs[1], cardId: 'events' });
+  assert.deepEqual(findDeckFor('https://example.com/weather/', configs), { config: configs[2], cardId: null });
   assert.equal(findDeckFor('https://example.com/other/', configs), null);
   assert.equal(findDeckFor('', configs), null);
 });

@@ -188,7 +188,7 @@ function renderItems(items) {
   let group = null;
   let groupKind = null;
   for (const item of items) {
-    const kind = item.embed ? 'embed' : item.button ? 'button' : item.input ? 'input' : item.label ? 'dl' : item.listItem !== undefined ? 'ul' : 'p';
+    const kind = item.button ? 'button' : item.input ? 'input' : item.label ? 'dl' : item.listItem !== undefined ? 'ul' : 'p';
     if (kind === 'dl' || kind === 'ul') {
       if (groupKind !== kind) {
         group = el(kind);
@@ -199,22 +199,8 @@ function renderItems(items) {
       group = null;
       groupKind = null;
     }
-    if (kind === 'embed') {
-      // YouTube の埋め込みプレーヤー。カードの項目の上に置き、ほかの要素を重ねない。焦点の行き先（data-item）にはしない
-      // （iframe の中に焦点が落ちると、読み上げで迷子になるため。tabindex=-1 で Tab でも入らない）。
-      const wrap = el('div', { class: 'yt-frame' });
-      const f = el('iframe', { src: item.embed, title: item.embedTitle || 'YouTube の動画プレーヤー', width: '640', height: '360', tabindex: '-1',
-        allow: 'autoplay; encrypted-media; picture-in-picture', referrerpolicy: 'strict-origin-when-cross-origin' });
-      if (item.onLoad) f.addEventListener('load', () => item.onLoad(f));
-      wrap.append(f);
-      box.append(wrap);
-      group = null;
-      groupKind = null;
-      continue;
-    }
     if (kind === 'button') {
       const b = el('button', { type: 'button', 'data-item': '', tabindex: '-1', class: 'item-button', text: item.button });
-      if (item.yt) b.setAttribute('data-yt', item.yt);
       if (item.keys) b.setAttribute('aria-keyshortcuts', item.keys);
       b.addEventListener('click', () => item.onPress(b));
       if (item.result) b.setAttribute('data-result', '');
@@ -350,16 +336,6 @@ async function activateCard(card, node) {
   }
   if (card.kind === 'review') {
     await openReview(card);
-    return;
-  }
-  if (card.kind === 'yt-search') {
-    const input = node.querySelector('[data-input]');
-    if (input) input.focus();
-    else enterCard(node);
-    return;
-  }
-  if (card.kind === 'yt-channel') {
-    await ytLoad(card);
     return;
   }
   if (card.kind === 'create' || card.kind === 'newFolder') {
@@ -639,225 +615,6 @@ function showClickConfirm(card, node) {
   ];
   const fresh = refreshCard(card);
   if (fresh) enterCard(fresh, true);
-}
-
-// ---- YouTube のカード（設定ファイルの "kind": "youtube"）----
-// 公式の API で探し・読み、公式の埋め込みプレーヤーで再生する（画面を読む作りは当てない）。プレーヤーはカードの中に見える形で置き、
-// ほかの要素を重ねない。操作のボタンはプレーヤーの下に置き、焦点はボタンに置く（iframe の中に焦点を落とさない）。
-const YT_PRIVACY = '検索の言葉は YouTube（Google）に送られます。Todoku は保存しません。';
-let ytState = { card: null, iframe: null, ready: false, current: 0, volume: null, pendingPlay: false };
-
-function ytDeck(config, hasParent) {
-  const texts = [
-    `「${pageLabel(config)}」で、YouTube の動画を探して、再生できます。`,
-    // キーの説明は、ほかのアプリのはじめのカード（appDeck）と同じ形にそろえる（Home・End の一文と Esc の一文。WinCC の確かめ）。
-    '上下矢印キーでカードを選びます。',
-    'Homeキーで最初のカード、Endキーで最後のカードへ移動します。',
-    'スペースキーまたはEnterキーで、カードの中に入ります。',
-    '一覧の一件を選んで Enter キーを押すと、再生のカードで再生します。',
-    '再生のカードでは、プレーヤーの下のボタンで、再生、一時停止、10秒戻る、10秒進む、音量の上げ下げができます。',
-    'Escキーで、カードの中からカードへ戻ります。',
-    YT_PRIVACY,
-  ];
-  if (hasParent) texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);
-  if (typeof config.description === 'string' && config.description.trim() !== '') texts.push(endSentence(config.description));
-  const items = sentences(texts);
-  // 表示名を付けたページは、一枚目を選んだときに、元の名前を説明として一度読む。
-  if (pageMark(config.id).name) items.unshift({ text: `元の名前は「${config.name}」です。`, describe: true });
-  const policy = (name, label) => ({
-    button: label,
-    onPress: async () => {
-      let r;
-      try {
-        r = await window.cardsApi.openPolicy(name);
-      } catch (e) {
-        r = { ok: false, message: 'ページを開けませんでした。' };
-      }
-      announce(r.message, !r.ok);
-    },
-  });
-  items.push(policy('youtube-terms', 'YouTube の利用規約を開く'), policy('google-privacy', 'Google のプライバシーポリシーを開く'));
-  const cards = [{ kind: 'info', heading: pageLabel(config), items }];
-  for (const c of config.cards) {
-    const base = { appId: config.id, cardId: c.id, title: c.title, heading: c.title, note: c.description ? endSentence(c.description) : undefined, items: [] };
-    if (c.action === 'youtube-search') {
-      const card = { ...base, kind: 'yt-search', query: '' };
-      card.items = ytSearchItems(card);
-      cards.push(card);
-    } else if (c.action === 'youtube-channel') {
-      cards.push({ ...base, kind: 'yt-channel', items: [{ text: 'スペースキーまたはEnterキーで、新しい動画を読みます。', describe: true }] });
-    } else if (c.action === 'youtube-player') {
-      // 説明（ボタンの一覧）は、動画を選んでボタンが出てから読ませる。選ぶ前は「まだ動画を選んでいません。…」の一文だけにする
-      // （無いボタンを探してしまうため。WinCC の確かめ）。
-      const card = { ...base, kind: 'yt-player', playerNote: base.note, note: undefined };
-      card.items = ytPlayerItems(card);
-      cards.push(card);
-    }
-  }
-  cards.push(organizeCard(config));
-  // 表示名を付けたページは、束の名前（ウィンドウの題）も一枚目の見出しも表示名で読む。
-  return { name: pageLabel(config), appId: config.id, cards };
-}
-
-function ytSearchItems(card) {
-  return [
-    {
-      input: '探す言葉',
-      type: 'search',
-      get value() { return card.query || ''; },
-      onInput: (v) => { card.query = v; },
-      onEnter: (v) => { card.query = v; ytLoad(card); },
-    },
-    { button: '探す', onPress: () => ytLoad(card) },
-  ];
-}
-
-async function ytLoad(card) {
-  if (busy) return;
-  const searching = card.kind === 'yt-search';
-  if (searching && !String(card.query || '').trim()) {
-    announce('探す言葉を入れてください。');
-    return;
-  }
-  busy = true;
-  // 「探しています。」「読んでいます。」は、0.5秒たっても終わらないときだけ言う（キーが無いときなど、すぐ返るときは言わない。
-  // すぐ返ったのに言うと、理由の文と重なって読まれた。WinCC の確かめ）。
-  const loadingTimer = setTimeout(() => announce(searching ? '探しています。' : '読んでいます。'), LOADING_DELAY_MS);
-  let r;
-  try {
-    r = await window.cardsApi.youtubeList(card.appId, card.cardId, searching ? card.query : '');
-  } catch (e) {
-    r = { ok: false, message: 'YouTube から読めませんでした。' };
-  } finally {
-    clearTimeout(loadingTimer);
-    busy = false;
-  }
-  const head = searching ? ytSearchItems(card) : [];
-  if (!r.ok) {
-    card.items = [...head, { text: endSentence(r.message), result: true }];
-    card.heading = card.title;
-    // 焦点を理由の文に移すので、知らせの欄には同じ文を入れない（一度だけ読まれるように）。
-    // カードが描き直せなかった（別の束へ移っていた）ときだけ、知らせの欄で言う。
-    if (!refreshCard(card, { focusResult: true })) announce(endSentence(r.message), true);
-    return;
-  }
-  card.ytItems = r.items;
-  card.onItemEnter = (i) => ytPlay(card.ytItems[i]);
-  card.heading = `${card.title}（${r.items.length}件）`;
-  card.items = [...head, ...(r.items.length === 0 ? [{ text: '動画は見つかりませんでした。', result: true }] : r.items.map((v) => ({ listItem: v.text }))),
-    ...(r.items.length > 0 ? [{ text: '一件を選んで Enter キーを押すと、再生のカードで再生します。' }] : [])];
-  refreshCard(card, { focusResult: true });
-  announce(searching ? (r.items.length === 0 ? '見つかりませんでした。' : `${r.items.length}件見つかりました。`) : `「${card.title}」から${r.items.length}件読みました。`);
-}
-
-function ytPlayerItems(card) {
-  if (!card.video) return [{ text: 'まだ動画を選んでいません。「動画を探す」か、新しい動画の一覧で一件を選んで Enter キーを押すと、ここで再生します。', result: true }];
-  const b = (label, yt, fn) => ({ button: label, yt, onPress: fn });
-  return [
-    { embed: card.video.embedUrl, embedTitle: `YouTube の動画プレーヤー（${card.video.title}）`, onLoad: (f) => ytAttach(card, f) },
-    { text: `再生する動画: ${card.video.text}` },
-    b('再生', 'play', () => ytCommand('playVideo', [], '再生します。')),
-    b('一時停止', 'pause', () => ytCommand('pauseVideo', [], '一時停止しました。')),
-    b('10秒戻る', 'back', () => ytSeek(-10)),
-    b('10秒進む', 'forward', () => ytSeek(10)),
-    b('音量を上げる', 'up', () => ytVolume(10)),
-    b('音量を下げる', 'down', () => ytVolume(-10)),
-  ];
-}
-
-// 一覧の一件から、再生のカードへ移って再生する。プレーヤーが画面に半分以上見えてから再生を始める（YouTube の決まり）。
-function ytPlay(video) {
-  if (!video) return;
-  const deck = current();
-  const index = deck.cards.findIndex((c) => c.kind === 'yt-player');
-  if (index < 0) {
-    announce('再生のカードがありません。', true);
-    return;
-  }
-  const card = deck.cards[index];
-  card.video = video;
-  card.note = card.playerNote;
-  card.heading = `${card.title}（${video.title}）`;
-  card.items = ytPlayerItems(card);
-  ytState = { card, iframe: null, ready: false, current: 0, volume: null, pendingPlay: true };
-  selectCard(index, { announcePosition: false });
-  const node = refreshCard(card);
-  if (node) {
-    node.scrollIntoView({ block: 'start' });
-    const play = node.querySelector('button[data-yt="play"]');
-    if (play) play.focus();
-  }
-  announce(`「${video.title}」を再生のカードに出しました。読み込めたら再生します。`);
-}
-
-function ytPost(func, args = []) {
-  if (!ytState.iframe || !ytState.iframe.contentWindow) return false;
-  ytState.iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
-  return true;
-}
-
-function ytVisibleEnough(f) {
-  const r = f.getBoundingClientRect();
-  const h = Math.max(0, Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0));
-  const w = Math.max(0, Math.min(r.right, window.innerWidth) - Math.max(r.left, 0));
-  return r.width > 0 && r.height > 0 && (h * w) / (r.width * r.height) > 0.5;
-}
-
-function ytAttach(card, f) {
-  if (ytState.card !== card) return;
-  ytState.iframe = f;
-  // 埋め込みプレーヤーに、状態（再生の位置・音量）を知らせてもらうよう頼む。
-  f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'todoku', channel: 'widget' }), '*');
-}
-
-window.addEventListener('message', (e) => {
-  if (!ytState.iframe || e.source !== ytState.iframe.contentWindow) return;
-  let data;
-  try {
-    data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-  } catch (err) {
-    return;
-  }
-  if (!data || typeof data !== 'object') return;
-  if (data.event === 'onReady' || data.event === 'initialDelivery') ytState.ready = true;
-  // 再生できない動画（埋め込みを許していない・消された など）は、黙らずに知らせる。
-  if (data.event === 'onError') {
-    ytState.pendingPlay = false;
-    const why = { 2: '動画の指定が正しくありません', 5: 'このプレーヤーでは再生できない形式です', 100: '動画が見つかりません（消されたか、非公開です）', 101: '動画の持ち主が、埋め込みでの再生を許していません', 150: '動画の持ち主が、埋め込みでの再生を許していません' }[data.info];
-    announce(`この動画は、ここでは再生できません。${why ? `${why}。` : `誤りの番号は${data.info}です。`}`, true);
-    return;
-  }
-  const info = data.info && typeof data.info === 'object' ? data.info : null;
-  if (info) {
-    if (typeof info.currentTime === 'number') ytState.current = info.currentTime;
-    if (typeof info.volume === 'number') ytState.volume = info.volume;
-  }
-  if (ytState.ready && ytState.pendingPlay && ytVisibleEnough(ytState.iframe)) {
-    ytState.pendingPlay = false;
-    ytPost('playVideo');
-  }
-});
-
-function ytCommand(func, args, said) {
-  if (!ytPost(func, args)) {
-    announce('まだ動画を選んでいません。', true);
-    return;
-  }
-  ytState.pendingPlay = false;
-  announce(said);
-}
-
-function ytSeek(delta) {
-  const to = Math.max(0, (ytState.current || 0) + delta);
-  ytCommand('seekTo', [to, true], delta < 0 ? '10秒戻しました。' : '10秒進めました。');
-  ytState.current = to;
-}
-
-function ytVolume(delta) {
-  const now = typeof ytState.volume === 'number' ? ytState.volume : 100;
-  const v = Math.max(0, Math.min(100, Math.round(now + delta)));
-  ytCommand('setVolume', [v], `音量を${v}%にしました。`);
-  ytState.volume = v;
 }
 
 // ---- 設定ファイルの点検と直しの案（支援者向けのカード）----
@@ -1395,11 +1152,6 @@ async function revealPage(appId = pageAppId()) {
     announce(PAGE_KEYS_ONLY_IN_APP);
     return;
   }
-  const config = pageConfig(appId);
-  if (config && config.kind === 'youtube') {
-    announce('このアプリには、表示できる元のページがありません。', true);
-    return;
-  }
   await announceThenSwitch('元のページを表示します。',
     () => window.cardsApi.revealPage(appId), '元のページを表示できませんでした。');
 }
@@ -1411,8 +1163,8 @@ async function openPageExternal(appId = pageAppId()) {
     return;
   }
   const config = pageConfig(appId);
-  if (config && (config.kind === 'youtube' || !/^https?:\/\//i.test(String(config.url || '')))) {
-    announce(config.kind === 'youtube' ? 'このアプリには、ブラウザで開けるページがありません。' : 'このページは、既定のブラウザでは開けません。', true);
+  if (config && !/^https?:\/\//i.test(String(config.url || ''))) {
+    announce('このページは、既定のブラウザでは開けません。', true);
     return;
   }
   await announceThenSwitch('既定のブラウザで開きます。',
@@ -1982,7 +1734,6 @@ function endSentence(text) {
 
 // hasParent: 上に「Todoku」の束があるか（アプリが一つだけのときは無い）。
 function appDeck(config, hasParent = true) {
-  if (config.kind === 'youtube') return ytDeck(config, hasParent);
   // 「このページのリンク」のカードも読むカードに数える。
   const reads = config.cards.filter((c) => c.action !== 'click').length + 1;
   const clicks = config.cards.length + 1 - reads;
