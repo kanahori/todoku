@@ -227,21 +227,33 @@ test('前に出す: Mac では最前面にしない。少し後にまだ焦点�
   assert.deepEqual(win.calls.slice(3), ['show', 'focus', 'page-focus']);
 });
 
-test('焦点を取れない窓に戻す: Windows では焦点が落ち着くまで500ミリ秒待ってから戻し、Mac ではすぐ戻す', () => {
+test('焦点を取れない窓に戻す: どの OS でもすぐ戻す（Windows ではタスクバーからも外す）', () => {
   const { restoreUnfocusable } = require('../src/main/target');
   const make = () => {
     const calls = [];
     return { calls, focusable: true, isDestroyed: () => false, isFocusable() { return this.focusable; },
       setFocusable(v) { this.focusable = v; calls.push(`focusable:${v}`); }, setSkipTaskbar(v) { calls.push(`skip:${v}`); } };
   };
-  const timers = [];
   const win = make();
-  restoreUnfocusable(win, { platform: 'win32', later: (fn, ms) => timers.push({ fn, ms }) });
-  assert.deepEqual(win.calls, []);
-  assert.deepEqual(timers.map((t) => t.ms), [500]);
-  timers[0].fn();
+  restoreUnfocusable(win, { platform: 'win32' });
   assert.deepEqual(win.calls, ['focusable:false', 'skip:true']);
   const mac = make();
-  restoreUnfocusable(mac, { platform: 'darwin', later: () => { throw new Error('待たない'); } });
+  restoreUnfocusable(mac, { platform: 'darwin' });
   assert.deepEqual(mac.calls, ['focusable:false']);
+});
+
+test('前面の見張り: Windows では150ミリ秒後と600ミリ秒後に、Todoku の窓が前面でなければ前に出し直す。Mac・試しのときは何もしない', () => {
+  const { guardHomeFront } = require('../src/main/target');
+  const timers = [];
+  const brought = [];
+  const home = { focused: false, isDestroyed: () => false, isVisible: () => true, isFocused() { return this.focused; } };
+  const n = guardHomeFront(home, { platform: 'win32', headless: false, later: (fn, ms) => timers.push({ fn, ms }), bring: (w) => brought.push(w) });
+  assert.equal(n, 2);
+  assert.deepEqual(timers.map((t) => t.ms), [150, 600]);
+  timers[0].fn();
+  home.focused = true;
+  timers[1].fn();
+  assert.equal(brought.length, 1);
+  assert.equal(guardHomeFront(home, { platform: 'darwin', headless: false, later: () => { throw new Error('見ない'); } }), 0);
+  assert.equal(guardHomeFront(home, { platform: 'win32', headless: true, later: () => { throw new Error('見ない'); } }), 0);
 });

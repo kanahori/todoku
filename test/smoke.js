@@ -2289,7 +2289,7 @@ async function rendererLinksChecks() {
     check('アプリのはじめのカード: P キーと B キーの説明があり、「元のページを表示する」（P）と「いまのページを既定のブラウザで開く」（B）のボタンがある',
       info.heading === '試しのアプリ（作り物）'
         && info.texts.includes('Pキーで、元のページを、そのままの見た目で表示します。元のページでEscキーを押すと、Todoku に戻ります。')
-        && info.texts.includes('Bキーで、いまのページを既定のブラウザで開きます。')
+        && info.texts.some((x) => /^Bキーで、いまのページを既定のブラウザで開きます。Todoku に戻るには、(Command|Alt)キーと Tabキーを押します。$/.test(x))
         && JSON.stringify(info.buttons.slice(0, 2)) === JSON.stringify(['元のページを表示する/P', 'いまのページを既定のブラウザで開く/B'])
         && info.buttons[info.buttons.length - 1] === '出典のページを開く', info);
 
@@ -2305,8 +2305,8 @@ async function rendererLinksChecks() {
     await pressLetter('B');
     await t.wait(150);
     const openRefused = await t.js("document.getElementById('alert').textContent");
-    check('P キーは、先に「元のページを表示します。Escキーで戻ります。」と知らせ、2.5秒待ってから元のページを前に出す（1.6秒ではまだ出さない）。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
-      revealSaid === '元のページを表示します。Escキーで戻ります。' && JSON.stringify(revealedEarly) === '[]'
+    check('P キーは、先に「元のページを表示します。」と知らせ、2.5秒待ってから元のページを前に出す（1.6秒ではまだ出さない）。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
+      revealSaid === '元のページを表示します。' && JSON.stringify(revealedEarly) === '[]'
         && JSON.stringify(revealedLater) === '["fake-app"]' && openRefused === 'このページは、既定のブラウザでは開けません。'
         && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '[]', { revealSaid, revealedEarly, revealedLater, openRefused });
 
@@ -2352,9 +2352,11 @@ async function rendererLinksChecks() {
     await t.wait(150);
     const extSaid = await t.status();
     await t.wait(2700);
-    check('確認の「既定のブラウザで開く」は、先に「…のページを、既定のブラウザで開きます。Commandキー（Windows は Altキー）と Tabキーで戻ります。」と知らせ、少し待ってから、その一件を番号で頼んで開く',
+    const backNote = await t.js("[...document.querySelectorAll('#deck > article.card p[data-item]')].map((p) => p.textContent).pop()");
+    check('確認の「既定のブラウザで開く」は、先に「…のページを、既定のブラウザで開きます。」と知らせ、少し待ってから、その一件を番号で頼んで開く。戻り方は確認のカードの最後の一文',
       JSON.stringify(await t.js('window.fakeLog.linksOpened()')) === '["fake-app/1"]'
-        && /^「作り物の町のページ」のページを、既定のブラウザで開きます。(Command|Alt)キーと Tabキーで戻ります。$/.test(extSaid), extSaid);
+        && extSaid === '「作り物の町のページ」のページを、既定のブラウザで開きます。'
+        && /^既定のブラウザで開いたときは、(Command|Alt)キーと Tabキーで Todoku に戻ります。$/.test(backNote), { extSaid, backNote });
 
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
@@ -2640,8 +2642,8 @@ async function rendererLinkGroupsChecks() {
     const bSaid = await t.status();
     const bEarly = await t.js('window.fakeLog.pagesOpened()');
     await t.wait(2700);
-    check('B キー: 先に「既定のブラウザで開きます。Commandキー（Windows は Altキー）と Tabキーで戻ります。」と知らせ、少し待ってから開くよう頼む',
-      /^既定のブラウザで開きます。(Command|Alt)キーと Tabキーで戻ります。$/.test(bSaid)
+    check('B キー: 先に「既定のブラウザで開きます。」と知らせ、少し待ってから開くよう頼む',
+      bSaid === '既定のブラウザで開きます。'
         && JSON.stringify(bEarly) === '[]' && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '["fake-app"]', { bSaid, bEarly });
 
     // Esc で「このページのリンク」のカードへ戻ると、分けたことの一文と、場所ごとのカードを開き直すボタンがある。

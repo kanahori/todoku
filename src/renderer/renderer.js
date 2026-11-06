@@ -1323,6 +1323,7 @@ function linkConfirmItems(card) {
     { button: 'カードを作って開く', onPress: () => startGenerate(card) },
     { button: '既定のブラウザで開く', onPress: () => openLinkExternal(card) },
     { button: 'やめる', onPress: () => { if (!busy) popDeck(); } },
+    { text: `既定のブラウザで開いたときは、${backKeyName()}キーと Tabキーで Todoku に戻ります。` },
   ];
 }
 
@@ -1336,7 +1337,7 @@ function linkConfirmDeck(fromCard, link, i) {
 }
 
 async function openLinkExternal(card) {
-  await announceThenSwitch(`「${card.linkText}」のページを、既定のブラウザで開きます。${backKeyName()}キーと Tabキーで戻ります。`,
+  await announceThenSwitch(`「${card.linkText}」のページを、既定のブラウザで開きます。`,
     () => window.cardsApi.openLinkExternal(card.appId, card.linkIndex), 'リンクのページを開けませんでした。');
 }
 
@@ -1350,8 +1351,10 @@ const PAGE_KEYS_ONLY_IN_APP = 'このキーは、アプリのカードを開い�
 
 // 元のページや既定のブラウザを前に出すと、Todoku のウィンドウが後ろへ回り、Todoku の知らせが聞こえない
 // （「元のページを表示しました。…」が、P キーのときでなく、Esc で戻った後に読まれた。2026-11-06 の WinCC の確かめ）。
-// そこで、先に何をするかと戻り方を知らせ、読み終わるのを少し待ってから、前に出す。うまくいかなかったときだけ、後で知らせる。
-// 待ちは 2.5秒（1.2秒では、ウィンドウが前に出たところで NVDA が文を途中で止めた。文も短くした。2026-11-06 の WinCC の確かめ）。
+// そこで、先に何をするかを知らせ、読み終わるのを少し待ってから、前に出す。うまくいかなかったときだけ、後で知らせる。
+// 待ちは 2.5秒（1.2秒では、ウィンドウが前に出たところで NVDA が文を途中で止めた。2026-11-06 の WinCC の確かめ）。
+// 知らせは前半だけにする（社長のご選択・AUQ 11/6 19:50）。戻り方（Esc キー・Alt か Command と Tab）は、アプリの一枚目の説明と、
+// リンクの確認のカードに置く。
 const SWITCH_DELAY_MS = 2500;
 let switching = false;
 function backKeyName() { return /Mac/i.test(navigator.platform || '') ? 'Command' : 'Alt'; }
@@ -1393,7 +1396,7 @@ async function revealPage(appId = pageAppId()) {
     announce('このアプリには、表示できる元のページがありません。', true);
     return;
   }
-  await announceThenSwitch('元のページを表示します。Escキーで戻ります。',
+  await announceThenSwitch('元のページを表示します。',
     () => window.cardsApi.revealPage(appId), '元のページを表示できませんでした。');
 }
 
@@ -1408,7 +1411,7 @@ async function openPageExternal(appId = pageAppId()) {
     announce(config.kind === 'youtube' ? 'このアプリには、ブラウザで開けるページがありません。' : 'このページは、既定のブラウザでは開けません。', true);
     return;
   }
-  await announceThenSwitch(`既定のブラウザで開きます。${backKeyName()}キーと Tabキーで戻ります。`,
+  await announceThenSwitch('既定のブラウザで開きます。',
     () => window.cardsApi.openPageExternal(appId), 'いまのページを開けませんでした。');
 }
 
@@ -1993,7 +1996,7 @@ function appDeck(config, hasParent = true) {
     'Homeキーで最初、Endキーで最後の項目へ移動します。',
     'Escキーで、カードの中からカードへ戻ります。',
     'Pキーで、元のページを、そのままの見た目で表示します。元のページでEscキーを押すと、Todoku に戻ります。',
-    'Bキーで、いまのページを既定のブラウザで開きます。',
+    `Bキーで、いまのページを既定のブラウザで開きます。Todoku に戻るには、${backKeyName()}キーと Tabキーを押します。`,
   ];
   if (hasParent) {
     texts.push(`カードの上でEscキーを押すと、「${APP_NAME}」に戻ります。`);

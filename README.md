@@ -132,7 +132,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 - Every app deck (from a config file or made by Claude) ends with a card "このページのリンク" (links on this page). Enter reads the links of the app's page one by one, by their link text (or `aria-label`, or the `alt` of an image inside the link). Only `http`/`https` links are listed; links to a place on the same page (`#...`), links to the page itself, links without a name, and duplicates (the same address, ignoring `#...`) are left out. The link text is read on this computer only; nothing new is sent to Claude.
 - When the links are in more than one place on the page, they open as a deck with one card per place, for example "本文（リンク4件）", "トピックス（リンク17件）", "メニュー（リンク47件）", "フッター（リンク7件）" and "そのほか（リンク5件）". Places are the page's landmarks (`main`, `nav`, `header`, `footer`, `aside`, `role="search"`, named `section` and `role="region"`, with or without `role`), and inside `main` the h2/h3 sections. A place is named by its `aria-label`, `aria-labelledby` or first heading, otherwise "本文", "メニュー", "ページの上", "フッター" and so on. The main content comes first; language switches, "スマートフォン版" and similar page tools go to "そのほか" at the end. Every link is in exactly one card, so the counts add up to the total (on the real Tsukuba City top page: 157 links in 22 cards, checked on macOS on 2026-11-06). The grouping is done on this computer; nothing is sent to Claude.
 - Enter on a link: if Todoku already has a deck for that address (a config file or a deck Claude made, matched by the deck's `url` or a card's `path`), the app opens that deck (on that card). Otherwise it asks first: "このページは、まだ Todoku で読めるようになっていません。これから Claude がカードを作ります。90秒ほどかかります。", with three buttons: "カードを作って開く" (make cards and open them; the same flow as "新しいページからカードを作る"), "既定のブラウザで開く" (open in the default browser) and "やめる" (cancel). Esc returns to the same link. The card's description says this once ("まだ読めないページは、開く前に確認します。"), so it is not repeated on every link.
-- P and B first say what will happen and how to come back, in a short sentence ("元のページを表示します。Escキーで戻ります。" / "既定のブラウザで開きます。Altキーと Tabキーで戻ります。", Command instead of Alt on macOS), wait 2.5 seconds, and only then bring the other window to the front, because NVDA stops reading Todoku's announcement as soon as another window comes to the front. Links whose text is only digits or one or two characters (a calendar day such as "6") are read by their `aria-label` or `title`, or with the place in front ("イベント情報：6").
+- P and B first say what will happen in one short sentence ("元のページを表示します。" / "既定のブラウザで開きます。"; from a link, "「…」のページを、既定のブラウザで開きます。"), wait 2.5 seconds, and only then bring the other window to the front, because NVDA stops reading Todoku's announcement as soon as another window comes to the front. How to come back is not in the announcement but in the app's first card ("…元のページでEscキーを押すと、Todoku に戻ります。" and "…Todoku に戻るには、Altキーと Tabキーを押します。", Command instead of Alt on macOS) and at the end of the link's confirmation card. Links whose text is only digits or one or two characters (a calendar day such as "6") are read by their `aria-label` or `title`, or with the place in front ("イベント情報：6").
 - P key, or the "元のページを表示する" button on the app's first card: shows the original web page as it is, in its own window in front (for example to show how complex the Japan Meteorological Agency pages look). Esc in that window returns to Todoku, and so does closing that window. If the page was not opened yet, it is opened first.
 - B key, or the "いまのページを既定のブラウザで開く" button on the app's first card: opens the current page of the app (the page the web app window is on, or the config's `url`) in the default browser, and says so. Only `http`/`https` pages are opened. The keys are the same on Windows and macOS, work on a card or an item (not in a text field), and do nothing on the first screen except saying "このキーは、アプリのカードを開いているときに使えます。". The two buttons carry `aria-keyshortcuts`.
 
@@ -176,7 +176,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 
 ## Tests
 
-- `npm test`: 160 tests, 153 passed, 7 skipped (the Electron-only scripts), 0 failed.
+- `npm test`: 161 tests, 154 passed, 7 skipped (the Electron-only scripts), 0 failed.
 - `npm run smoke`: 259 checks, 259 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
 - `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (260 checks, 260 passed).
@@ -563,8 +563,9 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
   まだ開いていないページは、開いてから出します。
 - B キーか、アプリの一枚目のカードの「いまのページを既定のブラウザで開く」ボタン: アプリのいまのページ（ウェブアプリのウィンドウが開いているページか、設定ファイルの `url`）を既定のブラウザで開きます。
   開くのは `http` と `https` のページだけです。
-- P キーと B キーは、先に何をするかと戻り方を短い文で知らせ（「元のページを表示します。Escキーで戻ります。」「既定のブラウザで開きます。Altキーと Tabキーで戻ります。」。macOS では Alt キーの代わりに Command キー）、2.5秒待ってから、ほかのウィンドウを前に出します。
+- P キーと B キーは、先に何をするかを短い一文で知らせ（「元のページを表示します。」「既定のブラウザで開きます。」。リンクから開くときは「「…」のページを、既定のブラウザで開きます。」）、2.5秒待ってから、ほかのウィンドウを前に出します。
   ほかのウィンドウが前に出ると、NVDA が Todoku の知らせを途中で止めるためです。
+  戻り方は知らせに入れず、アプリの一枚目のカード（「…元のページでEscキーを押すと、Todoku に戻ります。」「…Todoku に戻るには、Altキーと Tabキーを押します。」。macOS では Alt キーの代わりに Command キー）と、リンクの確認のカードの最後の一文に書いてあります。
   キーは Windows と macOS で同じで、カードの上でも項目の上でも使えます（入力欄の中では使えません）。
   最初のページでは、「このキーは、アプリのカードを開いているときに使えます。」と知らせるだけです。
   二つのボタンには `aria-keyshortcuts` を付けています。
@@ -682,7 +683,7 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 
 ### テスト
 
-- `npm test`: 160件。153件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
+- `npm test`: 161件。154件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
 - `npm run smoke`: 259件。259件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
 - `npm run real:tsukuba`: 13件。本物のつくば市のサイトで、13件が通りました。
 - `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（260件。260件が通りました）。

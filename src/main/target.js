@@ -611,28 +611,39 @@ let homeWindow = null;
 // （smoke で、Todoku の窓に戻った後もログインの窓が焦点を取れる窓のままで、焦点が返らないことを確かめた）。
 function endLoginFocus() {
   revealed.clear();
+  let restored = 0;
   for (const id of [...loginFocus]) {
     const w = windows.get(id);
     loginFocus.delete(id);
     if (!w || w.isDestroyed()) continue;
     restoreUnfocusable(w);
+    restored += 1;
   }
+  if (restored > 0) guardHomeFront(homeWindow);
 }
 
-// 前に出していたウェブアプリの窓を、焦点を取れない窓に戻す（Windows では、タスクバーからも外す）。
-// Windows では、Todoku の窓に焦点が戻った直後にこれをすると、一つ前の窓（ターミナルなど）へ一瞬焦点が移り、
-// NVDA がその窓の題を読んでから Todoku に戻った（P → Esc で2回中2回。2026-11-06 の WinCC の確かめ）。
-// そこで Windows では、焦点が落ち着くのを待ってから（500ミリ秒後）戻す。その間も、守りの印（loginFocus）は先に外してあるので、
-// ウェブアプリの窓に焦点が来れば Todoku の窓へ返す。
-function restoreUnfocusable(w, { platform = process.platform, later = setTimeout } = {}) {
-  const run = () => {
-    if (w.isDestroyed()) return;
-    if (w.isFocusable()) w.setFocusable(false);
-    if (platform === 'win32') w.setSkipTaskbar(true);
-  };
-  if (platform === 'win32') later(run, 500);
-  else run();
+// 前に出していたウェブアプリの窓を、焦点を取れない窓に戻す（Windows では、タスクバーからも外す）。すぐに戻す。
+// 2f8b231 では Windows だけ500ミリ秒おくらせたが、Todoku に戻った後に戻すことになり、Windows が一つ前の窓（ターミナル）へ
+// 前面を渡したまま戻らなくなった（P → Esc で7回中7回。2026-11-06 夕方の WinCC の確かめ）。35e46ef と同じく、すぐに戻す。
+function restoreUnfocusable(w, { platform = process.platform } = {}) {
+  if (w.isDestroyed()) return;
+  if (w.isFocusable()) w.setFocusable(false);
+  if (platform === 'win32') w.setSkipTaskbar(true);
 }
+
+// Windows で、Todoku の窓が前面にいるはずなのに前面でなくなっていたら、もう一度前に出す（150ミリ秒後と600ミリ秒後に見る）。
+// ウェブアプリの窓を焦点を取れない窓に戻したとき、Windows が一つ前の窓へ前面を渡すことがあるため。Mac では何もしない。
+function guardHomeFront(home, { platform = process.platform, later = setTimeout, bring = bringToFront, headless = testHeadless() } = {}) {
+  if (platform !== 'win32' || headless || !home) return 0;
+  const check = () => {
+    if (home.isDestroyed() || !home.isVisible() || home.isFocused()) return;
+    bring(home, { platform });
+  };
+  later(check, 150);
+  later(check, 600);
+  return 2;
+}
+
 function setHomeWindow(win) {
   if (homeWindow && !homeWindow.isDestroyed()) homeWindow.removeListener('focus', endLoginFocus);
   homeWindow = win;
@@ -1036,11 +1047,18 @@ async function revealTarget(BrowserWindow, config, options = {}) {
 // 前に出した元のページから、Todoku の窓へ戻る。Todoku の窓に焦点が戻ると、元のページの窓は焦点を取れない窓に戻る（endLoginFocus）。
 // どんなきっかけで Todoku の窓へ戻したかの控え（試しが見るため。'escape' か 'closed'）。
 const homeReturns = [];
-function backToHome(id, reason = 'escape') {
+// Windows では、Todoku の窓を前に出してから、元のページの窓を隠す（hide）。
+// 前面の窓を先に隠すと Windows が一つ前の窓へ前面を渡すので、Todoku が前面になってから隠す。隠した窓は、次にカードを読むときに
+// 前に出さずに見せ直す（openTarget の showQuietly）。隠しておけば、焦点を取れない窓に戻すときにも前面が動かない。
+function backToHome(id, reason = 'escape', { platform = process.platform } = {}) {
   revealed.delete(id);
   if (!homeWindow || homeWindow.isDestroyed()) return false;
   homeReturns.push(reason);
-  if (!testHeadless()) bringToFront(homeWindow);
+  if (!testHeadless()) {
+    bringToFront(homeWindow, { platform });
+    const w = windows.get(id);
+    if (platform === 'win32' && w && !w.isDestroyed() && w.isVisible()) w.hide();
+  }
   return true;
 }
 function homeReturnLog() { return homeReturns.slice(); }
@@ -1097,5 +1115,5 @@ function closeTarget(appId) {
 module.exports = {
   resolveUrl, buildScript, pageAction, pageProbe, runCard, checkCards, openTarget, showTarget, closeTarget, isSamePage, setHomeWindow, testHeadless,
   readItemTarget, closeAllTargets, tidyListItems, revealTarget, backToHome, isRevealed, currentPageUrl, readLinks,
-  bringToFront, homeReturnLog, restoreUnfocusable,
+  bringToFront, homeReturnLog, restoreUnfocusable, guardHomeFront,
 };
