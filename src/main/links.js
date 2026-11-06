@@ -69,7 +69,11 @@ async function pageLinks(waitMs) {
       } else {
         area = near ? { key: `h${hk}`, kind: 'heading', label: clean(near.textContent).slice(0, 30) } : { key: 'none', kind: 'none', label: '' };
       }
-      return { href: a.href, text: nameOf(a), area, lang: Boolean(a.getAttribute('hreflang') || a.getAttribute('lang')) };
+      return {
+        href: a.href, text: nameOf(a), area, lang: Boolean(a.getAttribute('hreflang') || a.getAttribute('lang')),
+        // 文字が数字だけ・1〜2字だけのリンクのための、ほかの名前（aria-label か title）。
+        alt: clean(a.getAttribute('aria-label')) || clean(a.getAttribute('title')),
+      };
     });
   };
   const started = Date.now();
@@ -95,6 +99,12 @@ function sameKey(url) {
   return withoutHash(String(url || '')).replace(/\/$/, '');
 }
 
+// それだけでは何のリンクか分からない文字（数字だけか、1〜2字だけ）。
+function isWeakLinkText(text) {
+  const t = String(text || '').trim();
+  return /^[0-9０-９]+$/.test(t) || [...t].length <= 2;
+}
+
 // ページから集めたリンクを、読む一覧にそろえる。結果は [{ url, text }]。
 // - 開けるのは http:// と https:// だけ（javascript:・mailto:・tel: などは除く）。
 // - ページの中の飛び先（同じページの #…）と、いまのページそのものへのリンクは除く。
@@ -110,10 +120,18 @@ function tidyLinks(raw, pageUrl, max = MAX_LINKS) {
     if (!url) continue;
     const key = sameKey(url);
     if (key === here || seen.has(key)) continue;
-    const text = String(r.text || '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+    let text = String(r.text || '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
     if (!text) continue;
     seen.add(key);
     const a = r.area && typeof r.area === 'object' ? r.area : {};
+    // 文字が数字だけ・1〜2字だけのリンク（イベントカレンダーの「6」など）は、それだけでは何のリンクか分からない。
+    // aria-label か title があればそれを使い、無ければ場所の名前を前に付ける（「イベント情報：6」）。
+    if (isWeakLinkText(text)) {
+      const alt = String(r.alt || '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+      const place = String(a.label || '').replace(/\s+/g, ' ').trim().slice(0, 30) || (AREA_KINDS[a.kind] && AREA_KINDS[a.kind].name) || '';
+      if (alt && alt !== text) text = alt;
+      else if (place) text = `${place}：${text}`;
+    }
     out.push({
       url, text,
       area: { key: String(a.key || 'none'), kind: String(a.kind || 'none'), label: String(a.label || '').replace(/\s+/g, ' ').trim().slice(0, 30) },
@@ -191,4 +209,4 @@ function findDeckFor(url, configs) {
   return null;
 }
 
-module.exports = { MAX_LINKS, pageLinks, tidyLinks, groupLinks, browserUrl, findDeckFor, sameKey };
+module.exports = { MAX_LINKS, pageLinks, tidyLinks, groupLinks, browserUrl, findDeckFor, sameKey, isWeakLinkText };

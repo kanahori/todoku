@@ -83,6 +83,20 @@ test('場所ごとに分ける: 本文を先に、ページの上とフッター
 });
 
 test('場所ごとに分ける: 一覧そろえ（tidyLinks）は、場所の印と言語の印を残す', () => {
-  const r = tidyLinks([{ href: 'https://example.com/a', text: 'A', area: { key: 'l0', kind: 'nav', label: ' 町の\nメニュー ' }, lang: true }], PAGE);
-  assert.deepEqual(r, [{ url: 'https://example.com/a', text: 'A', area: { key: 'l0', kind: 'nav', label: '町の メニュー' }, lang: true }]);
+  const r = tidyLinks([{ href: 'https://example.com/a', text: 'Aのページ', area: { key: 'l0', kind: 'nav', label: ' 町の\nメニュー ' }, lang: true }], PAGE);
+  assert.deepEqual(r, [{ url: 'https://example.com/a', text: 'Aのページ', area: { key: 'l0', kind: 'nav', label: '町の メニュー' }, lang: true }]);
+});
+
+test('数字だけ・1〜2字だけのリンク: aria-label か title があればそれを使い、無ければ場所の名前を前に付ける', () => {
+  const { isWeakLinkText } = require('../src/main/links');
+  const r = tidyLinks([
+    { href: 'https://example.com/cal/6', text: '6', area: { key: 'm1', kind: 'main', label: 'イベント情報' } },
+    { href: 'https://example.com/cal/7', text: '7', alt: '11月7日の催し', area: { key: 'm1', kind: 'main', label: 'イベント情報' } },
+    { href: 'https://example.com/en', text: 'EN', area: { key: 'l0', kind: 'header', label: '' } },
+    { href: 'https://example.com/x', text: '?', area: { key: 'none', kind: 'none', label: '' } },
+    { href: 'https://example.com/bousai', text: '防災情報', area: { key: 'l1', kind: 'nav', label: '' } },
+  ], PAGE);
+  assert.deepEqual(r.map((l) => l.text), ['イベント情報：6', '11月7日の催し', 'ページの上：EN', 'そのほか：?', '防災情報']);
+  for (const t of ['6', '１２', 'EN', '防災']) assert.equal(isWeakLinkText(t), true, t);
+  for (const t of ['防災情報', 'English', '2026年']) assert.equal(isWeakLinkText(t), false, t);
 });

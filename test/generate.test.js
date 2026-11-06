@@ -528,3 +528,27 @@ test('カードを作る指示に、利用者の目線の題の書き方（中�
   assert.match(SYSTEM_PROMPT, /ページに書いていないことを、題の元にしないこと/);
   assert.match(SYSTEM_PROMPT, /アプリはカードに説明を付けません。/);
 });
+
+test('中身の分からない題: 「最終更新日：…」の行と「リンク」だけの題は使わず、場所の中の別の見出しがあればそれを題にし、無ければ作らない（偽の返事で）', () => {
+  const candidates = [
+    { role: 'other', action: 'read', selector: '.updated', container: '', titleSelector: '.updated' },
+    { role: 'list', action: 'list', selector: '.links li', container: '', titleSelector: 'h2' },
+    { role: 'list', action: 'list', selector: '.more li', container: '', titleSelector: 'h2' },
+    { role: 'main', action: 'read', selector: '.body', container: '', titleSelector: 'h2' },
+  ];
+  const probes = [
+    { count: 1, hasText: true, containerOk: false, title: '最終更新日：2026年6月27日', alts: [] },
+    { count: 4, hasText: true, containerOk: false, title: 'リンク', alts: ['リンク', '県南の催し'] },
+    { count: 4, hasText: true, containerOk: false, title: '詳細', alts: ['もっと見る'] },
+    { count: 1, hasText: true, containerOk: false, title: '催しの案内' },
+  ];
+  const rejects = [];
+  const cards = pickCards(candidates, probes, rejects);
+  assert.deepEqual(cards.map((c) => c.title), ['県南の催し', '催しの案内']);
+  assert.deepEqual(rejects.map((r) => [r.selector, r.reason]), [['.updated', 'vague-title'], ['.more li', 'vague-title']]);
+  const { isVagueTitle } = require('../src/main/generate');
+  for (const t of ['最終更新日：2026年6月27日', '更新日:4月1日', 'リンク', '関連リンク', 'もっと見る', 'Read more', '2026年10月16日06時38分更新']) assert.equal(isVagueTitle(t), true, t);
+  for (const t of ['リンクの使い方', '県南自治体イベント情報', '更新のお知らせ']) assert.equal(isVagueTitle(t), false, t);
+  const { SYSTEM_PROMPT } = require('../src/main/generate-prompt');
+  assert.match(SYSTEM_PROMPT, /日付だけの要素（更新日・公開日・「最終更新日：…」の行など）と、「リンク」「詳細」「一覧」「もっと見る」のような一語だけの要素は、題の元にしないこと。/);
+});

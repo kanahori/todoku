@@ -12,7 +12,7 @@
       "selector": "main#main article .divPosts",
       "container": "main#main",
       "description": "出典：筑波技術大学ウェブマガジン。",
-      "skipItemsMatching": "入試|入学者選抜|募集要項"
+      "skipItemsMatching": "入試|入学者選抜|募集要項|オープンキャンパス|大学説明会|入学相談"
     }
   ]
 }

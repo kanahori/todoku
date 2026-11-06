@@ -1329,18 +1329,22 @@ async function rendererClickAnnounceChecks() {
       }
       return true;
     })()`);
+    // Enter で入ると、焦点はボタンに直に来る（下矢印は要らない）。ボタンの説明は「「〇〇」をクリックします。」。
+    const describedBy = [];
     const press = async () => {
       await key('ArrowDown');
       await key('Enter');
       await wait(100);
-      await key('ArrowDown');
       const button = await js('document.activeElement.textContent');
+      describedBy.push(await js("(() => { const a = document.activeElement; const d = document.getElementById(a.getAttribute('aria-describedby') || ''); return a.tagName + ':' + (d ? d.textContent : ''); })()"));
       await js('window.__said.length = 0; document.activeElement.click()');
       return button;
     };
     const fastButton = await press();
     await wait(900);
     const fastSaid = await js('window.__said.slice()');
+    check('クリックのカード: Enter で入ると、焦点はボタン「「〇〇」をクリックする」に直に来て、「「〇〇」をクリックします。」がボタンの説明になる',
+      describedBy[0] === 'BUTTON:「すぐ終わる押す所」をクリックします。', describedBy);
     check('すぐ終わる押す所: 「クリックしています。」を出さず、「クリックしました。」だけを知らせる',
       fastButton === '「すぐ終わる押す所」をクリックする' && JSON.stringify(fastSaid) === JSON.stringify(['「すぐ終わる押す所」をクリックしました。']), { fastButton, fastSaid });
     await key('Escape');
@@ -1776,12 +1780,11 @@ async function rendererFocusChecks() {
       unfixed.heading === '直せない読む所（読めません）'
         && unfixed.text === 'ページが変わったため、読む場所が見つかりませんでした。\n自動で直すこともできませんでした（時間内に終わりませんでした）。', unfixed);
 
-    // 直せなかった押す所: 押せなかった知らせに、理由つきの一文を足す。
+    // 直せなかった押す所: 押せなかった知らせに、理由つきの一文を足す（Enter で入ると焦点はボタンに来る）。
     await key('Escape');
     await key('ArrowDown');
     await key('Enter');
     await wait(100);
-    await key('ArrowDown');
     const pressButton = await focusState();
     await js('document.activeElement.click()');
     await wait(300);
@@ -2274,16 +2277,21 @@ async function rendererLinksChecks() {
         && JSON.stringify(info.buttons.slice(0, 2)) === JSON.stringify(['元のページを表示する/P', 'いまのページを既定のブラウザで開く/B'])
         && info.buttons[info.buttons.length - 1] === '出典のページを開く', info);
 
+    // P キー: 先に「元のページを表示します。…」と知らせ、読み終わるのを待ってから（1.2秒）元のページを前に出す。
     await pressLetter('p');
     await t.wait(150);
     const revealSaid = await t.status();
+    const revealedEarly = await t.js('window.fakeLog.revealed()');
+    await t.wait(1400);
+    const revealedLater = await t.js('window.fakeLog.revealed()');
+    // B キー: 練習のページ（fixture:）は既定のブラウザで開けないので、頼まずにそう知らせる。
     await pressLetter('B');
     await t.wait(150);
-    const openSaid = await t.status();
-    check('P キーで元のページを表示し、B キーでいまのページを既定のブラウザで開き、それぞれ知らせる',
-      JSON.stringify(await t.js('window.fakeLog.revealed()')) === '["fake-app"]' && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '["fake-app"]'
-        && revealSaid === '元のページを表示しました。元のページでEscキーを押すと、Todoku に戻ります。'
-        && openSaid.startsWith('いまのページを、既定のブラウザで開きました。'), { revealSaid, openSaid });
+    const openRefused = await t.js("document.getElementById('alert').textContent");
+    check('P キーは、先に「元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。」と知らせ、少し待ってから元のページを前に出す。練習のページの B キーは「このページは、既定のブラウザでは開けません。」',
+      revealSaid === '元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。' && JSON.stringify(revealedEarly) === '[]'
+        && JSON.stringify(revealedLater) === '["fake-app"]' && openRefused === 'このページは、既定のブラウザでは開けません。'
+        && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '[]', { revealSaid, revealedEarly, revealedLater, openRefused });
 
     // 「このページのリンク」は束の最後から二枚目のカード（最後は「名前・メモ・フォルダ」）。中に入るとリンクを一件ずつ読む。
     await t.key('End');
@@ -2326,8 +2334,10 @@ async function rendererLinksChecks() {
     await t.js('document.activeElement.click()');
     await t.wait(150);
     const extSaid = await t.status();
-    check('確認の「既定のブラウザで開く」は、その一件を番号で頼んで開き、知らせる',
-      JSON.stringify(await t.js('window.fakeLog.linksOpened()')) === '["fake-app/1"]' && extSaid === '「作り物の町のページ」のページを、既定のブラウザで開きました。', extSaid);
+    await t.wait(1400);
+    check('確認の「既定のブラウザで開く」は、先に「…のページを、既定のブラウザで開きます。Todoku に戻るには…」と知らせ、少し待ってから、その一件を番号で頼んで開く',
+      JSON.stringify(await t.js('window.fakeLog.linksOpened()')) === '["fake-app/1"]'
+        && /^「作り物の町のページ」のページを、既定のブラウザで開きます。Todoku に戻るには (Command|Alt) キーと Tab キーを押してください。$/.test(extSaid), extSaid);
 
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
@@ -2561,6 +2571,7 @@ async function rendererLinkGroupsChecks() {
     await t.key('End');
     await t.key('ArrowUp');
     const linksCard = await t.active();
+    const describedBefore = await t.js("(document.getElementById(document.activeElement.getAttribute('aria-describedby') || '') || {}).textContent || ''");
     await t.key('Enter');
     await t.wait(700);
     const deck = await t.active();
@@ -2582,7 +2593,7 @@ async function rendererLinkGroupsChecks() {
     await t.key('ArrowDown');
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
-    await t.wait(150);
+    await t.wait(1500);
     const opened = await t.js('window.fakeLog.linksOpened()');
     await t.key('ArrowDown');
     await t.js('document.activeElement.click()');
@@ -2593,11 +2604,25 @@ async function rendererLinkGroupsChecks() {
         && JSON.stringify(opened) === '["fake-app/3"]' && back.tag === 'LI' && back.text === '防災のお知らせ' && back.heading === 'メニュー（リンク2件）',
       { first, ask, opened, back });
 
+    // B キー（http のページのアプリ）: 先に知らせ、少し待ってから既定のブラウザで開くよう頼む。
+    await t.js("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', bubbles: true, cancelable: true }))");
+    await t.wait(150);
+    const bSaid = await t.status();
+    const bEarly = await t.js('window.fakeLog.pagesOpened()');
+    await t.wait(1400);
+    check('B キー: 先に「いまのページを、既定のブラウザで開きます。Todoku に戻るには…」と知らせ、少し待ってから開くよう頼む',
+      /^いまのページを、既定のブラウザで開きます。Todoku に戻るには (Command|Alt) キーと Tab キーを押してください。$/.test(bSaid)
+        && JSON.stringify(bEarly) === '[]' && JSON.stringify(await t.js('window.fakeLog.pagesOpened()')) === '["fake-app"]', { bSaid, bEarly });
+
     // Esc で「このページのリンク」のカードへ戻ると、分けたことの一文と、場所ごとのカードを開き直すボタンがある。
     await t.key('Escape');
     await t.key('Escape');
     const linksBack = await t.active();
+    const describedAfter = await t.js("(document.getElementById(document.activeElement.getAttribute('aria-describedby') || '') || {}).textContent || ''");
     const items = await t.js("[...document.activeElement.closest('article.card').querySelectorAll('[data-item]')].map((n) => n.tagName + ':' + n.textContent)");
+    const note = '一件を選んで Enter キーを押すと、そのページへ移ります。まだ読めないページは、開く前に確認します。';
+    check('カードの説明: アプリの束のカードを選ぶと、タイトルの後に説明（description）を読む（aria-describedby）。読んで描き直した後も結び付いたまま',
+      describedBefore === note && describedAfter === note, { describedBefore, describedAfter });
     check('場所ごとのリンク: Esc で「このページのリンク（5件）」へ戻り、中に「5件のリンクを、ページの場所ごとに3枚のカードに分けました。」と開き直すボタンがある',
       linksBack.heading === 'このページのリンク（5件）' && items.includes('P:5件のリンクを、ページの場所ごとに3枚のカードに分けました。')
         && items.includes('BUTTON:場所ごとのリンクのカードを開く'), { linksBack, items });

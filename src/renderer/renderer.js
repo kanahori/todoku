@@ -147,14 +147,8 @@ function renderCard(card) {
   });
   node.append(el('h2', { id: headingId, text: card.heading }));
   // 説明（設定ファイルの description）は、見出しの次の項目にして、矢印で選べるようにする（カードの外に情報を作らない）。
-  const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
-  node.append(renderItems(items));
-  // 行き先のカードは Enter で先へ進むので、中の一文（Enter で何が起きるか）を、カードを選んだときに見出しの後で読ませる。
-  const described = node.querySelector('[data-describe]');
-  if (described) {
-    described.id = `card-d-${idSeq}`;
-    node.setAttribute('aria-describedby', described.id);
-  }
+  node.append(renderItems(cardItems(card)));
+  linkDescription(node);
   // マウスで押したときも、キーと同じ動きにする。
   node.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
@@ -164,6 +158,25 @@ function renderCard(card) {
   });
   card.node = node;
   return node;
+}
+
+// カードの中の項目。説明（設定ファイルの description）があれば一つ目に置き、カードを選んだときに見出しの後で読む説明にする
+// （アプリの束のカードは、選んだときにタイトルしか読まれず、説明は中に入って Home キーを押さないと聞こえなかった。2026-11-06 の WinCC の確かめ）。
+function cardItems(card) {
+  return card.note ? [{ text: card.note, note: true, describe: true }, ...(card.items || [])] : (card.items || []);
+}
+
+// カードの中の説明の項目（data-describe の最初のもの）を、カードの aria-describedby に結び付ける。無ければ外す。
+// 行き先のカードは Enter で先へ進むので、中の一文（Enter で何が起きるか）も、この形で、カードを選んだときに見出しの後で読ませる。
+// 描き直したとき（refreshCard）も結び直す（前は描き直すと、外した要素を指したままだった）。
+function linkDescription(node) {
+  const described = node.querySelector(':scope > .items [data-describe]');
+  if (described) {
+    if (!described.id) described.id = `card-d-${++idSeq}`;
+    node.setAttribute('aria-describedby', described.id);
+  } else {
+    node.removeAttribute('aria-describedby');
+  }
 }
 
 // 項目の種類: { label, text }（見出しと内容の組・dl）・{ listItem }（読んだ1件・ul の li。NVDA が「2の4」と位置を読む）・
@@ -205,6 +218,14 @@ function renderItems(items) {
       if (item.keys) b.setAttribute('aria-keyshortcuts', item.keys);
       b.addEventListener('click', () => item.onPress(b));
       if (item.result) b.setAttribute('data-result', '');
+      // describedByPrev: すぐ前の一文（p）を、このボタンの説明として読ませる。
+      if (item.describedByPrev) {
+        const prev = [...box.querySelectorAll(':scope > p')].pop();
+        if (prev) {
+          prev.id = prev.id || `card-p-${++idSeq}`;
+          b.setAttribute('aria-describedby', prev.id);
+        }
+      }
       if (item.pressed !== undefined) b.setAttribute('aria-pressed', String(Boolean(item.pressed)));
       if (item.expanded !== undefined) b.setAttribute('aria-expanded', String(Boolean(item.expanded)));
       if (item.setting) b.setAttribute('data-setting', item.setting);
@@ -366,7 +387,7 @@ function refreshCard(card, { focusResult = false, focusFirst = false, keepPositi
   if (index < 0 || !card.node || !card.node.isConnected) return null;
   const node = card.node;
   node.querySelector('h2').textContent = card.heading;
-  const items = card.note ? [{ text: card.note, note: true }, ...(card.items || [])] : (card.items || []);
+  const items = cardItems(card);
   const focusWasInside = node.contains(document.activeElement) && document.activeElement !== node;
   const at = focusWasInside ? itemNodes(node).indexOf(document.activeElement) : -1;
   const oldBox = node.querySelector('.items');
@@ -387,6 +408,7 @@ function refreshCard(card, { focusResult = false, focusFirst = false, keepPositi
     node.focus();
   }
   oldBox.remove();
+  linkDescription(node);
   return node;
 }
 
@@ -542,11 +564,16 @@ function notFixedSentence(result) {
 }
 
 // ---- 押すカード（押す前に確かめる二段）----
+// Enter で入ると、焦点はボタン「「〇〇」をクリックする」に直に置く（すぐ Enter でクリックできる）。
+// 「「〇〇」をクリックします。」の一文は、ボタンの説明として読む（前は焦点が一文の上に来て、下矢印でボタンへ移る手が、慣れないと迷った。
+// 2026-11-06 の WinCC の確かめ）。
 function showClickConfirm(card, node) {
   card.items = [
-    { text: `「${card.title}」をクリックします。`, result: true },
+    { text: `「${card.title}」をクリックします。` },
     {
       button: `「${card.title}」をクリックする`,
+      result: true,
+      describedByPrev: true,
       onPress: async (button) => {
         if (busy) return;
         busy = true;
@@ -573,7 +600,7 @@ function showClickConfirm(card, node) {
           // 押す所を直したときは、押し直さない。直したことを知らせ、もう一度押すかは使う人に任せる。
           repairsOf(card.appId).set(card.cardId, r.repaired);
           card.items = (card.items || []).filter((it) => !it.repairItem).concat(repairItems(card));
-          // 実行するボタンは作り直されるので、焦点は「「〇〇」をクリックします。」の項目へ移す（下矢印キーで押すボタンへ）。
+          // クリックするボタンは作り直されるので、焦点は新しいボタンへ移す（data-result はボタンに付けてある）。
           refreshCard(card, { focusResult: true });
           ensureMaintCard(card.appId);
           announce(`ページが変わったので、ボタンやリンクの場所を直しました。もう一度クリックするときは、「${card.title}」をクリックするボタンを押してください。`);
@@ -1277,20 +1304,15 @@ function linkConfirmItems(card) {
 // 確認の束（カード一枚）。作る流れは「新しいページからカードを作る」と同じ startGenerate を使う。
 function linkConfirmDeck(fromCard, link, i) {
   const heading = `「${link.text}」を開く`;
-  const card = { kind: 'linkConfirm', heading, baseHeading: heading, appId: fromCard.appId, linkIndex: i, urlValue: link.url };
+  const card = { kind: 'linkConfirm', heading, baseHeading: heading, appId: fromCard.appId, linkIndex: i, linkText: link.text, urlValue: link.url };
   card.restoreItems = () => linkConfirmItems(card);
   card.items = linkConfirmItems(card);
   return { name: heading, linkConfirm: true, cards: [card] };
 }
 
 async function openLinkExternal(card) {
-  let r;
-  try {
-    r = await window.cardsApi.openLinkExternal(card.appId, card.linkIndex);
-  } catch (e) {
-    r = { ok: false, message: 'リンクのページを開けませんでした。' };
-  }
-  announce(r.message, !r.ok);
+  await announceThenSwitch(`「${card.linkText}」のページを、既定のブラウザで開きます。Todoku に戻るには ${backKeyName()} キーと Tab キーを押してください。`,
+    () => window.cardsApi.openLinkExternal(card.appId, card.linkIndex), 'リンクのページを開けませんでした。');
 }
 
 // いま見ているアプリ（確認の束や一件を読んだ束にいるときは、そのもとのアプリ）。はじめの束では null。
@@ -1300,6 +1322,34 @@ function pageAppId() {
 }
 
 const PAGE_KEYS_ONLY_IN_APP = 'このキーは、アプリのカードを開いているときに使えます。';
+
+// 元のページや既定のブラウザを前に出すと、Todoku のウィンドウが後ろへ回り、Todoku の知らせが聞こえない
+// （「元のページを表示しました。…」が、P キーのときでなく、Esc で戻った後に読まれた。2026-11-06 の WinCC の確かめ）。
+// そこで、先に何をするかと戻り方を知らせ、読み終わるのを少し待ってから、前に出す。うまくいかなかったときだけ、後で知らせる。
+const SWITCH_DELAY_MS = 1200;
+let switching = false;
+function backKeyName() { return /Mac/i.test(navigator.platform || '') ? 'Command' : 'Alt'; }
+
+async function announceThenSwitch(message, run, failText) {
+  if (switching) return;
+  switching = true;
+  announce(message);
+  try {
+    await new Promise((r) => setTimeout(r, SWITCH_DELAY_MS));
+    let r;
+    try {
+      r = await run();
+    } catch (e) {
+      r = { ok: false, message: failText };
+    }
+    if (!r || !r.ok) announce((r && r.message) || failText, true);
+  } finally {
+    switching = false;
+  }
+}
+
+// いま見ているアプリの設定（はじめの束では null）。
+function pageConfig(appId) { return appConfigs.find((c) => c.id === appId) || null; }
 
 // P キーと「元のページを表示する」ボタン: 元のページを、そのままの見た目で前に出す。
 async function revealPage(appId = pageAppId()) {
@@ -1312,13 +1362,13 @@ async function revealPage(appId = pageAppId()) {
     announce(PAGE_KEYS_ONLY_IN_APP);
     return;
   }
-  let r;
-  try {
-    r = await window.cardsApi.revealPage(appId);
-  } catch (e) {
-    r = { ok: false, message: '元のページを表示できませんでした。' };
+  const config = pageConfig(appId);
+  if (config && config.kind === 'youtube') {
+    announce('このアプリには、表示できる元のページがありません。', true);
+    return;
   }
-  announce(r.message, !r.ok);
+  await announceThenSwitch('元のページを表示します。元のページでEscキーを押すと、Todoku に戻ります。',
+    () => window.cardsApi.revealPage(appId), '元のページを表示できませんでした。');
 }
 
 // B キーと「いまのページを既定のブラウザで開く」ボタン。
@@ -1327,13 +1377,13 @@ async function openPageExternal(appId = pageAppId()) {
     announce(PAGE_KEYS_ONLY_IN_APP);
     return;
   }
-  let r;
-  try {
-    r = await window.cardsApi.openPageExternal(appId);
-  } catch (e) {
-    r = { ok: false, message: 'いまのページを開けませんでした。' };
+  const config = pageConfig(appId);
+  if (config && (config.kind === 'youtube' || !/^https?:\/\//i.test(String(config.url || '')))) {
+    announce(config.kind === 'youtube' ? 'このアプリには、ブラウザで開けるページがありません。' : 'このページは、既定のブラウザでは開けません。', true);
+    return;
   }
-  announce(r.message, !r.ok);
+  await announceThenSwitch(`いまのページを、既定のブラウザで開きます。Todoku に戻るには ${backKeyName()} キーと Tab キーを押してください。`,
+    () => window.cardsApi.openPageExternal(appId), 'いまのページを開けませんでした。');
 }
 
 // ---- 最初のページのフォルダ・表示名・メモ（ブックマークのように使う）----

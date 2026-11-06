@@ -233,3 +233,19 @@ test('skipItemsMatching は list のカードにだけ、空でない正規表�
   };
   assert.deepEqual(validateConfig(c).map((e) => e.where), ['cards[1].skipItemsMatching', 'cards[2].skipItemsMatching', 'cards[3].skipItemsMatching']);
 });
+
+test('大学の三つの一覧のカードは、入試と入学の案内（入試・入学者選抜・募集要項・オープンキャンパス・大学説明会・入学相談）を読まない（裁定219）', () => {
+  const fs = require('node:fs');
+  const { loadConfigFile } = require('../src/main/config');
+  const words = ['入試', '入学者選抜', '募集要項', 'オープンキャンパス', '大学説明会', '入学相談会'];
+  let n = 0;
+  for (const name of fs.readdirSync(path.join(__dirname, '..', 'cards')).filter((f) => f.startsWith('ntut-'))) {
+    const { config } = loadConfigFile(path.join(__dirname, '..', 'cards', name));
+    for (const c of config.cards.filter((x) => x.action === 'list')) {
+      n += 1;
+      const re = new RegExp(c.skipItemsMatching || '(?!)');
+      for (const w of words) assert.ok(re.test(`保健科学部${w}のご案内`), `${name} の ${c.id} が「${w}」を外さない`);
+    }
+  }
+  assert.equal(n, 6);
+});

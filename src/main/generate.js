@@ -1021,6 +1021,15 @@ function retitleCards(cards, retitles) {
 }
 
 // 日時だけの文か（数字・年月日時分秒・区切りと、末尾の「更新」「発表」「現在」だけ）。
+// 中身の分からない題: 更新日などの日付の行（「最終更新日：2026年6月27日」）と、「リンク」「詳細」「一覧」のような一語。
+// 「イベント」のページから作った束に「最終更新日：…」「リンク」の題が出た（2026-11-06 の WinCC の確かめ）。
+const META_TITLE = /^(最終)?(更新|公開|掲載|作成|登録)(日|日時|日付)?\s*[：:]/;
+const GENERIC_TITLE = /^(リンク|リンク集|関連リンク|link|links|詳細|詳しく|詳しくはこちら|もっと見る|続きを読む|一覧|一覧を見る|一覧へ|こちら|ここ|more|read more|top|トップ|戻る|ページの先頭へ)$/i;
+function isVagueTitle(text) {
+  const t = String(text || '').trim();
+  return isTimeOnly(t) || META_TITLE.test(t) || GENERIC_TITLE.test(t);
+}
+
 function isTimeOnly(text) {
   const t = String(text || '').trim();
   return /[0-9０-９]/.test(t) && /^[0-9０-９年月日時分秒\s:：\/.\-（）()]+(更新|発表|現在)?$/.test(t);
@@ -1180,9 +1189,10 @@ function pickCards(candidates, probes, rejects = null) {
     // 題を作れないカード（「お知らせ 1」「ボタン 1」のような既定の題になるもの）は作らない。
     // 作るたびに束が大きく変わり、何のカードか分からない題が戻ってきた（2026-11-04 の Windows の確かめ）。
     // 題が日時だけ（「〇年〇月〇日〇時〇分更新」など）のカードは、何のカードか分からないので、中の別の短い文を題にし、無ければ作らない（頼み27 の8）。
-    if (isTimeOnly(title)) {
-      const alt = (Array.isArray(probe.alts) ? probe.alts : []).map((t) => cleanTitle(t)).find((t) => t && !isTimeOnly(t) && !isPlaceWord(t) && !titles.has(t));
-      if (!alt) return drop('time-title');
+    // 「最終更新日：…」のような日付の行と、「リンク」「詳細」のような一語の題も同じに扱う（リンクは「このページのリンク」のカードで全部読める）。
+    if (isVagueTitle(title)) {
+      const alt = (Array.isArray(probe.alts) ? probe.alts : []).map((t) => cleanTitle(t)).find((t) => t && !isVagueTitle(t) && !isPlaceWord(t) && !titles.has(t));
+      if (!alt) return drop(isTimeOnly(title) ? 'time-title' : 'vague-title');
       title = alt;
     }
     if (!title) return drop('no-title');
@@ -1508,6 +1518,7 @@ module.exports = {
   acceptUrl,
   limitStructure,
   isTimeOnly,
+  isVagueTitle,
   withFreshPositions,
   waitForSettle,
   pageSettleProbe,

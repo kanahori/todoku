@@ -152,6 +152,8 @@ contextBridge.exposeInMainWorld('cardsApi', {
     if (clickMode) return [{ file: 'fake-click.json', config: clickConfig, errors: [] }];
     if (reviewMode) return [{ file: 'fake-review.json', config: reviewConfig, errors: [] }];
     if (youtubeMode) return [{ file: 'fake-youtube.json', config: youtubeConfig, errors: [] }];
+    // 場所ごとのリンクの試しでは、B キーで開けるように、http のページのアプリにする。
+    if (linkGroupsMode) return [{ file: 'fake-app.json', config: { ...config, url: 'https://example.com/aoba/' }, errors: [] }];
     return [{ file: 'fake-app.json', config, errors: [] }];
   },
   // 一件に結び付いた所: 1件目と2件目は返事があり、3件目は一覧を読んだ後に画面が変わっていて、4件目は返事がまだ無い。

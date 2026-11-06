@@ -10,7 +10,8 @@
       "title": "ピックアップニュースを全部読む",
       "action": "list",
       "selector": ".pc-header section.slider .swiper-slide:not(.swiper-slide-duplicate) .box",
-      "description": "出典：筑波技術大学ホームページ。トップページのスライダーで、横に切り替わっていくニュースです。"
+      "description": "出典：筑波技術大学ホームページ。トップページのスライダーで、横に切り替わっていくニュースです。",
+      "skipItemsMatching": "入試|入学者選抜|募集要項|オープンキャンパス|大学説明会|入学相談"
     },
     {
       "id": "announcements",
@@ -18,7 +19,7 @@
       "action": "list",
       "selector": "section.event .wrap > .box",
       "container": "section.event .wrap",
-      "skipItemsMatching": "入試|入学者選抜|募集要項"
+      "skipItemsMatching": "入試|入学者選抜|募集要項|オープンキャンパス|大学説明会|入学相談"
     },
     {
       "id": "topics",
@@ -26,7 +27,7 @@
       "action": "list",
       "selector": "section.information .container > .row > div > .box .col-8",
       "container": "section.information .container > .row",
-      "skipItemsMatching": "入試|入学者選抜|募集要項",
+      "skipItemsMatching": "入試|入学者選抜|募集要項|オープンキャンパス|大学説明会|入学相談",
       "undatedLabel": "固定の記事"
     }
   ]

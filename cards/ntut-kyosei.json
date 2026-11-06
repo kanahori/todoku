@@ -12,14 +12,15 @@
       "selector": "#site-content ul.border_list > li",
       "container": "#site-content ul.border_list",
       "description": "出典：筑波技術大学 共生社会創成学部ホームページ。",
-      "skipItemsMatching": "入試|入学者選抜|募集要項"
+      "skipItemsMatching": "入試|入学者選抜|募集要項|オープンキャンパス|大学説明会|入学相談"
     },
     {
       "id": "research",
       "title": "教育研究活動の新しい記事を読む",
       "action": "list",
       "selector": "#site-content ul.card_list > li",
-      "container": "#site-content ul.card_list"
+      "container": "#site-content ul.card_list",
+      "skipItemsMatching": "入試|入学者選抜|募集要項|オープンキャンパス|大学説明会|入学相談"
     },
     {
       "id": "intro",
