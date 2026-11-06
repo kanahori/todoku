@@ -175,7 +175,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 
 ## Tests
 
-- `npm test`: 158 tests, 151 passed, 7 skipped (the Electron-only scripts), 0 failed.
+- `npm test`: 159 tests, 152 passed, 7 skipped (the Electron-only scripts), 0 failed.
 - `npm run smoke`: 257 checks, 257 passed, against the practice pages (and a local test server that never answers) only.
 - `npm run real:tsukuba`: 13 checks, 13 passed, against the real Tsukuba City site.
 - `npm run smoke:windows`: the same checks with the windows shown, plus one that checks the real focus (258 checks, 258 passed).
@@ -678,7 +678,7 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 
 ### テスト
 
-- `npm test`: 158件。151件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
+- `npm test`: 159件。152件が通り、7件は飛ばし（Electron の中でだけ走る台本）、落ちたのは0件です。
 - `npm run smoke`: 257件。257件が通りました（練習のページと、決して答えない手元のテスト用のサーバだけに当てます）。
 - `npm run real:tsukuba`: 13件。本物のつくば市のサイトで、13件が通りました。
 - `npm run smoke:windows`: 同じ確かめをウィンドウを見せて走らせ、本物の焦点の動きの1件を足したものです（258件。258件が通りました）。

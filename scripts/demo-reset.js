@@ -27,7 +27,7 @@ function stampOf(now) {
   return `${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 }
 
-// 一つの userData の、作った束・直し・表示設定を控えへ移す。結果は { moved: [{ from, to }], backup }。移すものが無ければ backup は null。
+// 一つの userData の、作った束・直し・表示設定・フォルダと表示名とメモを控えへ移す。結果は { moved: [{ from, to }], backup }。移すものが無ければ backup は null。
 function resetUserData(dir, { now = new Date() } = {}) {
   const present = TARGETS.filter((t) => fs.existsSync(path.join(dir, t)));
   if (present.length === 0) return { moved: [], backup: null };
@@ -92,7 +92,7 @@ function main(argv) {
     } else {
       const r = resetUserData(dir);
       if (!r.backup) {
-        console.log('  移すもの（作った束・直し・表示設定）はありませんでした。はじめの状態です。');
+        console.log('  移すもの（作った束・直し・表示設定・フォルダと表示名とメモ）はありませんでした。はじめの状態です。');
         continue;
       }
       for (const m of r.moved) console.log(`  移した: ${path.basename(m.from)} → ${m.to}`);

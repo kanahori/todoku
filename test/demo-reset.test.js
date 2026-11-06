@@ -70,3 +70,23 @@ test('戻すとき、元の所に今のものがあれば上書きせず、控�
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('はじめの状態に戻す: フォルダと表示名とメモ（bookmarks.json）も移し、戻すと元の所に戻る', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { resetUserData, restoreUserData, TARGETS } = require('../scripts/demo-reset');
+  assert.ok(TARGETS.includes('bookmarks.json'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reset-bookmarks-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'bookmarks.json'), '{"folders":[]}');
+    const r = resetUserData(dir, { now: new Date(2026, 10, 7, 9, 0, 0) });
+    assert.deepEqual(r.moved.map((m) => path.basename(m.from)), ['bookmarks.json']);
+    assert.equal(fs.existsSync(path.join(dir, 'bookmarks.json')), false);
+    const back = restoreUserData(dir);
+    assert.deepEqual(back.restored.map((m) => path.basename(m.to)), ['bookmarks.json']);
+    assert.equal(fs.readFileSync(path.join(dir, 'bookmarks.json'), 'utf8'), '{"folders":[]}');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
