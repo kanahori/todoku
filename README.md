@@ -6,7 +6,7 @@ It is a desktop app for Windows and macOS (Electron), built during Built with Cl
 
 - **Who it is for:** blind and low-vision people who use a screen reader (NVDA on Windows, VoiceOver on macOS), and the supporters who set things up for them.
 - **The problem:** web pages lay information out in two dimensions, and a screen reader user follows it by sound, one element at a time, so reaching the one thing they need usually takes time and effort. On the Japan Meteorological Agency's past-weather download page, for example, the links and buttons are images and table cells, and students who had to download data from it in a class needed a long time just to find them.
-- **What changes:** each page becomes a deck of cards, one per thing to read or do ("新着情報を読む", "データを表示", "CSVダウンロード"). Up and Down Arrow choose a card, Enter reads it (or clicks the page's button or link), Esc goes back. Choosing a station, showing the data and saving the CSV become single steps in a row. Carousels are read in full with numbers, and every link on a page is listed by where it is on the page (the real Tsukuba City top page: 157 links in 22 cards).
+- **What changes:** each page becomes a deck of cards, one per thing to read or do ("新着情報を読む", "データを表示", "CSVダウンロード"). Up and Down Arrow choose a card, Enter reads it (or clicks the page's button or link), Esc goes back. Choosing a station, showing the data and saving the CSV become single steps in a row. Slideshows that switch by themselves (carousels) are read in full with numbers, and every link on a page is listed by where it is on the page (the real Tsukuba City top page: 157 links in 22 cards).
 
 ## Where Claude comes in
 
@@ -158,7 +158,7 @@ Without an API key, everything except these Claude features works. To try it: `n
 ## Bundled examples
 
 - `cards/moodle-demo.json`: the public Moodle demo site (https://school.moodledemo.net/). The demo is shared by many people and is reset every hour; the app only opens it when a person chooses a card.
-- `cards/tsukuba-city.json`: the official website of Tsukuba City (https://www.city.tsukuba.lg.jp/), a real city site. Cards read the emergency information, the new pages, the notices, this month's events (from the event calendar page), every slide of the carousel (slider) at the top and of the pickup slider (the copies a carousel makes for looping are skipped), and the life-situation links. There is no card for the site search: the search box is an embedded search service, and Todoku cards cannot type text yet. The app's first card says "出典：つくば市公式ウェブサイト。" and has a button that opens the official site (`sourceUrl`). The app opens the city's pages in its own window and reads the text as it is; it does not change the pages and does not put them in a frame. `npm run real:tsukuba` checks every card and the automatic repair (with a fake model and `test/tsukuba-city-old-line-for-test.json`, a copy with one deliberately outdated selector) against the real site; it loads the site three times, so run it by hand, not in a loop.
+- `cards/tsukuba-city.json`: the official website of Tsukuba City (https://www.city.tsukuba.lg.jp/), a real city site. Cards read the emergency information, the new pages, the notices, this month's events (from the event calendar page), every slide of the slideshow at the top ("スライドショーのお知らせを全部読む") and of the pickup slideshow (the copies a carousel makes for looping are skipped), and the life-situation links. There is no card for the site search: the search box is an embedded search service, and Todoku cards cannot type text yet. The app's first card says "出典：つくば市公式ウェブサイト。" and has a button that opens the official site (`sourceUrl`). The app opens the city's pages in its own window and reads the text as it is; it does not change the pages and does not put them in a frame. `npm run real:tsukuba` checks every card and the automatic repair (with a fake model and `test/tsukuba-city-old-line-for-test.json`, a copy with one deliberately outdated selector) against the real site; it loads the site three times, so run it by hand, not in a loop.
 - `cards/jma-forecast.json`, `cards/jma-daily.json`, `cards/jma-obsdl.json`: pages of the Japan Meteorological Agency (forecast for Tokyo, daily past weather data, and the past weather data download form, with click cards for each step of the form).
 - `cards/ntut-top.json`, `cards/ntut-kyosei.json`, `cards/ntut-magazine.json`: the public websites of Tsukuba University of Technology (the university, one faculty, and the web magazine). Some kinds of notices are left out of the lists (`skipItemsMatching`), and links whose text contains the same words are left out of "このページのリンク" too (only for decks from config files, not for decks Claude made).
 - `cards/practice-city.json` and `test/fixtures/city-top.html`: a made-up city website ("Midori City") with an auto-rotating carousel and other common barriers. It is fictional and not based on any real city's site.
@@ -217,7 +217,7 @@ Built with Claude: Japan 2026（2026年11月2日〜8日）の期間中に、テ�
   上下の矢印キーでカードを選び、Enter キーで読みます（ページのボタンやリンクをクリックするカードもあります）。
   Esc キーで戻ります。
   地点を選び、データを表示して、保存するまでが、一つずつ順にたどる操作になります。
-  自動で切り替わっていくカルーセル（スライダー）も、番号を付けて全部読めます。
+  自動で切り替わっていくスライドショー（カルーセル）も、番号を付けて全部読めます。
   ページのリンクは全部、ページの中の場所ごとに並べて選べます（本物のつくば市のトップでは、157件を22枚のカードに分けました）。
 
 ### Claude がすること
@@ -650,7 +650,7 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
   デモは多くの人が使い、1時間ごとに元に戻ります。
   アプリがこのサイトを開くのは、使う人がカードを選んだときだけです。
 - `cards/tsukuba-city.json`: 本物の市のサイト、つくば市公式ウェブサイト（https://www.city.tsukuba.lg.jp/）です。
-  緊急情報・新着情報・お知らせ・今月のイベント情報（イベントカレンダーのページから）・トップのカルーセル（スライダー）とピックアップのスライダーの全部（回すために作られた写しは読みません）・くらしの場面ごとの案内を読みます。
+  緊急情報・新着情報・お知らせ・今月のイベント情報（イベントカレンダーのページから）・トップのスライドショー（「スライドショーのお知らせを全部読む」）とピックアップのスライドショーの全部（回すために作られた写しは読みません）・くらしの場面ごとの案内を読みます。
   サイト内の検索は、検索の欄が外の検索サービスの部品で、Todoku のカードはまだ文字を入れられないので、カードにしていません。
   アプリの一枚目のカードで「出典：つくば市公式ウェブサイト。」と読み、公式サイトを開くボタン（`sourceUrl`）があります。
   アプリは市のページを自分のウィンドウで開き、書いてあるとおりに読むだけで、ページを書き換えたり、フレームの中に入れたりはしません。

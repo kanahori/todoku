@@ -40,7 +40,7 @@
     },
     {
       "id": "carousel",
-      "title": "カルーセル（スライダー）のお知らせを全部読む",
+      "title": "スライドショーのお知らせを全部読む",
       "action": "list",
       "selector": ".wrap-mv ul.mv-slider > li:not(.bx-clone) > a",
       "description": "トップページで、自動で切り替わっていくお知らせです。"
@@ -50,7 +50,7 @@
       "title": "ピックアップを全部読む",
       "action": "list",
       "selector": ".top-pickup ul.pickup-slider > li:not(.bx-clone) > a",
-      "description": "トップページの「ピックアップ」のスライダーに並ぶ、注目のページの案内です。"
+      "description": "トップページの「ピックアップ」のスライドショーに並ぶ、注目のページの案内です。"
     },
     {
       "id": "kurashi",
