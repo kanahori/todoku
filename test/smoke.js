@@ -172,7 +172,6 @@ async function main() {
     univIntro.ok && univIntro.text === 'みんなで学ぶ、あしたの町へ\n作り物の学部の紹介の一つ目の文です。\n作り物の学部の紹介の二つ目の文です。', univIntro.text);
   check('大学のトップ: 入試の案内へのリンクを読むカードは無い（ピックアップのリンクはカードにしない）',
     !univ.cards.some((c) => /入試|pickuplink|admission/.test(`${c.title} ${c.selector} ${c.container || ''}`)), univ.cards.map((c) => c.selector));
-
   // 自治体風のページ: 自動で切り替わるカルーセルの、隠れているスライドも全部読める。
   const city = loadConfigFile(path.join(__dirname, '..', 'cards', 'practice-city.json')).config;
   const carousel = await runCard(BrowserWindow, city, 'carousel');
@@ -530,6 +529,14 @@ async function linksAndRevealChecks() {
         'となり町の案内 https://example.com/aoba/related/',
         '個人情報の取り扱い https://example.com/aoba/privacy/',
       ]), got);
+    // 読まない決まり（skipItemsMatching）のある設定ファイルの束では、その語を含むリンクの題も出さない（裁定219。ここでは作り物の「催し」で確かめる）。
+    {
+      const { skipPatternOf, dropSkippedLinks } = require('../src/main/links');
+      const withSkip = { ...page, cards: [...page.cards, { id: 'ev', title: '催し', action: 'list', selector: 'li', skipItemsMatching: '催し' }] };
+      const kept = r.ok ? dropSkippedLinks(r.links, skipPatternOf(withSkip)) : [];
+      check('リンク: 読まない決まりの語（作り物の「催し」）を含むリンクは出さず、件数も外した後の数（10件から2件を外して8件）',
+        r.ok && r.links.length === 10 && kept.length === 8 && !kept.some((l) => l.text.includes('催し')), kept.map((l) => l.text));
+    }
     // 場所ごとに分ける: 本文 → 見出しのまとまり → メニュー（aria-label の名前）→ フッター → そのほか（言語とスマートフォン版）。合計は全部の件数。
     const { groupLinks } = require('../src/main/links');
     const groups = r.ok ? groupLinks(r.links) : [];

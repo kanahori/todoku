@@ -100,3 +100,17 @@ test('数字だけ・1〜2字だけのリンク: aria-label か title があれ�
   for (const t of ['6', '１２', 'EN', '防災']) assert.equal(isWeakLinkText(t), true, t);
   for (const t of ['防災情報', 'English', '2026年']) assert.equal(isWeakLinkText(t), false, t);
 });
+
+test('読まない項目の決まり（skipItemsMatching）: 一覧のカードの決まりを一つにまとめ、その語を含むリンクの題を外す。決まりが無ければ外さない', () => {
+  const { skipPatternOf, dropSkippedLinks } = require('../src/main/links');
+  const config = { cards: [
+    { id: 'a', action: 'list', skipItemsMatching: '入試|募集要項' },
+    { id: 'b', action: 'list', skipItemsMatching: 'オープンキャンパス' },
+    { id: 'c', action: 'list', skipItemsMatching: '入試|募集要項' },
+    { id: 'd', action: 'read' },
+  ] };
+  const links = [{ text: '入試情報' }, { text: 'お知らせ一覧' }, { text: '保健科学部オープンキャンパス' }, { text: '学生募集要項' }, { text: '図書館' }];
+  assert.deepEqual(dropSkippedLinks(links, skipPatternOf(config)).map((l) => l.text), ['お知らせ一覧', '図書館']);
+  assert.equal(skipPatternOf({ cards: [{ action: 'list' }] }), null);
+  assert.equal(dropSkippedLinks(links, null), links);
+});

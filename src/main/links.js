@@ -180,6 +180,26 @@ function groupLinks(links) {
     .map(({ label, kind, indexes }) => ({ label, kind, indexes }));
 }
 
+// 設定ファイルの読まない項目の決まり（list のカードの skipItemsMatching）を一つにまとめる。無ければ null。
+// 裁定219（入試の材料は開かない）に寄せて、その語を含むリンクの題は「このページのリンク」にも出さない。
+function skipPatternOf(config) {
+  const parts = [...new Set((config && Array.isArray(config.cards) ? config.cards : [])
+    .filter((c) => c && c.action === 'list' && typeof c.skipItemsMatching === 'string' && c.skipItemsMatching.trim() !== '')
+    .map((c) => c.skipItemsMatching))];
+  if (parts.length === 0) return null;
+  try {
+    return new RegExp(parts.map((p) => `(?:${p})`).join('|'));
+  } catch (e) {
+    return null;
+  }
+}
+
+// 決まりに当たるリンクを外す（外したことは言わない。件数も外した後の数）。
+function dropSkippedLinks(links, pattern) {
+  if (!pattern) return links;
+  return (Array.isArray(links) ? links : []).filter((l) => !pattern.test(String((l && l.text) || '')));
+}
+
 // いまのページを既定のブラウザで開くときの URL。ウェブアプリの窓が開いているページ（http か https）を先に、
 // 無ければ設定ファイルの url を使う。どちらも開けない形（練習のページなど）なら null。
 function browserUrl(currentUrl, configUrl) {
@@ -209,4 +229,6 @@ function findDeckFor(url, configs) {
   return null;
 }
 
-module.exports = { MAX_LINKS, pageLinks, tidyLinks, groupLinks, browserUrl, findDeckFor, sameKey, isWeakLinkText };
+module.exports = {
+  MAX_LINKS, pageLinks, tidyLinks, groupLinks, browserUrl, findDeckFor, sameKey, isWeakLinkText, skipPatternOf, dropSkippedLinks,
+};

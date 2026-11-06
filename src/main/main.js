@@ -8,7 +8,7 @@ const { loadConfigSources, loadConfigFile, externalUrl } = require('./config');
 const {
   checkCards, showTarget, closeTarget, setHomeWindow, testHeadless, readItemTarget, closeAllTargets, revealTarget, currentPageUrl, readLinks,
 } = require('./target');
-const { browserUrl, findDeckFor, groupLinks } = require('./links');
+const { browserUrl, findDeckFor, groupLinks, skipPatternOf, dropSkippedLinks } = require('./links');
 const { hasApiKey, createClaudeCaller, proposeRepairs, applyRepairs, saveConfigFile } = require('./repair');
 const { attachDownloads } = require('./download');
 const { createOverrideStore, applyOverrides, runCardWithAutoRepair, withTimeout } = require('./autofix');
@@ -433,11 +433,14 @@ ipcMain.handle('page:links', async (_event, appId) => {
   try {
     const r = await readLinks(BrowserWindow, config);
     if (!r.ok) return r;
-    lastLinks.set(appId, r.links);
+    // 設定ファイルの束で、一覧のカードに読まない項目の決まり（入試など）があれば、その語を含むリンクの題も出さない（裁定219）。
+    // Claude が作った束には効かせない。外したことは言わず、件数も外した後の数にする。
+    const links = generatedIds.has(appId) ? r.links : dropSkippedLinks(r.links, skipPatternOf(baseConfigs.get(appId) || config));
+    lastLinks.set(appId, links);
     // ページの場所ごとのまとまり（本文・メニュー・フッターなど）。手元で分け、Claude には送らない。
-    const groups = groupLinks(r.links);
+    const groups = groupLinks(links);
     return {
-      ok: true, action: 'list', items: r.links.map((l) => l.text), links: r.links.map(({ url, text }) => ({ url, text })), groups, truncated: r.truncated,
+      ok: true, action: 'list', items: links.map((l) => l.text), links: links.map(({ url, text }) => ({ url, text })), groups, truncated: r.truncated,
     };
   } catch (e) {
     return { ok: false, where: '(なし)', message: `動かせませんでした: ${e.message}` };
