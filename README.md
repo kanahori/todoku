@@ -194,6 +194,10 @@ Without an API key, everything except these Claude features works. To try it: `n
 
 Licenses were read from each package's `package.json` in `node_modules`.
 
+## License
+
+Todoku is released under the MIT License. See [LICENSE](LICENSE).
+
 ---
 
 ## 日本語
@@ -685,3 +689,8 @@ Claude の API キーが無くても、この Claude の働きのほかは全部
 | glob | 13.0.6 | BlueOak-1.0.0 | 包むときだけ（版の上書き） |
 
 使用許諾は、`node_modules` の中の各部品の `package.json` から読みました。
+
+### Todoku の使用許諾
+
+Todoku は MIT License で公開しています。
+全文は [LICENSE](LICENSE) にあります。

@@ -54,7 +54,7 @@
     "type": "git",
     "url": "git+https://github.com/kanahori/hackathon2026.git"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/kanahori/hackathon2026/issues"
